@@ -48,7 +48,8 @@ class OrderItem(models.Model):
     order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name="items")
     product = models.ForeignKey(Product, on_delete=models.PROTECT)
     qty = models.PositiveIntegerField()
-    price_cents = models.IntegerField()
+    price_cents = models.PositiveIntegerField()
+    line_total_cents = models.PositiveIntegerField()
 
     class Meta:
         indexes = [
@@ -65,7 +66,7 @@ class IdempotencyKey(models.Model):
     key = models.CharField(max_length=128)
     payload_hash = models.CharField(max_length=64)
     response_json = models.JSONField(null=True, blank=True)
-    created_at = models.DateTimeField()
+    created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         unique_together = [("user", "key")]

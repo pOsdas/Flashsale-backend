@@ -1,14 +1,13 @@
 from typing import List, Optional
 from enum import Enum
 import strawberry
+from graphql import GraphQLError
 from strawberry import auto
 from strawberry.types import Info
 from strawberry_django import type as dj_type
 from django.contrib.auth import get_user_model
 from django.db import transaction
-from django.utils import timezone
 
-from app.api.v1.catalog.models import Product
 from app.api.v1.orders.models import (
     Reservation,
     Order,
@@ -16,6 +15,23 @@ from app.api.v1.orders.models import (
     IdempotencyKey,
     OutboxEvent,
 )
+from app.api.v1.orders.services import (
+    CreateOrderItemInput,
+    EmptyOrderError,
+    OrderServiceError,
+    ProductInactiveError,
+    InsufficientStockError,
+    InvalidOrderItemQuantityError,
+    ProductNotFoundError,
+    UnsupportedCurrencyError,
+    OrderNotFoundError,
+    InvalidOrderStatusTransitionError,
+    IdempotencyConflictError,
+    IdempotencyResultCorruptedError,
+    create_order,
+    change_order_status,
+)
+from app.api.v1.catalog.schema import ProductType
 
 User = get_user_model()
 
@@ -42,9 +58,10 @@ class ReservationType:
 class OrderItemType:
     id: auto
     order: auto
-    product: auto
+    product: ProductType
     qty: auto
     price_cents: auto
+    line_total_cents: auto
 
 
 @dj_type(Order)
@@ -96,6 +113,10 @@ class OrdersQuery:
     @strawberry.field
     def order(self, info: Info, order_id: int) -> Optional["OrderType"]:
         user = info.context.request.user
+
+        if not user.is_authenticated:
+            raise GraphQLError("Authentication required.")
+
         return (
             Order.objects
             .filter(id=order_id, user=user)
@@ -107,6 +128,10 @@ class OrdersQuery:
     @strawberry.field
     def reservation(self, info: Info) -> List[ReservationType]:
         user = info.context.request.user
+
+        if not user.is_authenticated:
+            raise GraphQLError("Authentication required.")
+
         return list(
             Reservation.objects
             .filter(user=user)
@@ -126,6 +151,7 @@ class OrderItemInput:
 class CreateOrderInput:
     items: List[OrderItemInput]
     currency: str = "EUR"
+    idempotency_key: str
 
 
 # ---- Mutations ----
@@ -137,37 +163,46 @@ class OrdersMutation:
     def create_order(self, info: Info, data: CreateOrderInput) -> OrderType:
         user = info.context.request.user
 
-        order = Order.objects.create(
-            user=user,
-            status=Order.Status.CREATED,
-            currency=data.currency,
-        )
+        if not user.is_authenticated:
+            raise GraphQLError("Authentication required.")
 
-        total = 0
+        if data.currency != "EUR":
+            raise GraphQLError("Only EUR currency is supported now.")
 
-        for item in data.items:
-            product = Product.objects.select_for_update().get(id=item.product_id)
-
-            OrderItem.objects.create(
-                order=order,
-                product=product,
+        service_items = [
+            CreateOrderItemInput(
+                product_id=item.product_id,
                 qty=item.qty,
-                price_cents=product.price_cents
             )
-
-            total += product.price_cents * item.qty
-
-        order.total_cents = total
-        order.save(update_fields=["total_cents"])
-
-        OutboxEvent.objects.create(
-            topic="order.created",
-            payload={
-                "order_id": order.id,
-                "user_id": user.id,
-                "total_cents": order.total_cents,
-            }
-        )
+            for item in data.items
+        ]
+        try:
+            order = create_order(
+                user=user,
+                items=service_items,
+                currency=data.currency,
+                idempotency_key=data.idempotency_key,
+            )
+        except EmptyOrderError as e:
+            raise GraphQLError(str(e))
+        except InvalidOrderItemQuantityError as e:
+            raise GraphQLError(str(e))
+        except ProductNotFoundError as e:
+            raise GraphQLError(str(e))
+        except ProductInactiveError as e:
+            raise GraphQLError(str(e))
+        except InsufficientStockError as e:
+            raise GraphQLError(str(e))
+        except UnsupportedCurrencyError as e:
+            raise GraphQLError(str(e))
+        except IdempotencyConflictError as e:
+            raise GraphQLError(str(e))
+        except IdempotencyResultCorruptedError as e:
+            raise GraphQLError(str(e))
+        except InvalidOrderStatusTransitionError as e:
+            raise GraphQLError(str(e))
+        except OrderServiceError as e:
+            raise GraphQLError(str(e))
 
         return (
             Order.objects
@@ -184,16 +219,25 @@ class OrdersMutation:
             order_id: int,
             status: OrderStatusEnum,
     ) -> OrderType:
-        order = Order.objects.select_for_update().get(id=order_id)
-        order.status = status.value
-        order.save(update_fields=["status"])
+        user = info.context.request.user
 
-        OutboxEvent.objects.create(
-            topic="order.status_changed",
-            payload={
-                "order_id": order.id,
-                "status": order.status,
-            }
+        if not user.is_authenticated:
+            raise GraphQLError("Authentication required.")
+
+        try:
+            order = change_order_status(
+                user=user,
+                order_id=order_id,
+                new_status=status.value,
+            )
+        except OrderNotFoundError as e:
+            raise GraphQLError(str(e))
+        except OrderServiceError as e:
+            raise GraphQLError(str(e))
+
+        return (
+            Order.objects
+            .select_related("user")
+            .prefetch_related("items__product")
+            .get(id=order.id)
         )
-
-        return order
