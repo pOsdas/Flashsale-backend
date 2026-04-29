@@ -1,10 +1,17 @@
 from typing import List, Optional
 import strawberry
+from graphql import GraphQLError
 from strawberry import auto
 from strawberry.types import Info
 from strawberry_django import type as dj_type
 
 from app.api.v1.catalog.models import Stock, Product
+from app.api.v1.catalog.exceptions import ProductNotFoundError, CatalogError
+from app.api.v1.catalog.selectors import (
+    list_products, get_product_by_sku,
+    ProductListFilters, Pagination,
+)
+from app.api.v1.catalog.services import set_stock, create_product
 
 
 # ---- Types ----
@@ -31,28 +38,40 @@ class StockType:
 @strawberry.type
 class CatalogQuery:
     @strawberry.field
-    def product(self, info: Info, sku: str) -> Optional[ProductType]:
-        # avoid N+1
-        return (
-            Product.objects.select_related("stock")
-            .filter(sku=sku)
-            .first()
-        )
+    def product(self, info: Info, sku: str, only_active: bool = True) -> ProductType:
+        try:
+            return get_product_by_sku(  # type: ignore
+                product_sku=sku,
+                only_active=only_active,
+            )
+        except ProductNotFoundError as e:
+            raise GraphQLError(str(e))
+
 
     @strawberry.field
     def products(
             self,
             info: Info,
             is_active: Optional[bool] = None,
+            search: Optional[str] = None,
             limit: int = 50,
             offset: int = 0,
     ) -> List[ProductType]:
-        qs = Product.objects.select_related("stock").all().order_by("id")
+        try:
+            queryset = list_products(
+                filters=ProductListFilters(
+                    is_active=is_active,
+                    search=search,
+                ),
+                pagination=Pagination(
+                    limit=limit,
+                    offset=offset,
+                )
+            )
+        except ValueError as e:
+            raise GraphQLError(str(e))
 
-        if is_active is not None:
-            qs = qs.filter(is_active=is_active)
-
-        return list(qs[offset: offset + limit])
+        return list(queryset)
 
 
 # ---- Inputs ----
@@ -77,20 +96,24 @@ class StockSetInput:
 class CatalogMutation:
     @strawberry.mutation
     def create_product(self, info: Info, data: ProductCreateInput) -> ProductType:
-        product = Product.objects.create(
-            sku=data.sku,
-            title=data.title,
-            price_cents=data.price_cents,
-            currency=data.currency,
-            is_active=data.is_active,
-        )
-        Stock.objects.create(product=product, available=data.available)
-        return Product.objects.select_related("stock").get(pk=product.pk)
+        try:
+            return create_product(  # type: ignore
+                product_sku=data.sku,
+                title=data.title,
+                price_cents=data.price_cents,
+                currency=data.currency,
+                is_active=data.is_active,
+                available=data.available,
+            )
+        except CatalogError as e:
+            raise GraphQLError(str(e)) from e
 
     @strawberry.mutation
-    def get_stock(self, info: Info, data: StockSetInput) -> ProductType:
-        product = Product.objects.get(sku=data.sku)
-        stock, _ = Stock.objects.get_or_create(product=product)
-        stock.available = data.available
-        stock.save(update_fields=["available"])
-        return stock
+    def set_stock(self, info: Info, data: StockSetInput) -> ProductType:
+        try:
+            return set_stock(  # type: ignore
+                product_sku=data.sku,
+                available=data.available
+            )
+        except CatalogError as e:
+            raise GraphQLError(str(e)) from e
