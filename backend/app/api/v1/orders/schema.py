@@ -15,8 +15,7 @@ from app.api.v1.orders.models import (
     IdempotencyKey,
     OutboxEvent,
 )
-from app.api.v1.orders.services import (
-    CreateOrderItemInput,
+from app.api.v1.orders.exceptions import (
     EmptyOrderError,
     OrderServiceError,
     ProductInactiveError,
@@ -28,6 +27,9 @@ from app.api.v1.orders.services import (
     InvalidOrderStatusTransitionError,
     IdempotencyConflictError,
     IdempotencyResultCorruptedError,
+)
+from app.api.v1.orders.services import (
+    CreateOrderItemInput,
     create_order,
     change_order_status,
 )

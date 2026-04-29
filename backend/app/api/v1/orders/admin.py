@@ -10,7 +10,7 @@ from app.api.v1.orders.models import (
 
 
 class OrderItemInline(admin.TabularInline):
-    model = OrderItem,
+    model = OrderItem
     extra = 0
     fields = (
         "product",
