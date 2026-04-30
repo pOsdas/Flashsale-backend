@@ -4,7 +4,7 @@ from app.api.v1.catalog.models import Product, Stock
 
 
 class StockInline(admin.TabularInline):
-    model = Product
+    model = Stock
     extra = 0
     fields = (
         "available",
