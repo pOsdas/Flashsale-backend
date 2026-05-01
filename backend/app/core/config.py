@@ -16,7 +16,7 @@ class ApiV1Prefix(BaseSettings):
 
 
 class ApiPrefix(BaseSettings):
-    prefix: str = "/api"
+    prefix: str = "api"
     v1: ApiV1Prefix = ApiV1Prefix()
 
 
