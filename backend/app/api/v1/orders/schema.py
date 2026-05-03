@@ -1,5 +1,6 @@
 from typing import List, Optional
 from enum import Enum
+
 import strawberry
 from graphql import GraphQLError
 from strawberry import auto
@@ -8,6 +9,7 @@ from strawberry_django import type as dj_type
 from django.contrib.auth import get_user_model
 from django.db import transaction
 
+from app.core.logging import get_logger
 from app.api.v1.orders.models import (
     Reservation,
     Order,
@@ -24,7 +26,6 @@ from app.api.v1.orders.exceptions import (
     ProductNotFoundError,
     UnsupportedCurrencyError,
     OrderNotFoundError,
-    InvalidOrderStatusTransitionError,
     IdempotencyConflictError,
     IdempotencyResultCorruptedError,
 )
@@ -35,10 +36,10 @@ from app.api.v1.orders.services import (
 )
 from app.api.v1.catalog.schema import ProductType
 
+logger = get_logger(__name__)
 User = get_user_model()
 
 
-# ---- Enums ----
 @strawberry.enum
 class OrderStatusEnum(str, Enum):
     CREATED = "created"
@@ -46,7 +47,6 @@ class OrderStatusEnum(str, Enum):
     CANCELED = "canceled"
 
 
-# ---- Types ----
 @dj_type(Reservation)
 class ReservationType:
     id: auto
@@ -97,20 +97,34 @@ class OutboxEventType:
     published_at: auto
 
 
-# ---- Query ----
 @strawberry.type
 class OrdersQuery:
 
     @strawberry.field
     def my_orders(self, info: Info) -> List["OrderType"]:
         user = info.context.request.user
-        return list(
-            Order.objects
-            .filter(user=user)
-            .select_related("user")
-            .prefetch_related("items__product")
-            .order_by("-created_at")
-        )
+
+        if not user.is_authenticated:
+            raise GraphQLError("Authentication required.")
+
+        try:
+            return list(
+                Order.objects
+                .filter(user=user)
+                .select_related("user")
+                .prefetch_related("items__product")
+                .order_by("-created_at")
+            )
+        except Exception as e:
+            logger.error(
+                "Unexpected GraphQL my orders query error",
+                extra={
+                    "operation": "orders.myOrders",
+                    "user_id": user.id,
+                },
+                exc_info=True,
+            )
+            raise GraphQLError("Internal server error.") from e
 
     @strawberry.field
     def order(self, info: Info, order_id: int) -> Optional["OrderType"]:
@@ -119,13 +133,25 @@ class OrdersQuery:
         if not user.is_authenticated:
             raise GraphQLError("Authentication required.")
 
-        return (
-            Order.objects
-            .filter(id=order_id, user=user)
-            .select_related("user")
-            .prefetch_related("items__product")
-            .first()
-        )
+        try:
+            return (
+                Order.objects
+                .filter(id=order_id, user=user)
+                .select_related("user")
+                .prefetch_related("items__product")
+                .first()
+            )
+        except Exception as e:
+            logger.error(
+                "Unexpected GraphQL order query error",
+                extra={
+                    "operation": "orders.order",
+                    "user_id": user.id,
+                    "order_id": order_id,
+                },
+                exc_info=True,
+            )
+            raise GraphQLError("Internal server error.") from e
 
     @strawberry.field
     def reservation(self, info: Info) -> List[ReservationType]:
@@ -134,15 +160,25 @@ class OrdersQuery:
         if not user.is_authenticated:
             raise GraphQLError("Authentication required.")
 
-        return list(
-            Reservation.objects
-            .filter(user=user)
-            .select_related("product")
-            .order_by("-created_at")
-        )
+        try:
+            return list(
+                Reservation.objects
+                .filter(user=user)
+                .select_related("product")
+                .order_by("-created_at")
+            )
+        except Exception as e:
+            logger.error(
+                "Unexpected GraphQL reservation query error",
+                extra={
+                    "operation": "orders.reservation",
+                    "user_id": user.id,
+                },
+                exc_info=True,
+            )
+            raise GraphQLError("Internal server error.") from e
 
 
-# ---- Inputs ----
 @strawberry.input
 class OrderItemInput:
     product_id: int
@@ -156,7 +192,6 @@ class CreateOrderInput:
     idempotency_key: str
 
 
-# ---- Mutations ----
 @strawberry.type
 class OrdersMutation:
 
@@ -178,6 +213,7 @@ class OrdersMutation:
             )
             for item in data.items
         ]
+
         try:
             order = create_order(
                 user=user,
@@ -185,33 +221,56 @@ class OrdersMutation:
                 currency=data.currency,
                 idempotency_key=data.idempotency_key,
             )
-        except EmptyOrderError as e:
-            raise GraphQLError(str(e))
-        except InvalidOrderItemQuantityError as e:
-            raise GraphQLError(str(e))
-        except ProductNotFoundError as e:
-            raise GraphQLError(str(e))
-        except ProductInactiveError as e:
-            raise GraphQLError(str(e))
-        except InsufficientStockError as e:
-            raise GraphQLError(str(e))
-        except UnsupportedCurrencyError as e:
-            raise GraphQLError(str(e))
-        except IdempotencyConflictError as e:
-            raise GraphQLError(str(e))
-        except IdempotencyResultCorruptedError as e:
-            raise GraphQLError(str(e))
-        except InvalidOrderStatusTransitionError as e:
-            raise GraphQLError(str(e))
-        except OrderServiceError as e:
-            raise GraphQLError(str(e))
+        except (
+            EmptyOrderError,
+            InvalidOrderItemQuantityError,
+            ProductNotFoundError,
+            ProductInactiveError,
+            InsufficientStockError,
+            UnsupportedCurrencyError,
+            IdempotencyConflictError,
+            IdempotencyResultCorruptedError,
+            OrderServiceError,
+        ) as e:
+            raise GraphQLError(str(e)) from e
+        except Exception as e:
+            logger.error(
+                "Unexpected GraphQL create order mutation error",
+                extra={
+                    "operation": "orders.createOrder",
+                    "user_id": user.id,
+                    "currency": data.currency,
+                    "idempotency_key": data.idempotency_key,
+                    "items": [
+                        {
+                            "product_id": item.product_id,
+                            "qty": item.qty,
+                        }
+                        for item in service_items
+                    ],
+                },
+                exc_info=True,
+            )
+            raise GraphQLError("Internal server error.") from e
 
-        return (
-            Order.objects
-            .select_related("user")
-            .prefetch_related("items__product")
-            .get(id=order.id)
-        )
+        try:
+            return (
+                Order.objects
+                .select_related("user")
+                .prefetch_related("items__product")
+                .get(id=order.id)
+            )
+        except Exception as e:
+            logger.error(
+                "Unexpected GraphQL created order refetch error",
+                extra={
+                    "operation": "orders.createOrder.refetch",
+                    "user_id": user.id,
+                    "order_id": order.id,
+                },
+                exc_info=True,
+            )
+            raise GraphQLError("Internal server error.") from e
 
     @strawberry.mutation
     @transaction.atomic
@@ -232,14 +291,36 @@ class OrdersMutation:
                 order_id=order_id,
                 new_status=status.value,
             )
-        except OrderNotFoundError as e:
-            raise GraphQLError(str(e))
-        except OrderServiceError as e:
-            raise GraphQLError(str(e))
+        except (OrderNotFoundError, OrderServiceError) as e:
+            raise GraphQLError(str(e)) from e
+        except Exception as e:
+            logger.error(
+                "Unexpected GraphQL set order status mutation error",
+                extra={
+                    "operation": "orders.setOrderStatus",
+                    "user_id": user.id,
+                    "order_id": order_id,
+                    "new_status": status.value,
+                },
+                exc_info=True,
+            )
+            raise GraphQLError("Internal server error.") from e
 
-        return (
-            Order.objects
-            .select_related("user")
-            .prefetch_related("items__product")
-            .get(id=order.id)
-        )
+        try:
+            return (
+                Order.objects
+                .select_related("user")
+                .prefetch_related("items__product")
+                .get(id=order.id)
+            )
+        except Exception as e:
+            logger.error(
+                "Unexpected GraphQL set order status refetch error",
+                extra={
+                    "operation": "orders.setOrderStatus.refetch",
+                    "user_id": user.id,
+                    "order_id": order.id,
+                },
+                exc_info=True,
+            )
+            raise GraphQLError("Internal server error.") from e

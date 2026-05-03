@@ -1,10 +1,12 @@
 from typing import List, Optional
+
 import strawberry
 from graphql import GraphQLError
 from strawberry import auto
 from strawberry.types import Info
 from strawberry_django import type as dj_type
 
+from app.core.logging import get_logger
 from app.api.v1.catalog.models import Stock, Product
 from app.api.v1.catalog.exceptions import ProductNotFoundError, CatalogError
 from app.api.v1.catalog.selectors import (
@@ -12,6 +14,8 @@ from app.api.v1.catalog.selectors import (
     ProductListFilters, Pagination,
 )
 from app.api.v1.catalog.services import set_stock, create_product
+
+logger = get_logger(__name__)
 
 
 # ---- Types ----
@@ -45,8 +49,18 @@ class CatalogQuery:
                 only_active=only_active,
             )
         except ProductNotFoundError as e:
-            raise GraphQLError(str(e))
-
+            raise GraphQLError(str(e)) from e
+        except Exception as e:
+            logger.error(
+                "Unexpected GraphQL product query error",
+                extra={
+                    "operation": "catalog.product",
+                    "sku": sku,
+                    "only_active": only_active,
+                },
+                exc_info=True,
+            )
+            raise GraphQLError("Internal server error.") from e
 
     @strawberry.field
     def products(
@@ -69,7 +83,20 @@ class CatalogQuery:
                 )
             )
         except ValueError as e:
-            raise GraphQLError(str(e))
+            raise GraphQLError(str(e)) from e
+        except Exception as e:
+            logger.error(
+                "Unexpected GraphQL products query error",
+                extra={
+                    "operation": "catalog.products",
+                    "is_active": is_active,
+                    "search": search,
+                    "limit": limit,
+                    "offset": offset,
+                },
+                exc_info=True,
+            )
+            raise GraphQLError("Internal server error.") from e
 
         return list(queryset)
 
@@ -107,6 +134,21 @@ class CatalogMutation:
             )
         except CatalogError as e:
             raise GraphQLError(str(e)) from e
+        except Exception as e:
+            logger.error(
+                "Unexpected GraphQL create product mutation error",
+                extra={
+                    "operation": "catalog.createProduct",
+                    "sku": data.sku,
+                    "title": data.title,
+                    "price_cents": data.price_cents,
+                    "currency": data.currency,
+                    "is_active": data.is_active,
+                    "available": data.available,
+                },
+                exc_info=True,
+            )
+            raise GraphQLError("Internal server error.") from e
 
     @strawberry.mutation
     def set_stock(self, info: Info, data: StockSetInput) -> ProductType:
@@ -117,3 +159,14 @@ class CatalogMutation:
             )
         except CatalogError as e:
             raise GraphQLError(str(e)) from e
+        except Exception as e:
+            logger.error(
+                "Unexpected GraphQL set stock mutation error",
+                extra={
+                    "operation": "catalog.setStock",
+                    "sku": data.sku,
+                    "available": data.available,
+                },
+                exc_info=True,
+            )
+            raise GraphQLError("Internal server error.") from e

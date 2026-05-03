@@ -2,8 +2,11 @@ from dataclasses import dataclass
 
 from django.db.models import QuerySet
 
+from app.core.logging import get_logger
 from app.api.v1.catalog.exceptions import ProductNotFoundError
 from app.api.v1.catalog.models import Product
+
+logger = get_logger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -19,10 +22,34 @@ class Pagination:
 
     def __post_init__(self) -> None:
         if self.limit < 1:
+            logger.error(
+                "Invalid pagination limit",
+                extra={
+                    "limit": self.limit,
+                    "offset": self.offset,
+                },
+            )
             raise ValueError("Limit должен быть больше 0.")
+
         if self.limit > 100:
+            logger.error(
+                "Pagination limit is too large",
+                extra={
+                    "limit": self.limit,
+                    "offset": self.offset,
+                    "max_limit": 100,
+                },
+            )
             raise ValueError("Limit не может быть больше 100.")
+
         if self.offset < 0:
+            logger.error(
+                "Invalid pagination offset",
+                extra={
+                    "limit": self.limit,
+                    "offset": self.offset,
+                },
+            )
             raise ValueError("Offset не может быть отрицательным.")
 
 
@@ -34,17 +61,30 @@ def list_products(
     filters = filters or ProductListFilters()
     pagination = pagination or Pagination()
 
-    queryset = Product.objects.select_related("stock").all()
+    try:
+        queryset = Product.objects.select_related("stock").all()
 
-    if filters.is_active is not None:
-        queryset = queryset.filter(is_active=filters.is_active)
+        if filters.is_active is not None:
+            queryset = queryset.filter(is_active=filters.is_active)
 
-    if filters.search is not None:
-        queryset = queryset.filter(title__icontains=filters.search.strip())
+        if filters.search is not None:
+            queryset = queryset.filter(title__icontains=filters.search.strip())
 
-    queryset = queryset.order_by("id")
+        queryset = queryset.order_by("id")
 
-    return queryset[pagination.offset:pagination.offset + pagination.limit]
+        return queryset[pagination.offset:pagination.offset + pagination.limit]
+    except Exception:
+        logger.error(
+            "Failed to list products",
+            extra={
+                "is_active": filters.is_active,
+                "search": filters.search,
+                "limit": pagination.limit,
+                "offset": pagination.offset,
+            },
+            exc_info=True,
+        )
+        raise
 
 
 def get_product_by_sku(
@@ -60,9 +100,26 @@ def get_product_by_sku(
     try:
         return queryset.get(sku=product_sku)
     except Product.DoesNotExist:
+        logger.error(
+            "Product not found by SKU",
+            extra={
+                "product_sku": product_sku,
+                "only_active": only_active,
+            },
+        )
         raise ProductNotFoundError(
             f"Product with sku='{product_sku}' was not found."
         )
+    except Exception:
+        logger.error(
+            "Failed to get product by SKU",
+            extra={
+                "product_sku": product_sku,
+                "only_active": only_active,
+            },
+            exc_info=True,
+        )
+        raise
 
 
 def get_product_by_id(
@@ -78,6 +135,23 @@ def get_product_by_id(
     try:
         return queryset.get(id=product_id)
     except Product.DoesNotExist:
+        logger.error(
+            "Product not found by ID",
+            extra={
+                "product_id": product_id,
+                "only_active": only_active,
+            },
+        )
         raise ProductNotFoundError(
             f"Product with id={product_id} was not found."
         )
+    except Exception:
+        logger.error(
+            "Failed to get product by ID",
+            extra={
+                "product_id": product_id,
+                "only_active": only_active,
+            },
+            exc_info=True,
+        )
+        raise

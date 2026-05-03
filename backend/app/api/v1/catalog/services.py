@@ -1,5 +1,6 @@
 from django.db import IntegrityError, transaction
 
+from app.core.logging import get_logger
 from app.api.v1.catalog.models import Product, Stock
 from app.api.v1.catalog.exceptions import (
     InvalidProductDataError,
@@ -7,6 +8,7 @@ from app.api.v1.catalog.exceptions import (
     ProductNotFoundError,
 )
 
+logger = get_logger(__name__)
 
 SUPPORTED_CURRENCIES = {"EUR"}
 
@@ -24,15 +26,43 @@ def create_product(
     normalized_title = title.strip()
 
     if not normalized_title:
+        logger.error(
+            "Invalid product title",
+            extra={
+                "product_sku": product_sku,
+                "title": title,
+            },
+        )
         raise InvalidProductDataError("Title товара не может быть пустым.")
 
     if price_cents <= 0:
+        logger.error(
+            "Invalid product price",
+            extra={
+                "product_sku": product_sku,
+                "price_cents": price_cents,
+            },
+        )
         raise InvalidProductDataError("Цена товара должна быть больше нуля.")
 
     if available < 0:
+        logger.error(
+            "Invalid product stock amount",
+            extra={
+                "product_sku": product_sku,
+                "available": available,
+            },
+        )
         raise InvalidProductDataError("Количество товара не может быть отрицательным.")
 
     if currency not in SUPPORTED_CURRENCIES:
+        logger.error(
+            "Unsupported currency",
+            extra={
+                "product_sku": product_sku,
+                "currency": currency,
+            },
+        )
         raise InvalidProductDataError(f"Неподдерживаемая валюта: {currency}.")
 
     try:
@@ -55,6 +85,18 @@ def create_product(
                 .get(pk=product.pk)
             )
     except IntegrityError as e:
+        logger.error(
+            "Product creation failed due to integrity error",
+            extra={
+                "product_sku": product_sku,
+                "normalized_sku": normalized_sku,
+                "title": title,
+                "price_cents": price_cents,
+                "currency": currency,
+                "available": available,
+            },
+            exc_info=True,
+        )
         raise ProductAlreadyExistsError(
             f"Товар с подобным sku='{product_sku}' уже существует."
         ) from e
@@ -68,6 +110,13 @@ def set_stock(
     normalized_sku = _normalize_sku(product_sku)
 
     if available < 0:
+        logger.error(
+            "Invalid stock value",
+            extra={
+                "product_sku": product_sku,
+                "available": available,
+            },
+        )
         raise InvalidProductDataError("Количество товара не может быть отрицательным.")
 
     with transaction.atomic():
@@ -79,28 +128,54 @@ def set_stock(
         )
 
         if product is None:
+            logger.error(
+                "Product not found while setting stock",
+                extra={
+                    "product_sku": product_sku,
+                    "normalized_sku": normalized_sku,
+                },
+            )
             raise ProductNotFoundError(
                 f"Товар с подобным sku='{product_sku}' не найден."
             )
 
-        stock, _ = Stock.objects.get_or_create(
-            product=product,
-            defaults={"available": 0},
-        )
+        try:
+            stock, _ = Stock.objects.get_or_create(
+                product=product,
+                defaults={"available": 0},
+            )
 
-        stock.available = available
-        stock.save(update_fields=["available"])
+            stock.available = available
+            stock.save(update_fields=["available"])
 
-        return (
-            Product.objects
-            .select_related("stock")
-            .get(pk=product.pk)
-        )
+            return (
+                Product.objects
+                .select_related("stock")
+                .get(pk=product.pk)
+            )
+        except Exception as e:
+            logger.error(
+                "Failed to set stock",
+                extra={
+                    "product_sku": product_sku,
+                    "normalized_sku": normalized_sku,
+                    "available": available,
+                    "product_id": product.id,
+                },
+                exc_info=True,
+            )
+            raise
 
 
 def _normalize_sku(sku: str) -> str:
     normalized_sku = sku.strip().upper()
     if not normalized_sku:
+        logger.error(
+            "Invalid SKU normalization",
+            extra={
+                "sku": sku,
+            },
+        )
         raise InvalidProductDataError("Sku товара не может быть пустым.")
 
     return normalized_sku
