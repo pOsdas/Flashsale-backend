@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from app.api.v1.common import get_redis_client
+from app.api.v1.common.redis import get_redis_client
 
 
 @dataclass(frozen=True, slots=True)
