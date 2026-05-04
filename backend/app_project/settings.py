@@ -35,6 +35,7 @@ INSTALLED_APPS = [
 
     # for webhooks
     'rest_framework',
+    "drf_spectacular",
 
     "app.api.v1.catalog.apps.V1CatalogConfig",
     "app.api.v1.orders.apps.V1OrdersConfig",
@@ -127,12 +128,20 @@ AUTH_PASSWORD_VALIDATORS = [
 
 # DRF for webhook
 REST_FRAMEWORK = {
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework.authentication.SessionAuthentication",
     ],
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.AllowAny",
     ],
+}
+
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "Flashsale Backend API",
+    "DESCRIPTION": "API documentation for flashsale-backend",
+    "VERSION": "1.0.0",
 }
 
 # Webhooks / Go fetcher

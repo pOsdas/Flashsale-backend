@@ -20,4 +20,16 @@ urlpatterns = [
 ]
 
 if settings.DEBUG:
+    from drf_spectacular.views import (
+        SpectacularAPIView,
+        SpectacularSwaggerView,
+        SpectacularRedocView,
+    )
     urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
+
+    urlpatterns += [
+        # Маршруты для OpenAPI схемы и Swagger UI / Redoc
+        path(f'{API_PREFIX}{API_V1_PREFIX}/schema/', SpectacularAPIView.as_view(), name='schema'),
+        path(f'{API_PREFIX}{API_V1_PREFIX}/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
+        path(f'{API_PREFIX}{API_V1_PREFIX}/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui')
+    ]
