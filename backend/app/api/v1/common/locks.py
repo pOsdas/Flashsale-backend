@@ -4,6 +4,10 @@ from redis import Redis
 from app.api.v1.common.redis import get_redis_client
 
 
+class RedisLockAlreadyAcquiredError(Exception):
+    pass
+
+
 class RedisLock:
     def __init__(
             self,
@@ -33,7 +37,7 @@ class RedisLock:
     def __enter__(self) -> "RedisLock":
         acquired = self.acquire()
         if not acquired:
-            raise RuntimeError(f"Lock {self.key} is already acquired")
+            raise RedisLockAlreadyAcquiredError(f"Lock {self.key} is already acquired")
 
         return self
 

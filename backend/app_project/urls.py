@@ -17,6 +17,7 @@ urlpatterns = [
     path(f"{API_PREFIX}{API_V1_PREFIX}/admin/", admin.site.urls),
     path(f"{API_PREFIX}{API_V1_PREFIX}/graphql/", GraphQLView.as_view(schema=schema)),
     path(f"{API_PREFIX}{API_V1_PREFIX}/payments/", include("app.api.v1.payments.urls")),
+    path(f"{API_PREFIX}{API_V1_PREFIX}/fetcher/", include("app.api.v1.fetcher.urls")),
 ]
 
 if settings.DEBUG:
