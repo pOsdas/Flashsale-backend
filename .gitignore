@@ -1,3 +1,4 @@
 /backend/.env.local
 /backend/.env.docker
 /backend/TODO.md
+/go_fetcher/.env
