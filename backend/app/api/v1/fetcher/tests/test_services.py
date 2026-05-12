@@ -128,7 +128,7 @@ class FetcherImportServiceTests(TestCase):
                     "sku": "IPHONE-16",
                     "title": "iPhone 16",
                     "price_cents": 1000,
-                    "currency": "RUB",
+                    "currency": "USD",
                     "available": 15,
                     "is_active": True,
                 }
@@ -176,7 +176,7 @@ class FetcherImportServiceTests(TestCase):
                     "sku": "BAD-ITEM",
                     "title": "Bad Item",
                     "price_cents": 1000,
-                    "currency": "RUB",
+                    "currency": "USD",
                     "available": 10,
                     "is_active": True,
                 },

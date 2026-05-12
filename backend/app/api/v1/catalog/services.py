@@ -10,7 +10,7 @@ from app.api.v1.catalog.exceptions import (
 
 logger = get_logger(__name__)
 
-SUPPORTED_CURRENCIES = {"EUR"}
+SUPPORTED_CURRENCIES = {"EUR", "RUB"}
 
 
 def create_product(

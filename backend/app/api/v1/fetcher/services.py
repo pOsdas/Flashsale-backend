@@ -16,7 +16,7 @@ from app.api.v1.fetcher.exceptions import (
 )
 
 
-SUPPORTED_CURRENCIES = {"EUR"}
+SUPPORTED_CURRENCIES = {"EUR", "RUB"}
 
 
 class FetcherImportService:

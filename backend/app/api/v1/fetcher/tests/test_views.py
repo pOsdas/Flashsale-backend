@@ -109,7 +109,7 @@ class FetcherViewTests(APITestCase):
                     "sku": "iphone-16",
                     "title": "iPhone 16",
                     "price_cents": 89200,
-                    "currency": "RUB",
+                    "currency": "USD",
                     "available": 15,
                     "is_active": True,
                 }
@@ -130,7 +130,7 @@ class FetcherViewTests(APITestCase):
         response_data = response.json()
 
         self.assertFalse(response_data["success"])
-        self.assertEqual(response_data["error"], f"Unsupported currency: RUB")
+        self.assertEqual(response_data["error"], f"Unsupported currency: USD")
 
     def test_import_endpoint_invalid_payload(self):
         invalid_payload = {

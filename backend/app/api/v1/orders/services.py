@@ -44,16 +44,16 @@ def create_order(
 ) -> Order:
     normalized_items = _normalized_items(items)
 
-    if currency != "EUR":
+    if currency not in ["EUR", "RUB"]:
         logger.error(
             "Unsupported order currency",
             extra={
                 "user_id": user.id,
                 "currency": currency,
-                "supported_currency": "EUR",
+                "supported_currency": "EUR, RUB",
             },
         )
-        raise UnsupportedCurrencyError("Only EUR currency is supported now.")
+        raise UnsupportedCurrencyError("Only EUR, RUB currency is supported now.")
 
     if not idempotency_key.strip():
         logger.error(

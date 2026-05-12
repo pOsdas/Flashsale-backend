@@ -31,7 +31,7 @@ class PaymentsServiceTests(TestCase):
             sku="TEST-1",
             title="Test product",
             price_cents=1000,
-            currency="USD",
+            currency="EUR",
             is_active=True,
         )
 
@@ -43,6 +43,7 @@ class PaymentsServiceTests(TestCase):
         self.order = Order.objects.create(
             user=self.user,
             status=Order.Status.CREATED,
+            total_cents=2000,
         )
 
         self.order_item = OrderItem.objects.create(
@@ -339,8 +340,8 @@ class PaymentsServiceTests(TestCase):
         ).count()
 
         with patch(
-            "app.api.v1.payments.services.OutboxEvent.objects.create",
-            side_effect=RuntimeError("Outbox failure"),
+                "app.api.v1.payments.services.create_outbox_event",
+                side_effect=RuntimeError("Outbox failure"),
         ):
             with self.assertRaises(RuntimeError):
                 process_payment_webhook(
@@ -389,7 +390,7 @@ class PaymentsWebhookViewTests(TestCase):
             sku="TEST-1",
             title="Test product",
             price_cents=1000,
-            currency="USD",
+            currency="EUR",
             is_active=True,
         )
 
@@ -401,6 +402,7 @@ class PaymentsWebhookViewTests(TestCase):
         self.order = Order.objects.create(
             user=self.user,
             status=Order.Status.CREATED,
+            total_cents=2000,
         )
 
         self.order_item = OrderItem.objects.create(
