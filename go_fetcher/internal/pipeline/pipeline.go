@@ -6,58 +6,58 @@ import (
 	"time"
 
 	"go_fetcher/internal/models"
-	"go_fetcher/internal/parsers"
 	"go_fetcher/internal/sender"
 )
 
+type ImportResponse = sender.ImportResponse
+
 type ImportPipeline struct {
-	parser parsers.ProductParser
 	sender *sender.DjangoSender
-	source string
 }
 
-func NewImportPipeline(
-	parser parsers.ProductParser,
-	sender *sender.DjangoSender,
-	source string,
-) *ImportPipeline {
+func NewImportPipeline(sender *sender.DjangoSender) *ImportPipeline {
 	return &ImportPipeline{
-		parser: parser,
 		sender: sender,
-		source: source,
 	}
 }
 
-func (p *ImportPipeline) RunProductImport(
+func (p *ImportPipeline) ImportProducts(
 	ctx context.Context,
-	productID string,
-) (*sender.ImportResponse, error) {
-	product, err := p.parser.ParseProduct(ctx, productID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse product: %w", err)
+	source string,
+	products []models.Product,
+) (ImportResponse, error) {
+	if source == "" {
+		return ImportResponse{}, fmt.Errorf("source is required")
+	}
+
+	if len(products) == 0 {
+		return ImportResponse{}, fmt.Errorf("products list is empty")
+	}
+
+	items := make([]models.ProductImport, 0, len(products))
+
+	for _, product := range products {
+		items = append(items, product.ToImport())
 	}
 
 	payload := sender.ImportPayload{
-		Source:  p.source,
-		BatchID: buildBatchID(p.source, product.SKU),
-		Items: []models.ProductImport{
-			product.ToImport(),
-		},
+		Source:  source,
+		BatchID: buildBatchID(source),
+		Items:   items,
 	}
 
-	response, err := p.sender.SendImport(ctx, payload)
+	response, err := p.sender.ImportProducts(ctx, payload)
 	if err != nil {
-		return nil, fmt.Errorf("failed to send import payload: %w", err)
+		return ImportResponse{}, fmt.Errorf("import products to Django: %w", err)
 	}
 
 	return response, nil
 }
 
-func buildBatchID(source string, sku string) string {
+func buildBatchID(source string) string {
 	return fmt.Sprintf(
-		"%s-%s-%d",
+		"%s-%d",
 		source,
-		sku,
-		time.Now().Unix(),
+		time.Now().UTC().UnixNano(),
 	)
 }

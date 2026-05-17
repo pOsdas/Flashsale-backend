@@ -8,6 +8,7 @@ import (
 	"go_fetcher/internal/models"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -35,7 +36,7 @@ type ImportResponse struct {
 
 func NewDjangoSender(baseURL string, apiKey string) *DjangoSender {
 	return &DjangoSender{
-		baseURL: baseURL,
+		baseURL: strings.TrimRight(baseURL, "/"),
 		apiKey:  apiKey,
 		httpClient: &http.Client{
 			Timeout: 10 * time.Second,
@@ -43,25 +44,25 @@ func NewDjangoSender(baseURL string, apiKey string) *DjangoSender {
 	}
 }
 
-func (s *DjangoSender) SendImport(
+func (s *DjangoSender) ImportProducts(
 	ctx context.Context,
 	payload ImportPayload,
-) (*ImportResponse, error) {
+) (ImportResponse, error) {
 	requestBody, err := json.Marshal(payload)
 	if err != nil {
-		return nil, fmt.Errorf("failed to encode import payload: %w", err)
+		return ImportResponse{}, fmt.Errorf("failed to encode import payload: %w", err)
 	}
 
-	url := s.baseURL + "/api/v1/fetcher/import"
+	requestURL := s.baseURL + "/api/v1/fetcher/import"
 
 	request, err := http.NewRequestWithContext(
 		ctx,
 		http.MethodPost,
-		url,
+		requestURL,
 		bytes.NewReader(requestBody),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create django request: %w", err)
+		return ImportResponse{}, fmt.Errorf("failed to create django request: %w", err)
 	}
 
 	request.Header.Set("Content-Type", "application/json")
@@ -70,19 +71,19 @@ func (s *DjangoSender) SendImport(
 
 	response, err := s.httpClient.Do(request)
 	if err != nil {
-		return nil, fmt.Errorf("failed to send import request to django: %w", err)
+		return ImportResponse{}, fmt.Errorf("failed to send import request to django: %w", err)
 	}
 	defer response.Body.Close()
 
 	responseBody, err := io.ReadAll(response.Body)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read django response body: %w", err)
+		return ImportResponse{}, fmt.Errorf("failed to read django response body: %w", err)
 	}
 
 	var importResponse ImportResponse
 
 	if err := json.Unmarshal(responseBody, &importResponse); err != nil {
-		return nil, fmt.Errorf(
+		return ImportResponse{}, fmt.Errorf(
 			"failed to decode django response: %w, body: %s",
 			err,
 			string(responseBody),
@@ -90,12 +91,12 @@ func (s *DjangoSender) SendImport(
 	}
 
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return &importResponse, fmt.Errorf(
+		return importResponse, fmt.Errorf(
 			"django import failed with status %d: %s",
 			response.StatusCode,
 			string(responseBody),
 		)
 	}
 
-	return &importResponse, nil
+	return importResponse, nil
 }
