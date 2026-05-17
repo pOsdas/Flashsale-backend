@@ -34,6 +34,12 @@ func (p *ImportPipeline) ImportProducts(
 		return ImportResponse{}, fmt.Errorf("products list is empty")
 	}
 
+	products = deduplicateProductsBySKU(products)
+
+	if len(products) == 0 {
+		return ImportResponse{}, fmt.Errorf("products list is empty after deduplication")
+	}
+
 	items := make([]models.ProductImport, 0, len(products))
 
 	for _, product := range products {
@@ -60,4 +66,24 @@ func buildBatchID(source string) string {
 		source,
 		time.Now().UTC().UnixNano(),
 	)
+}
+
+func deduplicateProductsBySKU(products []models.Product) []models.Product {
+	result := make([]models.Product, 0, len(products))
+	seen := make(map[string]struct{}, len(products))
+
+	for _, product := range products {
+		if product.SKU == "" {
+			continue
+		}
+
+		if _, exists := seen[product.SKU]; exists {
+			continue
+		}
+
+		seen[product.SKU] = struct{}{}
+		result = append(result, product)
+	}
+
+	return result
 }

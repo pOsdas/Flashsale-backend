@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"log/slog"
 	"os"
 	"time"
 
@@ -18,18 +19,20 @@ import (
 
 const (
 	sourceWildberries = "wildberries"
-	defaultTimeout    = 30 * time.Second
 	defaultLimit      = 100
 )
 
 func main() {
+	logger := newLogger()
+
 	if err := godotenv.Load(); err != nil {
-		log.Println("No .env file found")
+		logger.Warn("no .env file found")
 	}
 
 	cfg, err := config.Load()
 	if err != nil {
-		log.Fatal(err)
+		logger.Error("failed to load config", slog.String("error", err.Error()))
+		os.Exit(1)
 	}
 
 	if len(os.Args) < 3 {
@@ -40,13 +43,23 @@ func main() {
 	command := os.Args[2]
 
 	if source != "wb" {
-		log.Fatalf("unsupported source: %s", source)
+		logger.Error("unsupported source", slog.String("source", source))
+		os.Exit(1)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), cfg.Timeout)
 	defer cancel()
 
-	wbParser := wildberries.NewParser()
+	wbParser := wildberries.NewParser(
+		wildberries.ParserConfig{
+			Cookie:         cfg.WBCookie,
+			Timeout:        cfg.Timeout,
+			RequestDelay:   cfg.WBRequestDelay,
+			MaxRetries:     cfg.WBMaxRetries,
+			RetryBaseDelay: cfg.WBRetryBaseDelay,
+		},
+		logger,
+	)
 
 	djangoSender := sender.NewDjangoSender(
 		cfg.DjangoURL,
@@ -57,41 +70,66 @@ func main() {
 		djangoSender,
 	)
 
+	startedAt := time.Now()
+
+	logger.Info(
+		"fetcher command started",
+		slog.String("source", source),
+		slog.String("command", command),
+	)
+
 	switch command {
 	case "product":
-		runWBProductCommand(ctx, wbParser, importPipeline)
+		runWBProductCommand(ctx, logger, wbParser, importPipeline)
 
 	case "search":
-		runWBSearchCommand(ctx, wbParser, importPipeline)
+		runWBSearchCommand(ctx, logger, wbParser, importPipeline)
 
 	case "category":
-		runWBCategoryCommand(ctx, wbParser, importPipeline)
+		runWBCategoryCommand(ctx, logger, wbParser, importPipeline)
 
 	default:
-		log.Fatalf("unsupported wb command: %s", command)
+		logger.Error("unsupported wb command", slog.String("command", command))
+		os.Exit(1)
 	}
+
+	logger.Info(
+		"fetcher command finished",
+		slog.String("source", source),
+		slog.String("command", command),
+		slog.Duration("duration", time.Since(startedAt)),
+	)
 }
 
 func runWBProductCommand(
 	ctx context.Context,
+	logger *slog.Logger,
 	wbParser *wildberries.Parser,
 	importPipeline *pipeline.ImportPipeline,
 ) {
 	productFlags := flag.NewFlagSet("wb product", flag.ExitOnError)
 
 	if err := productFlags.Parse(os.Args[3:]); err != nil {
-		log.Fatal(err)
+		logger.Error("failed to parse product flags", slog.String("error", err.Error()))
+		os.Exit(1)
 	}
 
 	if productFlags.NArg() != 1 {
+		logger.Error("invalid product command arguments")
 		log.Fatal("usage: go run ./cmd/fetcher wb product <nmID>")
 	}
 
 	nmID := productFlags.Arg(0)
 
+	logger.Info(
+		"wb product command parsed",
+		slog.String("nm_id", nmID),
+	)
+
 	products, err := wbParser.ParseProduct(ctx, nmID)
 	if err != nil {
-		log.Fatal(err)
+		logger.Error("failed to parse WB product", slog.String("error", err.Error()))
+		os.Exit(1)
 	}
 
 	response, err := importPipeline.ImportProducts(
@@ -100,7 +138,8 @@ func runWBProductCommand(
 		products,
 	)
 	if err != nil {
-		log.Fatal(err)
+		logger.Error("failed to import WB product", slog.String("error", err.Error()))
+		os.Exit(1)
 	}
 
 	printImportResponse(response)
@@ -108,6 +147,7 @@ func runWBProductCommand(
 
 func runWBSearchCommand(
 	ctx context.Context,
+	logger *slog.Logger,
 	wbParser *wildberries.Parser,
 	importPipeline *pipeline.ImportPipeline,
 ) {
@@ -116,18 +156,27 @@ func runWBSearchCommand(
 	limit := searchFlags.Int("limit", defaultLimit, "maximum number of products to import")
 
 	if err := searchFlags.Parse(os.Args[3:]); err != nil {
-		log.Fatal(err)
+		logger.Error("failed to parse search flags", slog.String("error", err.Error()))
+		os.Exit(1)
 	}
 
 	if searchFlags.NArg() != 1 {
-		log.Fatal(`usage: go run ./cmd/fetcher wb search "iphone" --limit=100`)
+		logger.Error("invalid search command arguments")
+		log.Fatal(`usage: go run ./cmd/fetcher wb search --limit=100 "iphone"`)
 	}
 
 	query := searchFlags.Arg(0)
 
+	logger.Info(
+		"wb search command parsed",
+		slog.String("query", query),
+		slog.Int("limit", *limit),
+	)
+
 	products, err := wbParser.SearchProducts(ctx, query, *limit)
 	if err != nil {
-		log.Fatal(err)
+		logger.Error("failed to parse WB search products", slog.String("error", err.Error()))
+		os.Exit(1)
 	}
 
 	response, err := importPipeline.ImportProducts(
@@ -136,7 +185,8 @@ func runWBSearchCommand(
 		products,
 	)
 	if err != nil {
-		log.Fatal(err)
+		logger.Error("failed to import WB search products", slog.String("error", err.Error()))
+		os.Exit(1)
 	}
 
 	printImportResponse(response)
@@ -144,6 +194,7 @@ func runWBSearchCommand(
 
 func runWBCategoryCommand(
 	ctx context.Context,
+	logger *slog.Logger,
 	wbParser *wildberries.Parser,
 	importPipeline *pipeline.ImportPipeline,
 ) {
@@ -152,18 +203,27 @@ func runWBCategoryCommand(
 	limit := categoryFlags.Int("limit", defaultLimit, "maximum number of products to import")
 
 	if err := categoryFlags.Parse(os.Args[3:]); err != nil {
-		log.Fatal(err)
+		logger.Error("failed to parse category flags", slog.String("error", err.Error()))
+		os.Exit(1)
 	}
 
 	if categoryFlags.NArg() != 1 {
-		log.Fatal(`usage: go run ./cmd/fetcher wb category "https://www.wildberries.ru/catalog/..." --limit=100`)
+		logger.Error("invalid category command arguments")
+		log.Fatal(`usage: go run ./cmd/fetcher wb category --limit=100 "кошельки и кредитницы"`)
 	}
 
-	categoryURL := categoryFlags.Arg(0)
+	categoryName := categoryFlags.Arg(0)
 
-	products, err := wbParser.CategoryProducts(ctx, categoryURL, *limit)
+	logger.Info(
+		"wb category command parsed",
+		slog.String("category", categoryName),
+		slog.Int("limit", *limit),
+	)
+
+	products, err := wbParser.CategoryProducts(ctx, categoryName, *limit)
 	if err != nil {
-		log.Fatal(err)
+		logger.Error("failed to parse WB category products", slog.String("error", err.Error()))
+		os.Exit(1)
 	}
 
 	response, err := importPipeline.ImportProducts(
@@ -172,7 +232,8 @@ func runWBCategoryCommand(
 		products,
 	)
 	if err != nil {
-		log.Fatal(err)
+		logger.Error("failed to import WB category products", slog.String("error", err.Error()))
+		os.Exit(1)
 	}
 
 	printImportResponse(response)
@@ -188,7 +249,18 @@ func printImportResponse(response pipeline.ImportResponse) {
 func printUsageAndExit() {
 	fmt.Println("usage:")
 	fmt.Println("  go run ./cmd/fetcher wb product <nmID>")
-	fmt.Println(`  go run ./cmd/fetcher wb search "iphone" --limit=100`)
-	fmt.Println(`  go run ./cmd/fetcher wb category "https://www.wildberries.ru/catalog/..." --limit=100`)
+	fmt.Println(`  go run ./cmd/fetcher wb search --limit=100 "iphone"`)
+	fmt.Println(`  go run ./cmd/fetcher wb category --limit=100 "кошельки и кредитницы"`)
 	os.Exit(1)
+}
+
+func newLogger() *slog.Logger {
+	handler := slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	})
+
+	logger := slog.New(handler)
+	slog.SetDefault(logger)
+
+	return logger
 }
