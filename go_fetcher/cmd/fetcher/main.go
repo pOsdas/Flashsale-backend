@@ -12,6 +12,7 @@ import (
 	"github.com/joho/godotenv"
 
 	"go_fetcher/internal/config"
+	"go_fetcher/internal/parsers/ozon"
 	"go_fetcher/internal/parsers/wildberries"
 	"go_fetcher/internal/pipeline"
 	"go_fetcher/internal/sender"
@@ -42,24 +43,8 @@ func main() {
 	source := os.Args[1]
 	command := os.Args[2]
 
-	if source != "wb" {
-		logger.Error("unsupported source", slog.String("source", source))
-		os.Exit(1)
-	}
-
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.Timeout)
 	defer cancel()
-
-	wbParser := wildberries.NewParser(
-		wildberries.ParserConfig{
-			Cookie:         cfg.WBCookie,
-			Timeout:        cfg.Timeout,
-			RequestDelay:   cfg.WBRequestDelay,
-			MaxRetries:     cfg.WBMaxRetries,
-			RetryBaseDelay: cfg.WBRetryBaseDelay,
-		},
-		logger,
-	)
 
 	djangoSender := sender.NewDjangoSender(
 		cfg.DjangoURL,
@@ -78,18 +63,53 @@ func main() {
 		slog.String("command", command),
 	)
 
-	switch command {
-	case "product":
-		runWBProductCommand(ctx, logger, wbParser, importPipeline)
+	switch source {
+	case "wb":
+		wbParser := wildberries.NewParser(
+			wildberries.ParserConfig{
+				Cookie:         cfg.WBCookie,
+				Timeout:        cfg.Timeout,
+				RequestDelay:   cfg.WBRequestDelay,
+				MaxRetries:     cfg.WBMaxRetries,
+				RetryBaseDelay: cfg.WBRetryBaseDelay,
+			},
+			logger,
+		)
 
-	case "search":
-		runWBSearchCommand(ctx, logger, wbParser, importPipeline)
+		switch command {
+		case "product":
+			runWBProductCommand(ctx, logger, wbParser, importPipeline)
+		case "search":
+			runWBSearchCommand(ctx, logger, wbParser, importPipeline)
+		case "category":
+			runWBCategoryCommand(ctx, logger, wbParser, importPipeline)
+		default:
+			logger.Error("unsupported wb command", slog.String("command", command))
+			os.Exit(1)
+		}
 
-	case "category":
-		runWBCategoryCommand(ctx, logger, wbParser, importPipeline)
+	case "ozon":
+		ozonParser := ozon.NewParser(
+			ozon.ParserConfig{
+				Cookie:         cfg.OzonCookie,
+				Timeout:        cfg.Timeout,
+				RequestDelay:   cfg.WBRequestDelay,
+				MaxRetries:     cfg.WBMaxRetries,
+				RetryBaseDelay: cfg.WBRetryBaseDelay,
+			},
+			logger,
+		)
+
+		switch command {
+		case "product":
+			runOzonProductCommand(ctx, logger, ozonParser, importPipeline)
+		default:
+			logger.Error("unsupported ozon command", slog.String("command", command))
+			os.Exit(1)
+		}
 
 	default:
-		logger.Error("unsupported wb command", slog.String("command", command))
+		logger.Error("unsupported source", slog.String("source", source))
 		os.Exit(1)
 	}
 
@@ -101,6 +121,7 @@ func main() {
 	)
 }
 
+// --- WB ---
 func runWBProductCommand(
 	ctx context.Context,
 	logger *slog.Logger,
@@ -239,6 +260,55 @@ func runWBCategoryCommand(
 	printImportResponse(response)
 }
 
+// ------------
+
+// --- Ozon ---
+func runOzonProductCommand(
+	ctx context.Context,
+	logger *slog.Logger,
+	ozonParser *ozon.Parser,
+	importPipeline *pipeline.ImportPipeline,
+) {
+	productFlags := flag.NewFlagSet("ozon product", flag.ExitOnError)
+
+	if err := productFlags.Parse(os.Args[3:]); err != nil {
+		logger.Error("failed to parse ozon product flags", slog.String("error", err.Error()))
+		os.Exit(1)
+	}
+
+	if productFlags.NArg() != 1 {
+		logger.Error("invalid ozon product command arguments")
+		log.Fatal(`usage: go run ./cmd/fetcher ozon product "/product/example-123/"`)
+	}
+
+	productInput := productFlags.Arg(0)
+
+	logger.Info(
+		"ozon product command parsed",
+		slog.String("product_input", productInput),
+	)
+
+	products, err := ozonParser.ParseProduct(ctx, productInput)
+	if err != nil {
+		logger.Error("failed to parse Ozon product", slog.String("error", err.Error()))
+		os.Exit(1)
+	}
+
+	response, err := importPipeline.ImportProducts(
+		ctx,
+		"ozon",
+		products,
+	)
+	if err != nil {
+		logger.Error("failed to import Ozon product", slog.String("error", err.Error()))
+		os.Exit(1)
+	}
+
+	printImportResponse(response)
+}
+
+// ------------
+
 func printImportResponse(response pipeline.ImportResponse) {
 	fmt.Printf("Django import success: %t\n", response.Success)
 	fmt.Printf("Django import status: %s\n", response.Status)
@@ -248,9 +318,12 @@ func printImportResponse(response pipeline.ImportResponse) {
 
 func printUsageAndExit() {
 	fmt.Println("usage:")
+	// WB
 	fmt.Println("  go run ./cmd/fetcher wb product <nmID>")
 	fmt.Println(`  go run ./cmd/fetcher wb search --limit=100 "iphone"`)
 	fmt.Println(`  go run ./cmd/fetcher wb category --limit=100 "кошельки и кредитницы"`)
+	// Ozon
+	fmt.Println(`  go run ./cmd/fetcher ozon product "/product/sirop-topping-bez-sahara-nizkokaloriynyy-mr-djemius-zero-solenaya-karamel-330g-1919933573/"`)
 	os.Exit(1)
 }
 

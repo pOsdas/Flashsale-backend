@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"time"
 )
 
@@ -10,7 +11,13 @@ type Config struct {
 	DjangoURL     string
 	FetcherAPIKey string
 	WBCookie      string
-	Timeout       time.Duration
+	OzonCookie    string
+
+	Timeout time.Duration
+
+	WBRequestDelay   time.Duration
+	WBMaxRetries     int
+	WBRetryBaseDelay time.Duration
 }
 
 func Load() (*Config, error) {
@@ -18,7 +25,13 @@ func Load() (*Config, error) {
 		DjangoURL:     os.Getenv("DJANGO_URL"),
 		FetcherAPIKey: os.Getenv("FETCHER_API_KEY"),
 		WBCookie:      os.Getenv("WB_COOKIE"),
-		Timeout:       30 * time.Second,
+		OzonCookie:    os.Getenv("OZON_COOKIE"),
+
+		Timeout: 30 * time.Second,
+
+		WBRequestDelay:   getEnvDurationMS("WB_REQUEST_DELAY_MS", 700*time.Millisecond),
+		WBMaxRetries:     getEnvInt("WB_MAX_RETRIES", 3),
+		WBRetryBaseDelay: getEnvDurationMS("WB_RETRY_BASE_DELAY_MS", 1*time.Second),
 	}
 
 	if cfg.DjangoURL == "" {
@@ -33,5 +46,37 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("WB_COOKIE is required")
 	}
 
+	if cfg.WBMaxRetries < 0 {
+		return nil, fmt.Errorf("WB_MAX_RETRIES must be greater than or equal to zero")
+	}
+
 	return cfg, nil
+}
+
+func getEnvInt(key string, defaultValue int) int {
+	rawValue := os.Getenv(key)
+	if rawValue == "" {
+		return defaultValue
+	}
+
+	value, err := strconv.Atoi(rawValue)
+	if err != nil {
+		return defaultValue
+	}
+
+	return value
+}
+
+func getEnvDurationMS(key string, defaultValue time.Duration) time.Duration {
+	rawValue := os.Getenv(key)
+	if rawValue == "" {
+		return defaultValue
+	}
+
+	value, err := strconv.Atoi(rawValue)
+	if err != nil {
+		return defaultValue
+	}
+
+	return time.Duration(value) * time.Millisecond
 }
