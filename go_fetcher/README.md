@@ -69,8 +69,8 @@ go run ./cmd/fetcher ozon product "/product/sirop-topping-bez-sahara-nizkokalori
 ## Docker commands:
 For example:
 ```shell
-docker run --rm --env-file .env go_fetcher ozon search --limit=10 "iphone"
+docker run --rm --env-file .env-docker go_fetcher ozon search --limit=10 "iphone"
 ```
 ```shell
-docker run --rm --env-file .env go_fetcher wb search --limit=10 "iphone"
+docker run --rm --env-file .env-docker go_fetcher wb search --limit=10 "iphone"
 ```
