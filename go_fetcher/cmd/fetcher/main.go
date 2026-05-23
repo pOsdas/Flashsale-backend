@@ -20,7 +20,16 @@ import (
 
 const (
 	sourceWildberries = "wildberries"
-	defaultLimit      = 100
+	sourceOzon        = "ozon"
+
+	cliSourceWB   = "wb"
+	cliSourceOzon = "ozon"
+
+	commandProduct  = "product"
+	commandSearch   = "search"
+	commandCategory = "category"
+
+	defaultLimit = 100
 )
 
 func main() {
@@ -64,53 +73,15 @@ func main() {
 	)
 
 	switch source {
-	case "wb":
-		wbParser := wildberries.NewParser(
-			wildberries.ParserConfig{
-				Cookie:         cfg.WBCookie,
-				Timeout:        cfg.Timeout,
-				RequestDelay:   cfg.WBRequestDelay,
-				MaxRetries:     cfg.WBMaxRetries,
-				RetryBaseDelay: cfg.WBRetryBaseDelay,
-			},
-			logger,
-		)
+	case cliSourceWB:
+		runWBCommand(ctx, logger, cfg, command, importPipeline)
 
-		switch command {
-		case "product":
-			runWBProductCommand(ctx, logger, wbParser, importPipeline)
-		case "search":
-			runWBSearchCommand(ctx, logger, wbParser, importPipeline)
-		case "category":
-			runWBCategoryCommand(ctx, logger, wbParser, importPipeline)
-		default:
-			logger.Error("unsupported wb command", slog.String("command", command))
-			os.Exit(1)
-		}
-
-	case "ozon":
-		ozonParser := ozon.NewParser(
-			ozon.ParserConfig{
-				Cookie:         cfg.OzonCookie,
-				Timeout:        cfg.Timeout,
-				RequestDelay:   cfg.WBRequestDelay,
-				MaxRetries:     cfg.WBMaxRetries,
-				RetryBaseDelay: cfg.WBRetryBaseDelay,
-			},
-			logger,
-		)
-
-		switch command {
-		case "product":
-			runOzonProductCommand(ctx, logger, ozonParser, importPipeline)
-		default:
-			logger.Error("unsupported ozon command", slog.String("command", command))
-			os.Exit(1)
-		}
+	case cliSourceOzon:
+		runOzonCommand(ctx, logger, cfg, command, importPipeline)
 
 	default:
 		logger.Error("unsupported source", slog.String("source", source))
-		os.Exit(1)
+		printUsageAndExit()
 	}
 
 	logger.Info(
@@ -122,6 +93,41 @@ func main() {
 }
 
 // --- WB ---
+
+func runWBCommand(
+	ctx context.Context,
+	logger *slog.Logger,
+	cfg *config.Config,
+	command string,
+	importPipeline *pipeline.ImportPipeline,
+) {
+	wbParser := wildberries.NewParser(
+		wildberries.ParserConfig{
+			Cookie:         cfg.WBCookie,
+			Timeout:        cfg.Timeout,
+			RequestDelay:   cfg.WBRequestDelay,
+			MaxRetries:     cfg.WBMaxRetries,
+			RetryBaseDelay: cfg.WBRetryBaseDelay,
+		},
+		logger,
+	)
+
+	switch command {
+	case commandProduct:
+		runWBProductCommand(ctx, logger, wbParser, importPipeline)
+
+	case commandSearch:
+		runWBSearchCommand(ctx, logger, wbParser, importPipeline)
+
+	case commandCategory:
+		runWBCategoryCommand(ctx, logger, wbParser, importPipeline)
+
+	default:
+		logger.Error("unsupported wb command", slog.String("command", command))
+		printUsageAndExit()
+	}
+}
+
 func runWBProductCommand(
 	ctx context.Context,
 	logger *slog.Logger,
@@ -131,12 +137,12 @@ func runWBProductCommand(
 	productFlags := flag.NewFlagSet("wb product", flag.ExitOnError)
 
 	if err := productFlags.Parse(os.Args[3:]); err != nil {
-		logger.Error("failed to parse product flags", slog.String("error", err.Error()))
+		logger.Error("failed to parse wb product flags", slog.String("error", err.Error()))
 		os.Exit(1)
 	}
 
 	if productFlags.NArg() != 1 {
-		logger.Error("invalid product command arguments")
+		logger.Error("invalid wb product command arguments")
 		log.Fatal("usage: go run ./cmd/fetcher wb product <nmID>")
 	}
 
@@ -177,12 +183,12 @@ func runWBSearchCommand(
 	limit := searchFlags.Int("limit", defaultLimit, "maximum number of products to import")
 
 	if err := searchFlags.Parse(os.Args[3:]); err != nil {
-		logger.Error("failed to parse search flags", slog.String("error", err.Error()))
+		logger.Error("failed to parse wb search flags", slog.String("error", err.Error()))
 		os.Exit(1)
 	}
 
 	if searchFlags.NArg() != 1 {
-		logger.Error("invalid search command arguments")
+		logger.Error("invalid wb search command arguments")
 		log.Fatal(`usage: go run ./cmd/fetcher wb search --limit=100 "iphone"`)
 	}
 
@@ -224,12 +230,12 @@ func runWBCategoryCommand(
 	limit := categoryFlags.Int("limit", defaultLimit, "maximum number of products to import")
 
 	if err := categoryFlags.Parse(os.Args[3:]); err != nil {
-		logger.Error("failed to parse category flags", slog.String("error", err.Error()))
+		logger.Error("failed to parse wb category flags", slog.String("error", err.Error()))
 		os.Exit(1)
 	}
 
 	if categoryFlags.NArg() != 1 {
-		logger.Error("invalid category command arguments")
+		logger.Error("invalid wb category command arguments")
 		log.Fatal(`usage: go run ./cmd/fetcher wb category --limit=100 "кошельки и кредитницы"`)
 	}
 
@@ -260,9 +266,42 @@ func runWBCategoryCommand(
 	printImportResponse(response)
 }
 
-// ------------
-
 // --- Ozon ---
+
+func runOzonCommand(
+	ctx context.Context,
+	logger *slog.Logger,
+	cfg *config.Config,
+	command string,
+	importPipeline *pipeline.ImportPipeline,
+) {
+	ozonParser := ozon.NewParser(
+		ozon.ParserConfig{
+			Cookie:         cfg.OzonCookie,
+			Timeout:        cfg.Timeout,
+			RequestDelay:   cfg.OzonRequestDelay,
+			MaxRetries:     cfg.OzonMaxRetries,
+			RetryBaseDelay: cfg.OzonRetryBaseDelay,
+		},
+		logger,
+	)
+
+	switch command {
+	case commandProduct:
+		runOzonProductCommand(ctx, logger, ozonParser, importPipeline)
+
+	case commandSearch:
+		runOzonSearchCommand(ctx, logger, ozonParser, importPipeline)
+
+	case commandCategory:
+		runOzonCategoryCommand(ctx, logger, ozonParser, importPipeline)
+
+	default:
+		logger.Error("unsupported ozon command", slog.String("command", command))
+		printUsageAndExit()
+	}
+}
+
 func runOzonProductCommand(
 	ctx context.Context,
 	logger *slog.Logger,
@@ -278,7 +317,7 @@ func runOzonProductCommand(
 
 	if productFlags.NArg() != 1 {
 		logger.Error("invalid ozon product command arguments")
-		log.Fatal(`usage: go run ./cmd/fetcher ozon product "/product/example-123/"`)
+		log.Fatal(`usage: go run ./cmd/fetcher ozon product "/product/sirop-topping-bez-sahara-nizkokaloriynyy-mr-djemius-zero-solenaya-karamel-330g-1919933573/"`)
 	}
 
 	productInput := productFlags.Arg(0)
@@ -296,7 +335,7 @@ func runOzonProductCommand(
 
 	response, err := importPipeline.ImportProducts(
 		ctx,
-		"ozon",
+		sourceOzon,
 		products,
 	)
 	if err != nil {
@@ -307,7 +346,101 @@ func runOzonProductCommand(
 	printImportResponse(response)
 }
 
-// ------------
+func runOzonSearchCommand(
+	ctx context.Context,
+	logger *slog.Logger,
+	ozonParser *ozon.Parser,
+	importPipeline *pipeline.ImportPipeline,
+) {
+	searchFlags := flag.NewFlagSet("ozon search", flag.ExitOnError)
+
+	limit := searchFlags.Int("limit", defaultLimit, "maximum number of products to import")
+
+	if err := searchFlags.Parse(os.Args[3:]); err != nil {
+		logger.Error("failed to parse ozon search flags", slog.String("error", err.Error()))
+		os.Exit(1)
+	}
+
+	if searchFlags.NArg() != 1 {
+		logger.Error("invalid ozon search command arguments")
+		log.Fatal(`usage: go run ./cmd/fetcher ozon search --limit=100 "iphone"`)
+	}
+
+	query := searchFlags.Arg(0)
+
+	logger.Info(
+		"ozon search command parsed",
+		slog.String("query", query),
+		slog.Int("limit", *limit),
+	)
+
+	products, err := ozonParser.SearchProducts(ctx, query, *limit)
+	if err != nil {
+		logger.Error("failed to parse Ozon search products", slog.String("error", err.Error()))
+		os.Exit(1)
+	}
+
+	response, err := importPipeline.ImportProducts(
+		ctx,
+		sourceOzon,
+		products,
+	)
+	if err != nil {
+		logger.Error("failed to import Ozon search products", slog.String("error", err.Error()))
+		os.Exit(1)
+	}
+
+	printImportResponse(response)
+}
+
+func runOzonCategoryCommand(
+	ctx context.Context,
+	logger *slog.Logger,
+	ozonParser *ozon.Parser,
+	importPipeline *pipeline.ImportPipeline,
+) {
+	categoryFlags := flag.NewFlagSet("ozon category", flag.ExitOnError)
+
+	limit := categoryFlags.Int("limit", defaultLimit, "maximum number of products to import")
+
+	if err := categoryFlags.Parse(os.Args[3:]); err != nil {
+		logger.Error("failed to parse ozon category flags", slog.String("error", err.Error()))
+		os.Exit(1)
+	}
+
+	if categoryFlags.NArg() != 1 {
+		logger.Error("invalid ozon category command arguments")
+		log.Fatal(`usage: go run ./cmd/fetcher ozon category --limit=100 "/category/svitery-dzhempery-i-kardigany-muzhskie-7554/"`)
+	}
+
+	categoryInput := categoryFlags.Arg(0)
+
+	logger.Info(
+		"ozon category command parsed",
+		slog.String("category_input", categoryInput),
+		slog.Int("limit", *limit),
+	)
+
+	products, err := ozonParser.CategoryProducts(ctx, categoryInput, *limit)
+	if err != nil {
+		logger.Error("failed to parse Ozon category products", slog.String("error", err.Error()))
+		os.Exit(1)
+	}
+
+	response, err := importPipeline.ImportProducts(
+		ctx,
+		sourceOzon,
+		products,
+	)
+	if err != nil {
+		logger.Error("failed to import Ozon category products", slog.String("error", err.Error()))
+		os.Exit(1)
+	}
+
+	printImportResponse(response)
+}
+
+// --- Common ---
 
 func printImportResponse(response pipeline.ImportResponse) {
 	fmt.Printf("Django import success: %t\n", response.Success)
@@ -318,12 +451,20 @@ func printImportResponse(response pipeline.ImportResponse) {
 
 func printUsageAndExit() {
 	fmt.Println("usage:")
-	// WB
+
+	fmt.Println("")
+	fmt.Println("Wildberries:")
 	fmt.Println("  go run ./cmd/fetcher wb product <nmID>")
 	fmt.Println(`  go run ./cmd/fetcher wb search --limit=100 "iphone"`)
 	fmt.Println(`  go run ./cmd/fetcher wb category --limit=100 "кошельки и кредитницы"`)
-	// Ozon
+
+	fmt.Println("")
+	fmt.Println("Ozon:")
 	fmt.Println(`  go run ./cmd/fetcher ozon product "/product/sirop-topping-bez-sahara-nizkokaloriynyy-mr-djemius-zero-solenaya-karamel-330g-1919933573/"`)
+	fmt.Println(`  go run ./cmd/fetcher ozon search --limit=100 "iphone"`)
+	fmt.Println(`  go run ./cmd/fetcher ozon category --limit=100 "/category/svitery-dzhempery-i-kardigany-muzhskie-7554/"`)
+	fmt.Println(`  go run ./cmd/fetcher ozon category --limit=100 "https://www.ozon.ru/category/svitery-dzhempery-i-kardigany-muzhskie-7554/"`)
+
 	os.Exit(1)
 }
 

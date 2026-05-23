@@ -18,6 +18,10 @@ type Config struct {
 	WBRequestDelay   time.Duration
 	WBMaxRetries     int
 	WBRetryBaseDelay time.Duration
+
+	OzonRequestDelay   time.Duration
+	OzonMaxRetries     int
+	OzonRetryBaseDelay time.Duration
 }
 
 func Load() (*Config, error) {
@@ -32,6 +36,10 @@ func Load() (*Config, error) {
 		WBRequestDelay:   getEnvDurationMS("WB_REQUEST_DELAY_MS", 700*time.Millisecond),
 		WBMaxRetries:     getEnvInt("WB_MAX_RETRIES", 3),
 		WBRetryBaseDelay: getEnvDurationMS("WB_RETRY_BASE_DELAY_MS", 1*time.Second),
+
+		OzonRequestDelay:   getEnvDurationMS("OZON_REQUEST_DELAY_MS", 700*time.Millisecond),
+		OzonMaxRetries:     getEnvInt("OZON_MAX_RETRIES", 3),
+		OzonRetryBaseDelay: getEnvDurationMS("OZON_RETRY_BASE_DELAY_MS", 1*time.Second),
 	}
 
 	if cfg.DjangoURL == "" {
