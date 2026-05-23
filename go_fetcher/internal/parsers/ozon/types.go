@@ -110,3 +110,33 @@ type ozonHTTPError struct {
 	StatusCode int
 	Body       string
 }
+
+type OzonCategoryCandidate struct {
+	Title string
+	URL   string
+}
+
+type ozonFiltersWidget struct {
+	Sections []ozonFilterSection `json:"sections"`
+}
+
+type ozonFilterSection struct {
+	Filters []ozonFilter `json:"filters"`
+}
+
+type ozonFilter struct {
+	Type           string             `json:"type"`
+	Key            string             `json:"key"`
+	CategoryFilter ozonCategoryFilter `json:"categoryFilter"`
+}
+
+type ozonCategoryFilter struct {
+	Title      string                   `json:"title"`
+	Categories []ozonCategoryFilterItem `json:"categories"`
+}
+
+type ozonCategoryFilterItem struct {
+	Title    string `json:"title"`
+	Level    int    `json:"level"`
+	URLValue string `json:"urlValue"`
+}

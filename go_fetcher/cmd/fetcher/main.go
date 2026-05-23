@@ -25,9 +25,10 @@ const (
 	cliSourceWB   = "wb"
 	cliSourceOzon = "ozon"
 
-	commandProduct  = "product"
-	commandSearch   = "search"
-	commandCategory = "category"
+	commandProduct    = "product"
+	commandSearch     = "search"
+	commandCategory   = "category"
+	commandCategories = "categories"
 
 	defaultLimit = 100
 )
@@ -40,10 +41,17 @@ func main() {
 	}
 
 	cfg, err := config.Load()
+
 	if err != nil {
 		logger.Error("failed to load config", slog.String("error", err.Error()))
 		os.Exit(1)
 	}
+
+	logger.Info(
+		"ozon cookie status",
+		slog.Bool("has_ozon_cookie", cfg.OzonCookie != ""),
+		slog.Int("ozon_cookie_len", len(cfg.OzonCookie)),
+	)
 
 	if len(os.Args) < 3 {
 		printUsageAndExit()
@@ -296,6 +304,9 @@ func runOzonCommand(
 	case commandCategory:
 		runOzonCategoryCommand(ctx, logger, ozonParser, importPipeline)
 
+	case commandCategories:
+		runOzonCategoriesCommand(ctx, logger, ozonParser)
+
 	default:
 		logger.Error("unsupported ozon command", slog.String("command", command))
 		printUsageAndExit()
@@ -440,7 +451,53 @@ func runOzonCategoryCommand(
 	printImportResponse(response)
 }
 
+func runOzonCategoriesCommand(
+	ctx context.Context,
+	logger *slog.Logger,
+	ozonParser *ozon.Parser,
+) {
+	categoriesFlags := flag.NewFlagSet("ozon categories", flag.ExitOnError)
+
+	limit := categoriesFlags.Int("limit", 10, "maximum number of category candidates to show")
+
+	if err := categoriesFlags.Parse(os.Args[3:]); err != nil {
+		logger.Error("failed to parse ozon categories flags", slog.String("error", err.Error()))
+		os.Exit(1)
+	}
+
+	if categoriesFlags.NArg() != 1 {
+		logger.Error("invalid ozon categories command arguments")
+		log.Fatal(`usage: go run ./cmd/fetcher ozon categories --limit=10 "мужские свитеры"`)
+	}
+
+	query := categoriesFlags.Arg(0)
+
+	logger.Info(
+		"ozon categories command parsed",
+		slog.String("query", query),
+		slog.Int("limit", *limit),
+	)
+
+	categories, err := ozonParser.ResolveCategories(ctx, query, *limit)
+	if err != nil {
+		logger.Error("failed to resolve Ozon categories", slog.String("error", err.Error()))
+		os.Exit(1)
+	}
+
+	printOzonCategories(categories)
+}
+
 // --- Common ---
+func printOzonCategories(categories []ozon.OzonCategoryCandidate) {
+	fmt.Println("Found Ozon categories:")
+	fmt.Println("")
+
+	for index, category := range categories {
+		fmt.Printf("%d. %s\n", index+1, category.Title)
+		fmt.Printf("   %s\n", category.URL)
+		fmt.Println("")
+	}
+}
 
 func printImportResponse(response pipeline.ImportResponse) {
 	fmt.Printf("Django import success: %t\n", response.Success)
@@ -462,6 +519,7 @@ func printUsageAndExit() {
 	fmt.Println("Ozon:")
 	fmt.Println(`  go run ./cmd/fetcher ozon product "/product/sirop-topping-bez-sahara-nizkokaloriynyy-mr-djemius-zero-solenaya-karamel-330g-1919933573/"`)
 	fmt.Println(`  go run ./cmd/fetcher ozon search --limit=100 "iphone"`)
+	fmt.Println(`  go run ./cmd/fetcher ozon categories --limit=10 "мужские свитеры"`)
 	fmt.Println(`  go run ./cmd/fetcher ozon category --limit=100 "/category/svitery-dzhempery-i-kardigany-muzhskie-7554/"`)
 	fmt.Println(`  go run ./cmd/fetcher ozon category --limit=100 "https://www.ozon.ru/category/svitery-dzhempery-i-kardigany-muzhskie-7554/"`)
 

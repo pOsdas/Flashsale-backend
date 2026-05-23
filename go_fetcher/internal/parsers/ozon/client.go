@@ -100,7 +100,7 @@ func (p *Parser) doJSONRequestOnce(ctx context.Context, requestURL string, targe
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return &ozonHTTPError{
 			StatusCode: resp.StatusCode,
-			Body:       string(responseBody),
+			Body:       limitString(string(responseBody), 1000),
 		}
 	}
 

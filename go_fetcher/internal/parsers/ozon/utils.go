@@ -55,3 +55,15 @@ func isDigitsOnly(s string) bool {
 
 	return true
 }
+
+func limitString(value string, maxLength int) string {
+	if maxLength <= 0 {
+		return ""
+	}
+
+	if len(value) <= maxLength {
+		return value
+	}
+
+	return value[:maxLength] + "...[truncated]"
+}
