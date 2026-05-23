@@ -1,0 +1,17 @@
+.git
+.idea
+.vscode
+
+.env
+*.log
+
+tmp
+bin
+dist
+build
+
+fetcher
+*.exe
+
+.DS_Store
+Thumbs.db
