@@ -99,6 +99,7 @@ class OutboxEvent(models.Model):
 
     available_at = models.DateTimeField(default=timezone.now, db_index=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     published_at = models.DateTimeField(null=True, blank=True)  # legacy - same as processed_at
     processed_at = models.DateTimeField(null=True, blank=True)
@@ -111,4 +112,4 @@ class OutboxEvent(models.Model):
         ]
 
     def __str__(self) -> str:
-        return f"OutboxEvent(topic={self.topic}, id={self.id}), status={self.status})"
+        return f"OutboxEvent(id={self.id}, topic={self.topic}, status={self.status})"
