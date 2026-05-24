@@ -1,4 +1,5 @@
 from django.contrib import admin
+from django.utils import timezone
 
 from app.api.v1.orders.models import (
     Reservation,
@@ -144,13 +145,17 @@ class OutboxEventAdmin(admin.ModelAdmin):
     list_display = (
         "id",
         "topic",
+        "status",
+        "attempts",
         "created_at",
         "published_at",
+        "processed_at",
     )
     list_filter = (
         "topic",
         "created_at",
         "published_at",
+        "processed_at",
     )
     search_fields = (
         "topic",
@@ -161,4 +166,27 @@ class OutboxEventAdmin(admin.ModelAdmin):
         "payload",
         "created_at",
         "published_at",
+        "processed_at",
     )
+
+    actions = (
+        "retry_selected_events",
+    )
+
+    @admin.action(description="Retry selected outbox events")
+    def retry_selected_events(self, request, queryset):
+        updated_count = queryset.exclude(
+            status=OutboxEvent.Status.PROCESSED
+        ).update(
+            status=OutboxEvent.Status.PENDING,
+            attempts=0,
+            error="",
+            available_at=timezone.now(),
+            processed_at=None,
+            published_at=None,
+        )
+
+        self.message_user(
+            request,
+            f"Scheduled {updated_count} outbox event(s) for retry."
+        )
