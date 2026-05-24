@@ -1,7 +1,6 @@
-from __future__ import annotations
-
 from django.conf import settings
 from django.db import models
+from django.utils import timezone
 
 from app.api.v1.catalog.models import Product
 
@@ -77,16 +76,39 @@ class IdempotencyKey(models.Model):
 
 
 class OutboxEvent(models.Model):
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        PROCESSING = "processing", "Processing"
+        PROCESSED = "processed", "Processed"
+        FAILED = "failed", "Failed"
+
     topic = models.CharField(max_length=128)
     payload = models.JSONField()
+
+    status = models.CharField(
+        max_length=32,
+        choices=Status.choices,
+        default=Status.PENDING,
+        db_index=True,
+    )
+
+    attempts = models.PositiveIntegerField(default=0)
+    max_attempts = models.PositiveIntegerField(default=5)
+
+    error = models.TextField(blank=True, default="")
+
+    available_at = models.DateTimeField(default=timezone.now, db_index=True)
     created_at = models.DateTimeField(auto_now_add=True)
-    published_at = models.DateTimeField(null=True, blank=True)
+
+    published_at = models.DateTimeField(null=True, blank=True)  # legacy - same as processed_at
+    processed_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         indexes = [
             models.Index(fields=["topic", "created_at"]),
+            models.Index(fields=["status", "available_at"]),
             models.Index(fields=["published_at", "created_at"]),
         ]
 
     def __str__(self) -> str:
-        return f"OutboxEvent(topic={self.topic}, id={self.id})"
+        return f"OutboxEvent(topic={self.topic}, id={self.id}), status={self.status})"
