@@ -37,6 +37,7 @@ INSTALLED_APPS = [
     'rest_framework',
     "drf_spectacular",
 
+    "app.api.v1.common.apps.V1CommonConfig",
     "app.api.v1.catalog.apps.V1CatalogConfig",
     "app.api.v1.orders.apps.V1OrdersConfig",
     "app.api.v1.payments.apps.V1PaymentsConfig",

@@ -5,7 +5,7 @@ from django.utils import timezone
 
 from app.core.logging import get_logger
 from app.api.v1.orders.models import OutboxEvent
-from app.api.v1.common.outbox_handlers import OUTBOX_EVENT_HANDLERS
+from app.api.v1.common.outbox_handlers import get_outbox_handlers
 
 
 logger = get_logger(__name__)
@@ -52,7 +52,8 @@ class OutboxWorker:
         return events
 
     def _process_event(self, event: OutboxEvent) -> None:
-        handler = OUTBOX_EVENT_HANDLERS.get(event.topic)
+        handlers = get_outbox_handlers()
+        handler = handlers.get(event.topic)
 
         if handler is None:
             self._mark_failed(
@@ -83,6 +84,7 @@ class OutboxWorker:
         OutboxEvent.objects.filter(id=event.id).update(
             status=OutboxEvent.Status.PROCESSED,
             processed_at=now,
+            published_at=now,
             updated_at=now,
             error="",
         )

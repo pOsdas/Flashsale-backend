@@ -11,7 +11,7 @@ from app.api.v1.payments.exceptions import (
     InvalidPaymentWebhookError, PaymentNotFoundError, InvalidOrderForPaymentError,
     OrderNotFoundError,
 )
-from app.api.v1.common import create_outbox_event
+from app.api.v1.common.outbox import create_outbox_event
 
 logger = get_logger(__name__)
 User = get_user_model()

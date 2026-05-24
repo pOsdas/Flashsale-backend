@@ -13,7 +13,8 @@ from app.api.v1.orders.exceptions import (
 )
 from app.api.v1.catalog.models import Stock
 from app.api.v1.orders.models import Order, OrderItem, IdempotencyKey
-from app.api.v1.common import create_outbox_event, compare_idempotency_payloads, make_idempotency_hash
+from app.api.v1.common.outbox import create_outbox_event
+from app.api.v1.common import compare_idempotency_payloads, make_idempotency_hash
 
 logger = get_logger(__name__)
 User = get_user_model()

@@ -5,7 +5,7 @@ from django.utils import timezone
 
 from app.api.v1.catalog.models import Product, Stock
 from app.api.v1.payments.models import ProcessedWebhookEvent
-from app.api.v1.common import create_outbox_event
+from app.api.v1.common.outbox import create_outbox_event
 from app.api.v1.common.locks import RedisLock, RedisLockAlreadyAcquiredError
 from app.api.v1.fetcher.exceptions import (
     FetcherBatchAlreadyProcessedError,

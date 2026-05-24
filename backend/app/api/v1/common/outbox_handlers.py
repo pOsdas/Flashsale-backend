@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Callable
 
 from app.core.logging import get_logger
 
@@ -26,8 +26,9 @@ def handle_catalog_import_completed(payload: dict[str, Any]) -> None:
     )
 
 
-OUTBOX_EVENT_HANDLERS = {
-    "order.created": handle_order_created,
-    "order.status_changed": handle_order_status_changed,
-    "catalog.import.completed": handle_catalog_import_completed,
-}
+def get_outbox_handlers() -> dict[str, Callable[[dict[str, Any]], None]]:
+    return {
+        "order.created": handle_order_created,
+        "order.status_changed": handle_order_status_changed,
+        "catalog.import.completed": handle_catalog_import_completed,
+    }
