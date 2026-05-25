@@ -1,0 +1,81 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: flashsale_db
+    environment:
+      POSTGRES_DB: flashsale
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: pwd
+    volumes:
+      - flashsale_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d flashsale"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:8-alpine
+    container_name: flashsale_redis
+
+  rabbitmq:
+    image: rabbitmq:4-management-alpine
+    container_name: flashsale_rabbitmq
+    ports:
+      - "127.0.0.1:15672:15672"
+
+  migrate:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: flashsale_migrate
+    env_file:
+      - ./backend/.env.docker
+    command: >
+      sh -c "python ensure_db.py"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: flashsale_backend
+    env_file:
+      - ./backend/.env.docker
+    command: >
+      sh -c "python manage.py runserver 0.0.0.0:8000"
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_started
+      rabbitmq:
+        condition: service_started
+
+  outbox_worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: flashsale_outbox_worker
+    env_file:
+      - ./backend/.env.docker
+    command: >
+      sh -c "python manage.py run_outbox_worker"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_started
+      rabbitmq:
+        condition: service_started
+
+volumes:
+  flashsale_postgres_data:
