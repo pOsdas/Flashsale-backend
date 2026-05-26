@@ -96,6 +96,8 @@ services:
       GF_SECURITY_ADMIN_PASSWORD: admin
     volumes:
       - flashsale_grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
     ports:
       - "127.0.0.1:3000:3000"
     depends_on:
