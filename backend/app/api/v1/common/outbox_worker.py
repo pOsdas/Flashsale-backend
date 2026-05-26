@@ -14,6 +14,8 @@ from app.api.v1.common.outbox_metrics import (
     OUTBOX_FAILED_EVENTS,
     OUTBOX_PENDING_EVENTS,
     OUTBOX_PROCESSING_EVENTS,
+    OUTBOX_PROCESSED_EVENTS,
+    OUTBOX_TOTAL_EVENTS,
 )
 
 
@@ -80,6 +82,16 @@ class OutboxWorker:
             OutboxEvent.objects.filter(
                 status=OutboxEvent.Status.PROCESSING,
             ).count()
+        )
+
+        OUTBOX_PROCESSED_EVENTS.set(
+            OutboxEvent.objects.filter(
+                status=OutboxEvent.Status.PROCESSED,
+            ).count()
+        )
+
+        OUTBOX_TOTAL_EVENTS.set(
+            OutboxEvent.objects.count()
         )
 
     def _process_event(self, event: OutboxEvent) -> None:

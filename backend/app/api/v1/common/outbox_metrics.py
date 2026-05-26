@@ -32,3 +32,13 @@ OUTBOX_PROCESSING_EVENTS = Gauge(
     "outbox_processing_events",
     "Current number of processing outbox events",
 )
+
+OUTBOX_PROCESSED_EVENTS = Gauge(
+    "outbox_processed_events",
+    "Current number of processed outbox events in database",
+)
+
+OUTBOX_TOTAL_EVENTS = Gauge(
+    "outbox_total_events",
+    "Current total number of outbox events in database",
+)
