@@ -22,7 +22,8 @@ dependencies = [
     "uvicorn (>=0.41.0,<0.42.0)",
     "argon2-cffi (>=25.1.0,<26.0.0)",
     "drf-spectacular (>=0.29.0,<0.30.0)",
-    "colorlog (>=6.10.1,<7.0.0)"
+    "colorlog (>=6.10.1,<7.0.0)",
+    "prometheus-client (>=0.25.0,<0.26.0)"
 ]
 
 

@@ -77,5 +77,31 @@ services:
       rabbitmq:
         condition: service_started
 
+  prometheus:
+    image: prom/prometheus:v3.0.1
+    container_name: flashsale_prometheus
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "127.0.0.1:9090:9090"
+    depends_on:
+      outbox_worker:
+        condition: service_started
+
+  grafana:
+    image: grafana/grafana:11.4.0
+    container_name: flashsale_grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - flashsale_grafana_data:/var/lib/grafana
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      prometheus:
+        condition: service_started
+
 volumes:
   flashsale_postgres_data:
+  flashsale_grafana_data:

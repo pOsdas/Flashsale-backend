@@ -1,4 +1,5 @@
 from datetime import timedelta
+import time
 
 from django.db import transaction, models
 from django.utils import timezone
@@ -6,6 +7,14 @@ from django.utils import timezone
 from app.core.logging import get_logger
 from app.api.v1.orders.models import OutboxEvent
 from app.api.v1.common.outbox_handlers import get_outbox_handlers
+from app.api.v1.common.outbox_metrics import (
+    OUTBOX_EVENT_PROCESSING_DURATION_SECONDS,
+    OUTBOX_EVENTS_FAILED_TOTAL,
+    OUTBOX_EVENTS_PROCESSED_TOTAL,
+    OUTBOX_FAILED_EVENTS,
+    OUTBOX_PENDING_EVENTS,
+    OUTBOX_PROCESSING_EVENTS,
+)
 
 
 logger = get_logger(__name__)
@@ -16,13 +25,16 @@ class OutboxWorker:
         self.batch_size = batch_size
 
     def run_once(self) -> int:
-        events = self._claim_events()
+        self._update_metrics()
 
+        events = self._claim_events()
         processed_count = 0
 
         for event in events:
             self._process_event(event)
             processed_count += 1
+
+        self._update_metrics()
 
         return processed_count
 
@@ -51,11 +63,34 @@ class OutboxWorker:
 
         return events
 
+    def _update_metrics(self) -> None:
+        OUTBOX_PENDING_EVENTS.set(
+            OutboxEvent.objects.filter(
+                status=OutboxEvent.Status.PENDING,
+            ).count()
+        )
+
+        OUTBOX_FAILED_EVENTS.set(
+            OutboxEvent.objects.filter(
+                status=OutboxEvent.Status.FAILED,
+            ).count()
+        )
+
+        OUTBOX_PROCESSING_EVENTS.set(
+            OutboxEvent.objects.filter(
+                status=OutboxEvent.Status.PROCESSING,
+            ).count()
+        )
+
     def _process_event(self, event: OutboxEvent) -> None:
         handlers = get_outbox_handlers()
         handler = handlers.get(event.topic)
 
+        started_at = time.monotonic()
+
         if handler is None:
+            OUTBOX_EVENTS_FAILED_TOTAL.labels(topic=event.topic).inc()
+
             self._mark_failed(
                 event=event,
                 error=f"No handler registered for topic: {event.topic}",
@@ -65,6 +100,7 @@ class OutboxWorker:
         try:
             handler(event.payload)
         except Exception as exc:
+            OUTBOX_EVENTS_FAILED_TOTAL.labels(topic=event.topic).inc()
             logger.exception(
                 "Outbox event processing failed",
                 extra={
@@ -76,6 +112,14 @@ class OutboxWorker:
             self._mark_failed(event=event, error=str(exc))
             return
 
+        finally:
+            duration = time.monotonic() - started_at
+
+            OUTBOX_EVENT_PROCESSING_DURATION_SECONDS.labels(
+                topic=event.topic,
+            ).observe(duration)
+
+        OUTBOX_EVENTS_PROCESSED_TOTAL.labels(topic=event.topic).inc()
         self._mark_processed(event)
 
     def _mark_processed(self, event: OutboxEvent) -> None:

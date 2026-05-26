@@ -1,7 +1,9 @@
+import os
 import time
 import signal
 
 from django.core.management.base import BaseCommand
+from prometheus_client import start_http_server
 
 
 class Command(BaseCommand):
@@ -29,6 +31,11 @@ class Command(BaseCommand):
             default=5,
             help="Sleep time between iterations in seconds",
         )
+        parser.add_argument(
+            "--metrics-port",
+            type=int,
+            default=9100,
+        )
 
     def handle(self, *args, **options):
         from app.api.v1.common.outbox_worker import OutboxWorker
@@ -39,6 +46,21 @@ class Command(BaseCommand):
         once = options["once"]
         batch_size = options["batch_size"]
         sleep_seconds = options["sleep"]
+
+        metrics_port = int(
+            os.environ.get(
+                "OUTBOX_METRICS_PORT",
+                options["metrics_port"],
+            )
+        )
+
+        if not once:
+            start_http_server(metrics_port)
+            self.stdout.write(
+                self.style.SUCCESS(
+                    f"Outbox metrics server started on port {metrics_port}"
+                )
+            )
 
         worker = OutboxWorker(batch_size=batch_size)
 
@@ -61,7 +83,12 @@ class Command(BaseCommand):
             if once:
                 break
 
-            time.sleep(sleep_seconds)
+            if self.running:
+                time.sleep(sleep_seconds)
+
+        self.stdout.write(
+            self.style.WARNING("Outbox worker stopped gracefully")
+        )
 
     def _stop(self, signum, frame):
         self.stdout.write(
