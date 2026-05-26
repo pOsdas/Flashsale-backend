@@ -18,6 +18,7 @@ urlpatterns = [
     path(f"{API_PREFIX}{API_V1_PREFIX}/graphql/", GraphQLView.as_view(schema=schema)),
     path(f"{API_PREFIX}{API_V1_PREFIX}/payments/", include("app.api.v1.payments.urls")),
     path(f"{API_PREFIX}{API_V1_PREFIX}/fetcher/", include("app.api.v1.fetcher.urls")),
+    path(f"{API_PREFIX}{API_V1_PREFIX}/prometheus/", include("django_prometheus.urls")),
 ]
 
 if settings.DEBUG:

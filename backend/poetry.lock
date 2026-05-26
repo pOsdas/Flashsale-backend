@@ -428,6 +428,22 @@ argon2 = ["argon2-cffi (>=23.1.0)"]
 bcrypt = ["bcrypt (>=4.1.1)"]
 
 [[package]]
+name = "django-prometheus"
+version = "2.5.0.dev13"
+description = "Django middlewares to monitor your application with Prometheus.io."
+optional = false
+python-versions = "*"
+groups = ["main"]
+files = [
+    {file = "django_prometheus-2.5.0.dev13-py2.py3-none-any.whl", hash = "sha256:df5652a44f6ddaf146f8d338150de980dc708b6db4b0c67873d2ee24a6f73fef"},
+    {file = "django_prometheus-2.5.0.dev13.tar.gz", hash = "sha256:4901860c7d19eabea9f88925789ad1f5152ace483f3a9f9efecb6d93cda72251"},
+]
+
+[package.dependencies]
+Django = ">=4.2,<5.0.dev0 || >=5.1.dev0,<6.1"
+prometheus-client = ">=0.7"
+
+[[package]]
 name = "djangorestframework"
 version = "3.16.1"
 description = "Web APIs for Django, made easy."
@@ -1336,4 +1352,4 @@ files = [
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.12,<4.0"
-content-hash = "3fa1c17b79e959393cbb88c74c65b6082e8121aaae52d94f9e957a2bdf4657c4"
+content-hash = "42fb4f838ddf5fc241b4b372f29887c7b61edfa741f6f31463d3d3b6412fe1a7"
