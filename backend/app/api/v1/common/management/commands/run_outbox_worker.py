@@ -5,6 +5,11 @@ import signal
 from django.core.management.base import BaseCommand
 from prometheus_client import start_http_server
 
+from app.core.logging import get_logger
+
+
+logger = get_logger(__name__)
+
 
 class Command(BaseCommand):
     help = "Runs outbox worker"
@@ -68,6 +73,16 @@ class Command(BaseCommand):
             self.style.SUCCESS(
                 f"Outbox worker started: once={once}, batch_size={batch_size}, sleep={sleep_seconds}"
             )
+        )
+
+        logger.info(
+            "outbox worker started",
+            extra={
+                "service": "outbox_worker",
+                "once": once,
+                "batch_size": batch_size,
+                "sleep_seconds": sleep_seconds,
+            },
         )
 
         while self.running:

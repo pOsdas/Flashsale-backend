@@ -34,6 +34,18 @@ class OutboxWorker:
 
         for event in events:
             self._process_event(event)
+
+            logger.info(
+                "processing outbox event",
+                extra={
+                    "service": "outbox_worker",
+                    "event_id": str(event.id),
+                    "topic": event.topic,
+                    "attempts": event.attempts,
+                    "status": event.status,
+                },
+            )
+
             processed_count += 1
 
         self._update_metrics()
@@ -116,9 +128,12 @@ class OutboxWorker:
             logger.exception(
                 "Outbox event processing failed",
                 extra={
-                    "event_id": event.id,
+                    "service": "outbox_worker",
+                    "event_id": str(event.id),
                     "topic": event.topic,
                     "attempts": event.attempts,
+                    "status": event.status,
+                    "error": str(exc),
                 },
             )
             self._mark_failed(event=event, error=str(exc))
@@ -148,8 +163,11 @@ class OutboxWorker:
         logger.info(
             "Outbox event processed",
             extra={
-                "event_id": event.id,
+                "service": "outbox_worker",
+                "event_id": str(event.id),
                 "topic": event.topic,
+                "attempts": event.attempts,
+                "status": event.status,
             },
         )
 

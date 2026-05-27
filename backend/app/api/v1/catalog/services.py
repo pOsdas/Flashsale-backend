@@ -29,6 +29,7 @@ def create_product(
         logger.error(
             "Invalid product title",
             extra={
+                "service": "backend",
                 "product_sku": product_sku,
                 "title": title,
             },

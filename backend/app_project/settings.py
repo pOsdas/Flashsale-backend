@@ -4,6 +4,7 @@ from pathlib import Path
 
 import dj_database_url
 
+import app.core.logging_filters
 from app.core.config import get_settings
 
 # Base project dir
@@ -46,6 +47,7 @@ INSTALLED_APPS = [
 # Middleware
 MIDDLEWARE = [
     'django_prometheus.middleware.PrometheusBeforeMiddleware',
+    'app.core.middleware.request_id.RequestIDMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -154,6 +156,8 @@ FETCHER_QUEUE_KEY = getattr(s, "fetcher_queue_key", "fetcher:queue")
 FETCHER_RESULT_PREFIX = getattr(s, "fetcher_result_prefix", "fetcher:result:")
 
 # Logging
+LOG_FORMAT = os.getenv("LOG_FORMAT", default="colored")
+
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
@@ -172,15 +176,39 @@ LOGGING = {
         },
         "json": {
             "()": "pythonjsonlogger.jsonlogger.JsonFormatter",
-            "fmt": "%(levelname)s %(name)s %(message)s %(asctime)s",
+            "fmt": (
+                "%(asctime)s "
+                "%(levelname)s "
+                "%(name)s "
+                "%(module)s "
+                "%(funcName)s "
+                "%(lineno)d "
+                "%(message)s "
+                "%(service)s "
+                "%(request_id)s "
+                "%(method)s "
+                "%(path)s "
+                "%(status_code)s "
+                "%(duration_ms)s "
+                "%(event_id)s "
+                "%(topic)s "
+                "%(attempts)s "
+                "%(error)s"
+            ),
+        },
+    },
+    "filters": {
+        "request_id": {
+            "()": "app.core.logging_filters.RequestIdLoggingFilter"
         },
     },
     "handlers": {
         "console": {
             "class": "logging.StreamHandler",
             "stream": "ext://sys.stdout",
-            "formatter": "colored" if DEBUG else "json",
+            "formatter": "json" if LOG_FORMAT == "json" else "colored",
             "level": "DEBUG",
+            "filters": ["request_id"],
         },
     },
     "root": {
@@ -189,6 +217,11 @@ LOGGING = {
     },
     "loggers": {
         "django": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "outbox": {
             "handlers": ["console"],
             "level": "INFO",
             "propagate": False,

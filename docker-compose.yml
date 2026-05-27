@@ -88,6 +88,28 @@ services:
       outbox_worker:
         condition: service_started
 
+  loki:
+    image: grafana/loki:3.3.2
+    container_name: flashsale_loki
+    command: -config.file=/etc/loki/loki-config.yml
+    volumes:
+      - ./loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - flashsale_loki_data:/loki
+    ports:
+      - "127.0.0.1:3100:3100"
+
+  promtail:
+    image: grafana/promtail:3.3.2
+    container_name: flashsale_promtail
+    command: -config.file=/etc/promtail/promtail-config.yml
+    volumes:
+      - ./promtail/promtail-config.yml:/etc/promtail/promtail-config.yml:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      loki:
+        condition: service_started
+
   grafana:
     image: grafana/grafana:11.4.0
     container_name: flashsale_grafana
@@ -103,7 +125,10 @@ services:
     depends_on:
       prometheus:
         condition: service_started
+      loki:
+        condition: service_started
 
 volumes:
   flashsale_postgres_data:
   flashsale_grafana_data:
+  flashsale_loki_data:
