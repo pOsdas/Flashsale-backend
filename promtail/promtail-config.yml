@@ -27,3 +27,20 @@ scrape_configs:
 
     pipeline_stages:
       - docker: {}
+
+      - json:
+          expressions:
+            level: levelname
+            logger: name
+            service: service
+            request_id: request_id
+            topic: topic
+            status_code: status_code
+            event_id: event_id
+
+      - labels:
+          level:
+          logger:
+          service:
+          topic:
+          status_code:
