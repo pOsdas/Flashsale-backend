@@ -85,25 +85,29 @@ class Command(BaseCommand):
             },
         )
 
-        while self.running:
-            processed_count = worker.run_once()
+        try:
+            while self.running:
+                processed_count = worker.run_once()
 
-            if processed_count:
-                self.stdout.write(
-                    self.style.SUCCESS(
-                        f"Processed outbox events: {processed_count}"
+                if processed_count:
+                    self.stdout.write(
+                        self.style.SUCCESS(
+                            f"Processed outbox events: {processed_count}"
+                        )
                     )
-                )
 
-            if once:
-                break
+                if once:
+                    break
 
-            if self.running:
-                time.sleep(sleep_seconds)
+                if self.running:
+                    time.sleep(sleep_seconds)
 
-        self.stdout.write(
-            self.style.WARNING("Outbox worker stopped gracefully")
-        )
+        finally:
+            worker.close()
+
+            self.stdout.write(
+                self.style.WARNING("Outbox worker stopped gracefully")
+            )
 
     def _stop(self, signum, frame):
         self.stdout.write(

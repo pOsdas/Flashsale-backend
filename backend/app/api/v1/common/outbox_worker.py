@@ -6,7 +6,7 @@ from django.utils import timezone
 
 from app.core.logging import get_logger
 from app.api.v1.orders.models import OutboxEvent
-from app.api.v1.common.outbox_handlers import get_outbox_handlers
+from app.api.v1.common.outbox_dispatchers import build_outbox_dispatcher
 from app.api.v1.common.outbox_metrics import (
     OUTBOX_EVENT_PROCESSING_DURATION_SECONDS,
     OUTBOX_EVENTS_FAILED_TOTAL,
@@ -25,6 +25,7 @@ logger = get_logger(__name__)
 class OutboxWorker:
     def __init__(self, batch_size: int = 50) -> None:
         self.batch_size = batch_size
+        self.dispatcher = build_outbox_dispatcher()
 
     def run_once(self) -> int:
         self._update_metrics()
@@ -107,24 +108,13 @@ class OutboxWorker:
         )
 
     def _process_event(self, event: OutboxEvent) -> None:
-        handlers = get_outbox_handlers()
-        handler = handlers.get(event.topic)
-
         started_at = time.monotonic()
 
-        if handler is None:
-            OUTBOX_EVENTS_FAILED_TOTAL.labels(topic=event.topic).inc()
-
-            self._mark_failed(
-                event=event,
-                error=f"No handler registered for topic: {event.topic}",
-            )
-            return
-
         try:
-            handler(event.payload)
+            self.dispatcher.dispatch(event)
         except Exception as exc:
             OUTBOX_EVENTS_FAILED_TOTAL.labels(topic=event.topic).inc()
+
             logger.exception(
                 "Outbox event processing failed",
                 extra={
@@ -193,3 +183,6 @@ class OutboxWorker:
     def _get_retry_delay(self, attempt: int) -> timedelta:
         seconds = min(60 * (2 ** (attempt - 1)), 3600)
         return timedelta(seconds=seconds)
+
+    def close(self) -> None:
+        self.dispatcher.close()

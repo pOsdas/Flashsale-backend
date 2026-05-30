@@ -105,6 +105,11 @@ CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
 CELERY_TIMEZONE = TIME_ZONE
 
+# RabbitMQ
+OUTBOX_DISPATCH_MODE = os.getenv("OUTBOX_DISPATCH_MODE", default="local")
+RABBITMQ_URL = os.getenv("RABBITMQ_URL", default="amqp://guest:guest@localhost:5672/")
+RABBITMQ_EXCHANGE = os.getenv("RABBITMQ_EXCHANGE", default="flashsale.events")
+
 # Security
 if not DEBUG:
     SECURE_SSL_REDIRECT = True
