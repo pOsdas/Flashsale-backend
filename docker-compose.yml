@@ -111,8 +111,12 @@ services:
         condition: service_started
 
   grafana:
-    image: grafana/grafana:11.4.0
+    build:
+      context: ./grafana
+      dockerfile: Dockerfile
     container_name: flashsale_grafana
+    env_file:
+      - ./backend/.env.docker
     environment:
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD: admin
@@ -120,6 +124,13 @@ services:
       - flashsale_grafana_data:/var/lib/grafana
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
       - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        cp -r /etc/grafana/provisioning /tmp/provisioning
+        envsubst < /tmp/provisioning/alerting/contact-points.yml.template > /tmp/provisioning/alerting/contact-points.yml
+        exec /run.sh --homepath=/usr/share/grafana --config=/etc/grafana/grafana.ini --packaging=docker cfg:default.paths.provisioning=/tmp/provisioning
     ports:
       - "127.0.0.1:3000:3000"
     depends_on:

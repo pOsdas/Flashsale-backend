@@ -1,0 +1,24 @@
+apiVersion: 1
+
+contactPoints:
+  - orgId: 1
+    name: telegram
+    receivers:
+      - uid: telegram_flashsale
+        type: telegram
+        settings:
+          bottoken: "${GRAFANA_TELEGRAM_BOT_TOKEN}"
+          chatid: "${GRAFANA_TELEGRAM_CHAT_ID}"
+          message: |
+            🚨 Flashsale Alert
+
+            Status: {{ .Status }}
+
+            {{ range .Alerts }}
+            Alert: {{ .Labels.alertname }}
+            Severity: {{ .Labels.severity }}
+            Service: {{ .Labels.service }}
+
+            Summary: {{ .Annotations.summary }}
+            Description: {{ .Annotations.description }}
+            {{ end }}

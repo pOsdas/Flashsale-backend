@@ -26,7 +26,7 @@ def _resolve_env_files() -> Tuple[str, ...]:
     if explicit:
         return (explicit,)
 
-    return (".env.local-template", ".env.local")
+    return (".env.local",)
 
 
 class Settings(BaseSettings):
@@ -57,8 +57,8 @@ class Settings(BaseSettings):
         default_factory=lambda: ["localhost", "127.0.0.1"]
     )
     fetcher_api_key: str
-
     django_settings_module: str = "app_project.settings"
+    log_format: str = "colored"
 
     # REDIS
     redis_url: AnyUrl = "redis://localhost:6379/0"

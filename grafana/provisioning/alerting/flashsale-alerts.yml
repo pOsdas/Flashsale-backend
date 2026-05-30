@@ -1,0 +1,105 @@
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: Flashsale operations alerts
+    folder: Flashsale
+    interval: 1m
+    rules:
+      - uid: flashsale_outbox_failed_events
+        title: Failed Outbox Events
+        condition: C
+        data:
+          - refId: A
+            datasourceUid: Prometheus
+            relativeTimeRange:
+              from: 300
+              to: 0
+            model:
+              expr: increase(outbox_events_failed_total[5m])
+              refId: A
+              instant: true
+              range: false
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              type: reduce
+              expression: A
+              reducer: last
+              refId: B
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [0]
+                  operator:
+                    type: and
+                  query:
+                    params: [C]
+                  reducer:
+                    type: last
+                  type: query
+              refId: C
+        noDataState: OK
+        execErrState: Error
+        for: 1m
+        annotations:
+          summary: Failed outbox events detected
+          description: Outbox worker has failed events during the last 5 minutes.
+        labels:
+          severity: warning
+          service: outbox_worker
+        isPaused: false
+
+      - uid: flashsale_outbox_pending_high
+        title: Pending Outbox Events High
+        condition: C
+        data:
+          - refId: A
+            datasourceUid: Prometheus
+            relativeTimeRange:
+              from: 300
+              to: 0
+            model:
+              expr: outbox_events_pending
+              refId: A
+              instant: true
+              range: false
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              type: reduce
+              expression: A
+              reducer: last
+              refId: B
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [50]
+                  operator:
+                    type: and
+                  query:
+                    params: [C]
+                  reducer:
+                    type: last
+                  type: query
+              refId: C
+        noDataState: OK
+        execErrState: Error
+        for: 5m
+        annotations:
+          summary: Too many pending outbox events
+          description: Pending outbox events stayed above 50 for 5 minutes.
+        labels:
+          severity: warning
+          service: outbox_worker
+        isPaused: false
