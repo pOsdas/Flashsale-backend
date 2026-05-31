@@ -32,6 +32,9 @@ services:
     container_name: flashsale_rabbitmq
     ports:
       - "127.0.0.1:15672:15672"
+    command: >
+      sh -c "rabbitmq-plugins enable --offline rabbitmq_management rabbitmq_prometheus &&
+             rabbitmq-server"
 
   migrate:
     build:
