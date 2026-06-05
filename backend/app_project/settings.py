@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     "app.api.v1.catalog.apps.V1CatalogConfig",
     "app.api.v1.orders.apps.V1OrdersConfig",
     "app.api.v1.payments.apps.V1PaymentsConfig",
+    "app.api.v1.monitoring.apps.V1MonitoringConfig",
 ]
 # Middleware
 MIDDLEWARE = [
