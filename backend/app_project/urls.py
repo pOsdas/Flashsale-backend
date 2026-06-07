@@ -32,7 +32,14 @@ if settings.DEBUG:
 
     urlpatterns += [
         # Маршруты для OpenAPI схемы и Swagger UI / Redoc
-        path(f'{API_PREFIX}{API_V1_PREFIX}/schema/', SpectacularAPIView.as_view(), name='schema'),
         path(f'{API_PREFIX}{API_V1_PREFIX}/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
-        path(f'{API_PREFIX}{API_V1_PREFIX}/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui')
+        path(f'{API_PREFIX}{API_V1_PREFIX}/schema/', SpectacularAPIView.as_view(), name='schema'),
+        path(
+            f'{API_PREFIX}{API_V1_PREFIX}/docs/',
+            SpectacularSwaggerView.as_view(
+                url_name='schema',
+                template_name='drf_spectacular/swagger_ui.html'
+            ),
+            name='swagger-ui'
+        ),
     ]

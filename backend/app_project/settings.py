@@ -65,7 +65,7 @@ TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
         # 'DIRS': [BASE_DIR / 'templates'],
-        'DIRS': [],
+        "DIRS": [BASE_DIR / "templates"],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -105,6 +105,17 @@ CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
 CELERY_TIMEZONE = TIME_ZONE
+
+# Go Fetcher
+MONITORING_FETCHER_MODE = os.getenv("MONITORING_FETCHER_MODE", default="fake")
+
+GO_FETCHER_BASE_URL = os.getenv("GO_FETCHER_BASE_URL", default="http://localhost:8090")
+GO_FETCHER_PRODUCT_ENDPOINT = os.getenv(
+    "GO_FETCHER_PRODUCT_ENDPOINT",
+    default="/api/v1/fetch/product",
+)
+GO_FETCHER_API_KEY = os.getenv("GO_FETCHER_API_KEY", default="")
+GO_FETCHER_TIMEOUT_SECONDS = int(os.getenv("GO_FETCHER_TIMEOUT_SECONDS", default=20))
 
 # RabbitMQ
 OUTBOX_DISPATCH_MODE = os.getenv("OUTBOX_DISPATCH_MODE", default="local")
@@ -154,6 +165,13 @@ SPECTACULAR_SETTINGS = {
     "TITLE": "Flashsale Backend API",
     "DESCRIPTION": "API documentation for flashsale-backend",
     "VERSION": "1.0.0",
+    "SERVE_INCLUDE_SCHEMA": False,
+
+    "SWAGGER_UI_SETTINGS": {
+        "deepLinking": True,
+        "persistAuthorization": True,
+        "displayOperationId": True,
+    },
 }
 
 # Webhooks / Go fetcher

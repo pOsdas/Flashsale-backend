@@ -36,6 +36,17 @@ services:
       sh -c "rabbitmq-plugins enable --offline rabbitmq_management rabbitmq_prometheus &&
              rabbitmq-server"
 
+  go_fetcher:
+    build:
+      context: ./go_fetcher
+      dockerfile: Dockerfile
+    container_name: flashsale_go_fetcher
+    env_file:
+      - ./go_fetcher/.env
+    command: ["serve"]
+    ports:
+      - "127.0.0.1:8090:8090"
+
   migrate:
     build:
       context: ./backend
@@ -87,6 +98,27 @@ services:
       redis:
         condition: service_started
       rabbitmq:
+        condition: service_started
+
+  monitoring_scanner:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: flashsale_monitoring_scanner
+    env_file:
+      - ./backend/.env.docker
+    command: >
+      sh -c "python manage.py run_monitoring_scanner"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_started
+      rabbitmq:
+        condition: service_started
+      go_fetcher:
         condition: service_started
 
   prometheus:

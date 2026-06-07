@@ -12,6 +12,9 @@ type wbProductsResponse struct {
 type wbProduct struct {
 	ID            int64    `json:"id"`
 	Brand         string   `json:"brand"`
+	Supplier      string   `json:"supplier"`
+	ReviewRating  float64  `json:"reviewRating"`
+	Feedbacks     int      `json:"feedbacks"`
 	Name          string   `json:"name"`
 	PriceU        int      `json:"priceU"`
 	SalePriceU    int      `json:"salePriceU"`

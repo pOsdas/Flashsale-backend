@@ -13,7 +13,6 @@ from app.api.v1.monitoring.models import (
     ProductSnapshot,
 )
 from app.api.v1.monitoring.serializers import (
-    AlertQuerySerializer,
     AlertSerializer,
     MonitoringTargetSerializer,
     ProductSnapshotSerializer,

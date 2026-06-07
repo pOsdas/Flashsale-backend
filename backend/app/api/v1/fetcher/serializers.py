@@ -1,6 +1,28 @@
 from rest_framework import serializers
 
 
+class FetchProductRequestSerializer(serializers.Serializer):
+    marketplace = serializers.ChoiceField(choices=["wb", "ozon"])
+    url = serializers.URLField(max_length=2000)
+    role = serializers.ChoiceField(
+        choices=["own", "competitor"],
+        default="competitor",
+    )
+    check_interval_minutes = serializers.IntegerField(
+        min_value=15,
+        max_value=1440,
+        default=60,
+    )
+
+
+class FetchProductResponseSerializer(serializers.Serializer):
+    success = serializers.BooleanField()
+    target_id = serializers.UUIDField()
+    snapshot_id = serializers.UUIDField()
+    alerts_count = serializers.IntegerField()
+    product = serializers.DictField()
+
+
 class FetcherImportItemSerializer(serializers.Serializer):
     sku = serializers.CharField(max_length=128)
     title = serializers.CharField(max_length=255)

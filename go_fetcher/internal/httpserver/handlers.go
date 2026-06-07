@@ -1,0 +1,145 @@
+package httpserver
+
+import (
+	"encoding/json"
+	"errors"
+	"log/slog"
+	"net/http"
+	"strings"
+)
+
+func (s *Server) handleFetchProduct(w http.ResponseWriter, r *http.Request) {
+	s.logger.Info(
+		"GO_FETCHER_HTTP_REQUEST_RECEIVED",
+		slog.String("method", r.Method),
+		slog.String("path", r.URL.Path),
+		slog.String("remote_addr", r.RemoteAddr),
+		slog.String("content_type", r.Header.Get("Content-Type")),
+		slog.Bool("has_api_key", r.Header.Get("X-Fetcher-Api-Key") != ""),
+	)
+
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	if s.apiKey != "" {
+		requestAPIKey := r.Header.Get("X-Fetcher-Api-Key")
+		if requestAPIKey != s.apiKey {
+			writeError(w, http.StatusUnauthorized, "invalid fetcher api key")
+			return
+		}
+	}
+
+	contentType := r.Header.Get("Content-Type")
+	if !strings.HasPrefix(contentType, "application/json") {
+		writeError(w, http.StatusUnsupportedMediaType, "content type must be application/json")
+		return
+	}
+
+	var req FetchProductRequest
+
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+
+	if err := decoder.Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid json request body")
+		return
+	}
+
+	req.Marketplace = strings.ToLower(strings.TrimSpace(req.Marketplace))
+	req.URL = strings.TrimSpace(req.URL)
+	req.ExternalID = strings.TrimSpace(req.ExternalID)
+
+	if err := validateFetchProductRequest(req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	var (
+		product *ProductDTO
+		err     error
+	)
+
+	switch req.Marketplace {
+	case "wb":
+		if s.wbFetcher == nil {
+			writeError(w, http.StatusInternalServerError, "wb fetcher is not configured")
+			return
+		}
+
+		product, err = s.wbFetcher(r.Context(), req)
+
+	case "ozon":
+		if s.ozonFetcher == nil {
+			writeError(w, http.StatusInternalServerError, "ozon fetcher is not configured")
+			return
+		}
+
+		product, err = s.ozonFetcher(r.Context(), req)
+
+	default:
+		writeError(w, http.StatusBadRequest, "unsupported marketplace")
+		return
+	}
+
+	if err != nil {
+		s.logger.Error(
+			"failed to fetch product",
+			"marketplace", req.Marketplace,
+			"url", req.URL,
+			"error", err,
+		)
+
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+
+	if product == nil {
+		writeError(w, http.StatusBadGateway, "product was not found")
+		return
+	}
+
+	if req.ExternalID != "" {
+		product.ExternalID = req.ExternalID
+	}
+
+	writeJSON(w, http.StatusOK, FetchProductResponse{
+		Status:  "success",
+		Product: product,
+	})
+}
+
+func validateFetchProductRequest(req FetchProductRequest) error {
+	if req.Marketplace == "" {
+		return errors.New("marketplace is required")
+	}
+
+	if req.Marketplace != "wb" && req.Marketplace != "ozon" {
+		return errors.New("marketplace must be wb or ozon")
+	}
+
+	if req.URL == "" {
+		return errors.New("url is required")
+	}
+
+	if !strings.HasPrefix(req.URL, "http://") && !strings.HasPrefix(req.URL, "https://") {
+		return errors.New("url must start with http:// or https://")
+	}
+
+	return nil
+}
+
+func writeJSON(w http.ResponseWriter, statusCode int, payload FetchProductResponse) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
+
+	_ = json.NewEncoder(w).Encode(payload)
+}
+
+func writeError(w http.ResponseWriter, statusCode int, message string) {
+	writeJSON(w, statusCode, FetchProductResponse{
+		Status: "error",
+		Error:  message,
+	})
+}

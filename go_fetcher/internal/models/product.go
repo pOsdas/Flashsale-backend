@@ -1,30 +1,42 @@
 package models
 
 type Product struct {
-	SKU        string
-	Title      string
-	PriceCents int
-	Currency   string
-	Available  int
-	IsActive   bool
+	SKU          string
+	Title        string
+	SellerName   string
+	Brand        string
+	PriceCents   int
+	Currency     string
+	Available    int
+	IsActive     bool
+	Rating       float64
+	ReviewsCount int
 }
 
 type ProductImport struct {
-	SKU        string `json:"sku"`
-	Title      string `json:"title"`
-	PriceCents int    `json:"price_cents"`
-	Currency   string `json:"currency"`
-	Available  int    `json:"available"`
-	IsActive   bool   `json:"is_active"`
+	SKU          string  `json:"sku"`
+	Title        string  `json:"title"`
+	SellerName   string  `json:"seller_name"`
+	Brand        string  `json:"brand"`
+	PriceCents   int     `json:"price_cents"`
+	Currency     string  `json:"currency"`
+	Available    int     `json:"available"`
+	IsActive     bool    `json:"is_active"`
+	Rating       float64 `json:"rating"`
+	ReviewsCount int     `json:"reviews_count"`
 }
 
 func (p Product) ToImport() ProductImport {
 	return ProductImport{
-		SKU:        p.SKU,
-		Title:      p.Title,
-		PriceCents: p.PriceCents,
-		Currency:   p.Currency,
-		Available:  p.Available,
-		IsActive:   p.IsActive,
+		SKU:          p.SKU,
+		Title:        p.Title,
+		SellerName:   p.SellerName,
+		Brand:        p.Brand,
+		PriceCents:   p.PriceCents,
+		Currency:     p.Currency,
+		Available:    p.Available,
+		IsActive:     p.IsActive,
+		Rating:       p.Rating,
+		ReviewsCount: p.ReviewsCount,
 	}
 }

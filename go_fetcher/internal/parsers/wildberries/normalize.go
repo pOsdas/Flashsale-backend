@@ -3,6 +3,7 @@ package wildberries
 import (
 	"go_fetcher/internal/models"
 	"strconv"
+	"strings"
 )
 
 func normalizeWBProducts(products []wbProduct) []models.Product {
@@ -10,12 +11,16 @@ func normalizeWBProducts(products []wbProduct) []models.Product {
 
 	for _, product := range products {
 		normalized := models.Product{
-			SKU:        strconv.FormatInt(product.ID, 10),
-			Title:      buildProductTitle(product),
-			PriceCents: extractPriceCents(product),
-			Currency:   defaultCurrency,
-			Available:  product.TotalQuantity,
-			IsActive:   true,
+			SKU:          strconv.FormatInt(product.ID, 10),
+			Title:        buildProductTitle(product),
+			SellerName:   strings.TrimSpace(product.Supplier),
+			Brand:        strings.TrimSpace(product.Brand),
+			PriceCents:   extractPriceCents(product),
+			Currency:     defaultCurrency,
+			Available:    product.TotalQuantity,
+			IsActive:     product.TotalQuantity > 0,
+			Rating:       product.ReviewRating,
+			ReviewsCount: product.Feedbacks,
 		}
 
 		if normalized.SKU == "" || normalized.Title == "" {

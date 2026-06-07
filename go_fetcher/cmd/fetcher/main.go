@@ -2,16 +2,24 @@ package main
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
 	"log/slog"
+	"net/url"
 	"os"
+	"os/signal"
+	"strconv"
+	"strings"
+	"syscall"
 	"time"
 
 	"github.com/joho/godotenv"
 
 	"go_fetcher/internal/config"
+	"go_fetcher/internal/httpserver"
 	"go_fetcher/internal/parsers/ozon"
 	"go_fetcher/internal/parsers/wildberries"
 	"go_fetcher/internal/pipeline"
@@ -30,7 +38,10 @@ const (
 	commandCategory   = "category"
 	commandCategories = "categories"
 
-	defaultLimit = 100
+	commandServe = "serve"
+
+	defaultLimit      = 100
+	defaultHTTPServer = "0.0.0.0:8090"
 )
 
 func main() {
@@ -41,11 +52,16 @@ func main() {
 	}
 
 	cfg, err := config.Load()
-
 	if err != nil {
 		logger.Error("failed to load config", slog.String("error", err.Error()))
 		os.Exit(1)
 	}
+
+	logger.Info(
+		"wb cookie status",
+		slog.Bool("has_wb_cookie", cfg.WBCookie != ""),
+		slog.Int("wb_cookie_len", len(cfg.WBCookie)),
+	)
 
 	logger.Info(
 		"ozon cookie status",
@@ -53,6 +69,18 @@ func main() {
 		slog.Int("ozon_cookie_len", len(cfg.OzonCookie)),
 	)
 
+	if len(os.Args) >= 2 && os.Args[1] == commandServe {
+		runHTTPServer(logger, cfg)
+		return
+	}
+
+	runCLI(logger, cfg)
+}
+
+func runCLI(
+	logger *slog.Logger,
+	cfg *config.Config,
+) {
 	if len(os.Args) < 3 {
 		printUsageAndExit()
 	}
@@ -98,6 +126,82 @@ func main() {
 		slog.String("command", command),
 		slog.Duration("duration", time.Since(startedAt)),
 	)
+}
+
+func runHTTPServer(
+	logger *slog.Logger,
+	cfg *config.Config,
+) {
+	ctx, stop := signal.NotifyContext(
+		context.Background(),
+		os.Interrupt,
+		syscall.SIGTERM,
+	)
+	defer stop()
+
+	wbParser := wildberries.NewParser(
+		wildberries.ParserConfig{
+			Cookie:         cfg.WBCookie,
+			Timeout:        cfg.Timeout,
+			RequestDelay:   cfg.WBRequestDelay,
+			MaxRetries:     cfg.WBMaxRetries,
+			RetryBaseDelay: cfg.WBRetryBaseDelay,
+		},
+		logger,
+	)
+
+	ozonParser := ozon.NewParser(
+		ozon.ParserConfig{
+			Cookie:         cfg.OzonCookie,
+			Timeout:        cfg.Timeout,
+			RequestDelay:   cfg.OzonRequestDelay,
+			MaxRetries:     cfg.OzonMaxRetries,
+			RetryBaseDelay: cfg.OzonRetryBaseDelay,
+		},
+		logger,
+	)
+
+	server := httpserver.NewServer(
+		defaultHTTPServer,
+		cfg.FetcherAPIKey,
+		logger,
+		func(ctx context.Context, req httpserver.FetchProductRequest) (*httpserver.ProductDTO, error) {
+			productInput, err := buildWBProductInput(req.URL)
+			if err != nil {
+				return nil, err
+			}
+
+			products, err := wbParser.ParseProduct(ctx, productInput)
+			if err != nil {
+				return nil, err
+			}
+
+			if len(products) == 0 {
+				return nil, errors.New("wb product was not found")
+			}
+
+			return productToDTO(products[0]), nil
+		},
+		func(ctx context.Context, req httpserver.FetchProductRequest) (*httpserver.ProductDTO, error) {
+			productInput := strings.TrimSpace(req.URL)
+
+			products, err := ozonParser.ParseProduct(ctx, productInput)
+			if err != nil {
+				return nil, err
+			}
+
+			if len(products) == 0 {
+				return nil, errors.New("ozon product was not found")
+			}
+
+			return productToDTO(products[0]), nil
+		},
+	)
+
+	if err := server.Run(ctx); err != nil {
+		logger.Error("http server failed", slog.String("error", err.Error()))
+		os.Exit(1)
+	}
 }
 
 // --- WB ---
@@ -487,7 +591,181 @@ func runOzonCategoriesCommand(
 	printOzonCategories(categories)
 }
 
+// --- HTTP helpers ---
+
+func buildWBProductInput(rawProductURL string) (string, error) {
+	rawProductURL = strings.TrimSpace(rawProductURL)
+
+	if rawProductURL == "" {
+		return "", errors.New("wb product url is required")
+	}
+
+	if _, err := strconv.ParseInt(rawProductURL, 10, 64); err == nil {
+		return rawProductURL, nil
+	}
+
+	parsedURL, err := url.Parse(rawProductURL)
+	if err != nil {
+		return "", errors.New("invalid wb product url")
+	}
+
+	pathParts := strings.Split(parsedURL.Path, "/")
+
+	for index, part := range pathParts {
+		if part == "catalog" && index+1 < len(pathParts) {
+			nmID := strings.TrimSpace(pathParts[index+1])
+
+			if nmID == "" {
+				return "", errors.New("wb nmID was not found in url")
+			}
+
+			if _, err := strconv.ParseInt(nmID, 10, 64); err != nil {
+				return "", errors.New("invalid wb nmID in url")
+			}
+
+			return nmID, nil
+		}
+	}
+
+	return "", errors.New("wb nmID was not found in url")
+}
+
+func productToDTO(product any) *httpserver.ProductDTO {
+	productMap := productToMap(product)
+
+	return &httpserver.ProductDTO{
+		ExternalID:   getString(productMap, "external_id", "externalID", "ExternalID", "sku", "SKU", "id", "ID"),
+		Title:        getString(productMap, "title", "Title", "name", "Name"),
+		SellerName:   getString(productMap, "seller_name", "sellerName", "SellerName", "seller", "Seller"),
+		Brand:        getString(productMap, "brand", "Brand"),
+		Price:        getInt(productMap, "price", "Price"),
+		OldPrice:     getInt(productMap, "old_price", "oldPrice", "OldPrice"),
+		Currency:     getStringWithDefault(productMap, "RUB", "currency", "Currency"),
+		IsAvailable:  getBool(productMap, "is_available", "isAvailable", "IsAvailable", "available", "Available"),
+		Rating:       getFloat(productMap, "rating", "Rating"),
+		ReviewsCount: getInt(productMap, "reviews_count", "reviewsCount", "ReviewsCount", "feedbacks", "Feedbacks"),
+	}
+}
+
+func productToMap(product any) map[string]any {
+	data, err := json.Marshal(product)
+	if err != nil {
+		return map[string]any{}
+	}
+
+	var productMap map[string]any
+
+	if err := json.Unmarshal(data, &productMap); err != nil {
+		return map[string]any{}
+	}
+
+	return productMap
+}
+
+func getString(productMap map[string]any, keys ...string) string {
+	for _, key := range keys {
+		value, ok := productMap[key]
+		if !ok || value == nil {
+			continue
+		}
+
+		switch typedValue := value.(type) {
+		case string:
+			return typedValue
+		case float64:
+			return strconv.FormatFloat(typedValue, 'f', -1, 64)
+		case bool:
+			return strconv.FormatBool(typedValue)
+		default:
+			return fmt.Sprintf("%v", typedValue)
+		}
+	}
+
+	return ""
+}
+
+func getStringWithDefault(productMap map[string]any, defaultValue string, keys ...string) string {
+	value := getString(productMap, keys...)
+	if value == "" {
+		return defaultValue
+	}
+
+	return value
+}
+
+func getInt(productMap map[string]any, keys ...string) int {
+	for _, key := range keys {
+		value, ok := productMap[key]
+		if !ok || value == nil {
+			continue
+		}
+
+		switch typedValue := value.(type) {
+		case int:
+			return typedValue
+		case int64:
+			return int(typedValue)
+		case float64:
+			return int(typedValue)
+		case string:
+			parsedValue, err := strconv.Atoi(typedValue)
+			if err == nil {
+				return parsedValue
+			}
+		}
+	}
+
+	return 0
+}
+
+func getFloat(productMap map[string]any, keys ...string) float64 {
+	for _, key := range keys {
+		value, ok := productMap[key]
+		if !ok || value == nil {
+			continue
+		}
+
+		switch typedValue := value.(type) {
+		case float64:
+			return typedValue
+		case int:
+			return float64(typedValue)
+		case int64:
+			return float64(typedValue)
+		case string:
+			parsedValue, err := strconv.ParseFloat(typedValue, 64)
+			if err == nil {
+				return parsedValue
+			}
+		}
+	}
+
+	return 0
+}
+
+func getBool(productMap map[string]any, keys ...string) bool {
+	for _, key := range keys {
+		value, ok := productMap[key]
+		if !ok || value == nil {
+			continue
+		}
+
+		switch typedValue := value.(type) {
+		case bool:
+			return typedValue
+		case string:
+			parsedValue, err := strconv.ParseBool(typedValue)
+			if err == nil {
+				return parsedValue
+			}
+		}
+	}
+
+	return false
+}
+
 // --- Common ---
+
 func printOzonCategories(categories []ozon.OzonCategoryCandidate) {
 	fmt.Println("Found Ozon categories:")
 	fmt.Println("")
@@ -508,6 +786,10 @@ func printImportResponse(response pipeline.ImportResponse) {
 
 func printUsageAndExit() {
 	fmt.Println("usage:")
+
+	fmt.Println("")
+	fmt.Println("HTTP server:")
+	fmt.Println("  go run ./cmd/fetcher serve")
 
 	fmt.Println("")
 	fmt.Println("Wildberries:")
