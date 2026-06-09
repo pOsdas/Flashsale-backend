@@ -121,6 +121,28 @@ services:
       go_fetcher:
         condition: service_started
 
+  notification_consumer:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: flashsale_notification_consumer
+    env_file:
+      - ./backend/.env.docker
+    command: > 
+      sh -c "python manage.py run_notification_consumer"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_started
+      rabbitmq:
+        condition: service_started
+    ports:
+      - "127.0.0.1:8011:8011"
+    restart: unless-stopped
+
   prometheus:
     image: prom/prometheus:v3.0.1
     container_name: flashsale_prometheus
@@ -130,6 +152,8 @@ services:
       - "127.0.0.1:9090:9090"
     depends_on:
       outbox_worker:
+        condition: service_started
+      notification_consumer:
         condition: service_started
 
   loki:

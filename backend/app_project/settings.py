@@ -44,6 +44,7 @@ INSTALLED_APPS = [
     "app.api.v1.orders.apps.V1OrdersConfig",
     "app.api.v1.payments.apps.V1PaymentsConfig",
     "app.api.v1.monitoring.apps.V1MonitoringConfig",
+    "app.api.v1.notifications.apps.V1NotificationsConfig",
 ]
 # Middleware
 MIDDLEWARE = [
@@ -107,20 +108,39 @@ CELERY_RESULT_SERIALIZER = "json"
 CELERY_TIMEZONE = TIME_ZONE
 
 # Go Fetcher
-MONITORING_FETCHER_MODE = os.getenv("MONITORING_FETCHER_MODE", default="fake")
+MONITORING_FETCHER_MODE = os.getenv("MONITORING_FETCHER_MODE", "fake")
 
-GO_FETCHER_BASE_URL = os.getenv("GO_FETCHER_BASE_URL", default="http://localhost:8090")
-GO_FETCHER_PRODUCT_ENDPOINT = os.getenv(
-    "GO_FETCHER_PRODUCT_ENDPOINT",
-    default="/api/v1/fetch/product",
-)
-GO_FETCHER_API_KEY = os.getenv("GO_FETCHER_API_KEY", default="")
-GO_FETCHER_TIMEOUT_SECONDS = int(os.getenv("GO_FETCHER_TIMEOUT_SECONDS", default=20))
+GO_FETCHER_BASE_URL = os.getenv("GO_FETCHER_BASE_URL", "http://localhost:8090")
+GO_FETCHER_PRODUCT_ENDPOINT = os.getenv("GO_FETCHER_PRODUCT_ENDPOINT", "/api/v1/fetch/product")
+GO_FETCHER_API_KEY = os.getenv("GO_FETCHER_API_KEY", "")
+GO_FETCHER_TIMEOUT_SECONDS = int(os.getenv("GO_FETCHER_TIMEOUT_SECONDS", "20"))
+
+# NOTIFICATIONS
+NOTIF_TELEGRAM_BOT_TOKEN = os.getenv("NOTIF_TELEGRAM_BOT_TOKEN", "")
+
+NOTIFICATION_CONSUMER_METRICS_PORT = int(os.getenv("NOTIFICATION_CONSUMER_METRICS_PORT", "8011"))
+
+NOTIFICATION_RABBITMQ_QUEUE = os.getenv("NOTIFICATION_RABBITMQ_QUEUE", "flashsale.notifications")
+
+NOTIFICATION_RABBITMQ_DLQ = os.getenv("NOTIFICATION_RABBITMQ_DLQ", "flashsale.notifications.dlq")
+
+NOTIFICATION_RABBITMQ_DLX = os.getenv("NOTIFICATION_RABBITMQ_DLX", "flashsale.notifications.dlx")
+
+NOTIFICATION_RABBITMQ_PREFETCH_COUNT = int(os.getenv("NOTIFICATION_RABBITMQ_PREFETCH_COUNT", "10"))
+
+NOTIFICATION_RABBITMQ_ROUTING_KEYS = [
+    item.strip()
+    for item in os.getenv(
+        "NOTIFICATION_RABBITMQ_ROUTING_KEYS",
+        "alert.created",
+    ).split(",")
+    if item.strip()
+]
 
 # RabbitMQ
-OUTBOX_DISPATCH_MODE = os.getenv("OUTBOX_DISPATCH_MODE", default="local")
-RABBITMQ_URL = os.getenv("RABBITMQ_URL", default="amqp://guest:guest@localhost:5672/")
-RABBITMQ_EXCHANGE = os.getenv("RABBITMQ_EXCHANGE", default="flashsale.events")
+OUTBOX_DISPATCH_MODE = os.getenv("OUTBOX_DISPATCH_MODE", "local")
+RABBITMQ_URL = os.getenv("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/")
+RABBITMQ_EXCHANGE = os.getenv("RABBITMQ_EXCHANGE", "flashsale.events")
 
 # Security
 if not DEBUG:
@@ -180,7 +200,7 @@ FETCHER_QUEUE_KEY = getattr(s, "fetcher_queue_key", "fetcher:queue")
 FETCHER_RESULT_PREFIX = getattr(s, "fetcher_result_prefix", "fetcher:result:")
 
 # Logging
-LOG_FORMAT = os.getenv("LOG_FORMAT", default="colored")
+LOG_FORMAT = os.getenv("LOG_FORMAT", "colored")
 
 LOGGING = {
     "version": 1,

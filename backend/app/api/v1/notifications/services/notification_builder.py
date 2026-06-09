@@ -23,7 +23,7 @@ class AlertNotificationBuilder:
 
     @classmethod
     def _get_product_title(cls, alert) -> str:
-        snapshot = getattr(alert, "new_snapshot", None)
+        snapshot = getattr(alert, "snapshot", None)
 
         if snapshot and getattr(snapshot, "title", ""):
             return snapshot.title
@@ -69,11 +69,6 @@ class AlertNotificationBuilder:
         if old_value not in (None, ""):
             return cls._format_value(alert, old_value)
 
-        old_snapshot = getattr(alert, "old_snapshot", None)
-
-        if old_snapshot:
-            return cls._snapshot_value_by_alert_type(alert, old_snapshot)
-
         return "—"
 
     @classmethod
@@ -83,10 +78,10 @@ class AlertNotificationBuilder:
         if new_value not in (None, ""):
             return cls._format_value(alert, new_value)
 
-        new_snapshot = getattr(alert, "new_snapshot", None)
+        snapshot = getattr(alert, "snapshot", None)
 
-        if new_snapshot:
-            return cls._snapshot_value_by_alert_type(alert, new_snapshot)
+        if snapshot:
+            return cls._snapshot_value_by_alert_type(alert, snapshot)
 
         return "—"
 

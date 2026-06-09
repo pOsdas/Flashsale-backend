@@ -1,5 +1,6 @@
 from django.db import IntegrityError, transaction
 
+from app.api.v1.orders.models import OutboxEvent
 from app.api.v1.monitoring.models import Alert, ProductSnapshot
 from app.api.v1.monitoring.services.change_detector import (
     AlertCandidate,
@@ -69,7 +70,7 @@ def _create_alert_from_candidate(
 ) -> Alert | None:
     try:
         with transaction.atomic():
-            return Alert.objects.create(
+            alert = Alert.objects.create(
                 user=snapshot.target.user,
                 target=snapshot.target,
                 snapshot=snapshot,
@@ -81,6 +82,17 @@ def _create_alert_from_candidate(
                 new_value=candidate.new_value,
                 dedup_key=candidate.dedup_key,
             )
+
+            OutboxEvent.objects.create(
+                topic="alert.created",
+                payload={
+                    "alert_id": alert.id,
+                    "user_id": alert.user_id,
+                    "target_id": alert.target_id,
+                },
+            )
+
+            return alert
 
     except IntegrityError:
         logger.info(
