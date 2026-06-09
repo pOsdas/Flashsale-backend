@@ -40,6 +40,13 @@ class NotificationChannel(models.Model):
         verbose_name="Webhook URL",
     )
 
+    enabled_alert_types = models.JSONField(
+        default=list,
+        blank=True,
+        verbose_name="Включенные типы alert",
+        help_text="Пустой список означает, что канал получает все типы alert.",
+    )
+
     is_active = models.BooleanField(
         default=True,
         verbose_name="Активен",
@@ -72,6 +79,12 @@ class NotificationChannel(models.Model):
 
     def __str__(self) -> str:
         return f"{self.user_id} | {self.type} | active={self.is_active}"
+
+    def allows_alert_type(self, alert_type: str) -> bool:
+        if not self.enabled_alert_types:
+            return True
+
+        return alert_type in self.enabled_alert_types
 
 
 class NotificationDelivery(models.Model):

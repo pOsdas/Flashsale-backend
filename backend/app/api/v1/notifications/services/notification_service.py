@@ -22,17 +22,19 @@ class NotificationService:
         self.telegram_adapter = telegram_adapter or TelegramDeliveryAdapter()
 
     def send_alert_created_notifications(self, alert) -> list[NotificationDelivery]:
-        channels = NotificationChannel.objects.filter(
-            user=alert.user,
-            type=NotificationChannel.ChannelType.TELEGRAM,
-            is_active=True,
-        ).exclude(
-            telegram_chat_id="",
+        channels = list(
+            NotificationChannel.objects.filter(
+                user=alert.user,
+                type=NotificationChannel.ChannelType.TELEGRAM,
+                is_active=True,
+            ).exclude(
+                telegram_chat_id="",
+            )
         )
 
         deliveries: list[NotificationDelivery] = []
 
-        if not channels.exists():
+        if not channels:
             logger.info(
                 "No active Telegram notification channels found for alert",
                 extra={
@@ -48,6 +50,25 @@ class NotificationService:
             return deliveries
 
         for channel in channels:
+            if not channel.allows_alert_type(alert.alert_type):
+                logger.info(
+                    "Telegram notification skipped by channel alert type settings",
+                    extra={
+                        "service": "notification_service",
+                        "alert_id": str(alert.id),
+                        "user_id": str(alert.user_id),
+                        "channel_id": str(channel.id),
+                        "alert_type": alert.alert_type,
+                        "enabled_alert_types": channel.enabled_alert_types,
+                    },
+                )
+
+                NOTIFICATION_DELIVERIES_TOTAL.labels(
+                    channel=NotificationChannel.ChannelType.TELEGRAM,
+                    status="skipped",
+                ).inc()
+                continue
+
             delivery = self._send_telegram_alert_notification(
                 alert=alert,
                 channel=channel,
@@ -135,4 +156,3 @@ class NotificationService:
         )
 
         return delivery
-    

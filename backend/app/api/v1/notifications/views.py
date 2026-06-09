@@ -70,7 +70,7 @@ class TelegramConnectLinkView(APIView):
 
 
 @extend_schema(
-    tags=["Notifications"],
+    tags=["Debug [Notifications]"],
     request=TelegramOnboardingSerializer,
     responses={
         200: TelegramOnboardingResponseSerializer,

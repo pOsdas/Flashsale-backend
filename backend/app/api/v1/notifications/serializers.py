@@ -12,6 +12,7 @@ class NotificationChannelSerializer(serializers.ModelSerializer):
             "telegram_chat_id",
             "email",
             "webhook_url",
+            "enabled_alert_types",
             "is_active",
             "created_at",
             "updated_at",
@@ -21,6 +22,28 @@ class NotificationChannelSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
+
+    def validate_enabled_alert_types(self, value):
+        if value is None:
+            return []
+
+        if not isinstance(value, list):
+            raise serializers.ValidationError(
+                "enabled_alert_types должен быть списком."
+            )
+
+        for item in value:
+            if not isinstance(item, str):
+                raise serializers.ValidationError(
+                    "Каждый тип alert должен быть строкой."
+                )
+
+            if not item.strip():
+                raise serializers.ValidationError(
+                    "Тип alert не может быть пустой строкой."
+                )
+
+        return [item.strip() for item in value]
 
     def validate(self, attrs):
         channel_type = attrs.get("type") or getattr(self.instance, "type", None)
@@ -81,6 +104,10 @@ class NotificationChannelSerializer(serializers.ModelSerializer):
                     "is_active": validated_data.get("is_active", True),
                     "email": validated_data.get("email", ""),
                     "webhook_url": validated_data.get("webhook_url", ""),
+                    "enabled_alert_types": validated_data.get(
+                        "enabled_alert_types",
+                        [],
+                    ),
                 },
             )
 
@@ -141,6 +168,7 @@ class TelegramOnboardingResponseSerializer(serializers.ModelSerializer):
             "id",
             "type",
             "telegram_chat_id",
+            "enabled_alert_types",
             "is_active",
             "message",
             "created_at",
