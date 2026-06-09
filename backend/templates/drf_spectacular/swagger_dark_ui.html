@@ -1,0 +1,102 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="ru" class="dark-mode">
+<head>
+    <title>{{ title|default:"Swagger UI" }}</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    {% if favicon_href %}
+        <link rel="icon" href="{{ favicon_href }}">
+    {% endif %}
+
+    <link rel="stylesheet" href="{{ swagger_ui_css }}">
+
+    <style>
+        html,
+        body {
+            background: #0f172a !important;
+            color: #e5e7eb !important;
+        }
+
+        .swagger-ui {
+            background: #0f172a !important;
+            color: #e5e7eb !important;
+        }
+
+        .swagger-ui .topbar {
+            background: #020617 !important;
+        }
+
+        .swagger-ui .scheme-container,
+        .swagger-ui .opblock,
+        .swagger-ui .model-box,
+        .swagger-ui section.models {
+            background: #1e293b !important;
+            border-color: #334155 !important;
+            box-shadow: none !important;
+        }
+
+        .swagger-ui .info .title,
+        .swagger-ui .info p,
+        .swagger-ui .info li,
+        .swagger-ui .opblock-tag,
+        .swagger-ui table thead tr td,
+        .swagger-ui table thead tr th,
+        .swagger-ui .parameter__name,
+        .swagger-ui .parameter__type,
+        .swagger-ui .response-col_status,
+        .swagger-ui .response-col_description,
+        .swagger-ui .model-title,
+        .swagger-ui .model,
+        .swagger-ui p,
+        .swagger-ui span,
+        .swagger-ui label,
+        .swagger-ui h1,
+        .swagger-ui h2,
+        .swagger-ui h3,
+        .swagger-ui h4 {
+            color: #b8c0cc !important;
+        }
+
+        .swagger-ui .opblock-summary {
+            background: #111827 !important;
+        }
+
+        .swagger-ui input,
+        .swagger-ui textarea,
+        .swagger-ui select {
+            background: #020617 !important;
+            color: #e5e7eb !important;
+            border-color: #475569 !important;
+        }
+
+        .swagger-ui .btn {
+            color: #e5e7eb !important;
+            border-color: #64748b !important;
+        }
+
+        .swagger-ui .highlight-code,
+        .swagger-ui pre,
+        .swagger-ui .microlight {
+            background: #020617 !important;
+            color: #e5e7eb !important;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="swagger-ui"></div>
+
+    <script src="{{ swagger_ui_bundle }}"></script>
+    <script src="{{ swagger_ui_standalone }}"></script>
+
+    {% if script_url %}
+        <script src="{{ script_url }}"></script>
+    {% else %}
+        <script>
+            {% include template_name_js %}
+        </script>
+    {% endif %}
+</body>
+</html>

@@ -2,6 +2,7 @@ from django.contrib import admin
 from django.urls import include, path
 from django.conf import settings
 from django.conf.urls.static import static
+from django.views.generic import TemplateView
 
 from strawberry.django.views import GraphQLView
 
@@ -36,10 +37,17 @@ if settings.DEBUG:
         path(f'{API_PREFIX}{API_V1_PREFIX}/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
         path(f'{API_PREFIX}{API_V1_PREFIX}/schema/', SpectacularAPIView.as_view(), name='schema'),
         path(
+            f'{API_PREFIX}{API_V1_PREFIX}/scalar-docs/',
+            TemplateView.as_view(
+                template_name="drf_spectacular/scalar_dark.html"
+            ),
+            name="scalar-docs",
+        ),
+        path(
             f'{API_PREFIX}{API_V1_PREFIX}/docs/',
             SpectacularSwaggerView.as_view(
                 url_name='schema',
-                template_name='drf_spectacular/swagger_ui.html'
+                template_name='drf_spectacular/swagger_dark_ui.html'
             ),
             name='swagger-ui'
         ),
