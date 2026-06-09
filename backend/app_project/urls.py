@@ -20,6 +20,7 @@ urlpatterns = [
     path(f"{API_PREFIX}{API_V1_PREFIX}/monitoring/", include("app.api.v1.monitoring.urls")),
     path(f"{API_PREFIX}{API_V1_PREFIX}/fetcher/", include("app.api.v1.fetcher.urls")),
     path(f"{API_PREFIX}{API_V1_PREFIX}/prometheus/", include("django_prometheus.urls")),
+    path(f"{API_PREFIX}{API_V1_PREFIX}/notifications/", include("app.api.v1.notifications.urls")),
 ]
 
 if settings.DEBUG:

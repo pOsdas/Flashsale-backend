@@ -143,6 +143,22 @@ services:
       - "127.0.0.1:8011:8011"
     restart: unless-stopped
 
+  telegram_onboarding_bot:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: flashsale_telegram_onboarding_bot
+    env_file:
+      - ./backend/.env.docker
+    command: >
+      sh -c "python manage.py run_telegram_onboarding_bot"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      backend:
+        condition: service_started
+    restart: unless-stopped
+
   prometheus:
     image: prom/prometheus:v3.0.1
     container_name: flashsale_prometheus

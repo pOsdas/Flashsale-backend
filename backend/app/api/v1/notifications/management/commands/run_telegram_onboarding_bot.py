@@ -5,6 +5,7 @@ import httpx
 from django.conf import settings
 from django.core.management.base import BaseCommand
 
+from app.api.v1.common.rate_limit import check_rate_limit
 from app.api.v1.notifications.services.telegram_onboarding import (
     TelegramOnboardingError,
     TelegramOnboardingService,
@@ -105,6 +106,8 @@ class Command(BaseCommand):
             "Telegram onboarding bot started",
             extra={
                 "service": "telegram_onboarding_bot",
+                "reply_rate_limit_limit": settings.NOTIF_TELEGRAM_REPLY_RATE_LIMIT_LIMIT,
+                "reply_rate_limit_window_seconds": settings.NOTIF_TELEGRAM_REPLY_RATE_LIMIT_WINDOW_SECONDS,
             },
         )
 
@@ -124,7 +127,11 @@ class Command(BaseCommand):
 
                     for update in updates:
                         offset = update["update_id"] + 1
-                        self._handle_update(bot=bot, update=update)
+
+                        self._handle_update(
+                            bot=bot,
+                            update=update,
+                        )
 
                 except httpx.HTTPError as exc:
                     logger.exception(
@@ -149,10 +156,14 @@ class Command(BaseCommand):
         finally:
             bot.close()
 
-    def _handle_update(self, bot: TelegramBotClient, update: dict) -> None:
+    def _handle_update(
+        self,
+        bot: TelegramBotClient,
+        update: dict,
+    ) -> None:
         message = update.get("message") or {}
         chat = message.get("chat") or {}
-        text = (message.get("text") or "").strip()
+        text = message.get("text") or ""
 
         chat_id = str(chat.get("id") or "")
 
@@ -160,19 +171,21 @@ class Command(BaseCommand):
             return
 
         if not text.startswith("/start"):
-            logger.info(
-                "Telegram onboarding bot ignored non-start message",
-                extra={
-                    "service": "telegram_onboarding_bot",
-                    "chat_id": chat_id,
-                },
+            self._send_rate_limited_message(
+                bot=bot,
+                chat_id=chat_id,
+                text=(
+                    "Чтобы подключить Telegram-уведомления, откройте ссылку "
+                    "подключения в личном кабинете Flashsale Signals."
+                ),
             )
             return
 
         parts = text.split(maxsplit=1)
 
         if len(parts) != 2:
-            bot.send_message(
+            self._send_rate_limited_message(
+                bot=bot,
                 chat_id=chat_id,
                 text=(
                     "Сначала откройте ссылку подключения в личном кабинете "
@@ -190,7 +203,8 @@ class Command(BaseCommand):
             )
 
         except TelegramOnboardingError as exc:
-            bot.send_message(
+            self._send_rate_limited_message(
+                bot=bot,
                 chat_id=chat_id,
                 text=(
                     f"{exc}\n\n"
@@ -200,11 +214,44 @@ class Command(BaseCommand):
             )
             return
 
-        bot.send_message(
+        self._send_rate_limited_message(
+            bot=bot,
             chat_id=chat_id,
             text=(
                 "✅ Telegram успешно подключен.\n\n"
                 "Теперь вы будете получать уведомления Flashsale Signals "
                 "об изменениях товаров."
             ),
+        )
+
+    def _send_rate_limited_message(
+        self,
+        bot: TelegramBotClient,
+        chat_id: str,
+        text: str,
+    ) -> None:
+        rate_limit_key = f"telegram_onboarding_bot:reply:{chat_id}"
+
+        result = check_rate_limit(
+            key=rate_limit_key,
+            limit=settings.NOTIF_TELEGRAM_REPLY_RATE_LIMIT_LIMIT,
+            window_seconds=settings.NOTIF_TELEGRAM_REPLY_RATE_LIMIT_WINDOW_SECONDS,
+        )
+
+        if not result.allowed:
+            logger.warning(
+                "Telegram onboarding reply skipped by Redis rate limit",
+                extra={
+                    "service": "telegram_onboarding_bot",
+                    "chat_id": chat_id,
+                    "limit": result.limit,
+                    "remaining": result.remaining,
+                    "retry_after_seconds": result.retry_after_seconds,
+                },
+            )
+            return
+
+        bot.send_message(
+            chat_id=chat_id,
+            text=text,
         )
