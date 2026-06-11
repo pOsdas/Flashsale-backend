@@ -1,7 +1,7 @@
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiTypes
 
 from app.api.v1.notifications.filters.history import NotificationDeliveryHistoryFilter
 from app.api.v1.notifications.models import NotificationDelivery
@@ -109,7 +109,53 @@ class TelegramOnboardingView(APIView):
         )
 
 
-@extend_schema(tags=["Notification History"])
+@extend_schema(
+    tags=["Notification History"],
+    summary="Get notification delivery history",
+    description=(
+        "Returns the authenticated user's notification delivery history. "
+        "The endpoint supports filtering by delivery status, channel id, "
+        "and creation date range."
+    ),
+    parameters=[
+        OpenApiParameter(
+            name="status",
+            type=OpenApiTypes.STR,
+            location=OpenApiParameter.QUERY,
+            required=False,
+            description="Filter by delivery status: pending, sent, failed.",
+            enum=[
+                NotificationDelivery.Status.PENDING,
+                NotificationDelivery.Status.SENT,
+                NotificationDelivery.Status.FAILED,
+            ],
+        ),
+        OpenApiParameter(
+            name="channel_id",
+            type=OpenApiTypes.INT,
+            location=OpenApiParameter.QUERY,
+            required=False,
+            description="Filter by notification channel id.",
+        ),
+        OpenApiParameter(
+            name="created_from",
+            type=OpenApiTypes.DATE,
+            location=OpenApiParameter.QUERY,
+            required=False,
+            description="Filter deliveries created from this date. Format: YYYY-MM-DD.",
+        ),
+        OpenApiParameter(
+            name="created_to",
+            type=OpenApiTypes.DATE,
+            location=OpenApiParameter.QUERY,
+            required=False,
+            description="Filter deliveries created up to this date. Format: YYYY-MM-DD.",
+        ),
+    ],
+    responses={
+        200: NotificationDeliveryHistorySerializer,
+    },
+)
 class NotificationDeliveryHistoryListView(generics.ListAPIView):
     serializer_class = NotificationDeliveryHistorySerializer
     permission_classes = [permissions.IsAuthenticated]

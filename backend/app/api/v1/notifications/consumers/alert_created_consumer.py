@@ -1,6 +1,7 @@
 from typing import Any
+from uuid import UUID
 
-from django.db import transaction
+from django.db import DatabaseError
 
 from app.api.v1.monitoring.models import Alert
 from app.api.v1.notifications.services.notification_service import NotificationService
@@ -34,9 +35,19 @@ class AlertCreatedNotificationConsumer:
         alert_id = payload.get("alert_id")
 
         if not alert_id:
-            raise ValueError("alert_created payload does not contain alert_id")
+            logger.warning(
+                "Alert created payload does not contain alert_id",
+                extra={
+                    "service": "alert_created_notification_consumer",
+                    "payload": payload,
+                },
+            )
+            return
 
         alert = self._get_alert(alert_id=alert_id)
+
+        if alert is None:
+            return
 
         logger.info(
             "Processing alert.created notification",
@@ -62,24 +73,53 @@ class AlertCreatedNotificationConsumer:
             },
         )
 
-    def _get_alert(self, alert_id: int | str) -> Alert:
-        try:
-            normalized_alert_id = int(alert_id)
-        except (TypeError, ValueError) as exc:
-            raise ValueError(f"Invalid alert_id: {alert_id}") from exc
+    def _get_alert(self, *, alert_id):
+        normalized_alert_id = self._normalize_alert_id(alert_id=alert_id)
 
-        with transaction.atomic():
-            alert = (
-                Alert.objects.select_related(
+        if normalized_alert_id is None:
+            return None
+
+        try:
+            return (
+                Alert.objects
+                .select_related(
                     "user",
                     "target",
                     "snapshot",
                 )
-                .filter(id=normalized_alert_id)
-                .first()
+                .get(id=normalized_alert_id)
             )
 
-        if alert is None:
-            raise Alert.DoesNotExist(f"Alert with id={normalized_alert_id} does not exist")
+        except Alert.DoesNotExist:
+            logger.warning(
+                "Alert from alert created payload was not found",
+                extra={
+                    "service": "alert_created_notification_consumer",
+                    "alert_id": str(alert_id),
+                },
+            )
+            return None
 
-        return alert
+        except DatabaseError:
+            logger.exception(
+                "Database error while loading alert for notification",
+                extra={
+                    "service": "alert_created_notification_consumer",
+                    "alert_id": str(alert_id),
+                },
+            )
+            return None
+
+    def _normalize_alert_id(self, *, alert_id):
+        try:
+            return UUID(str(alert_id))
+
+        except ValueError:
+            logger.warning(
+                "Invalid alert_id in alert created payload",
+                extra={
+                    "service": "alert_created_notification_consumer",
+                    "alert_id": str(alert_id),
+                },
+            )
+            return None
