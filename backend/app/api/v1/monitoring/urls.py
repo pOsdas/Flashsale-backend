@@ -4,6 +4,7 @@ from app.api.v1.monitoring.views import (
     AlertListAPIView,
     MonitoringTargetListCreateAPIView,
     ProductSnapshotListAPIView,
+    ProductPreviewView,
 )
 
 
@@ -25,5 +26,10 @@ urlpatterns = [
         "alerts/",
         AlertListAPIView.as_view(),
         name="alert-list",
+    ),
+    path(
+        "products/preview/",
+        ProductPreviewView.as_view(),
+        name="product-preview",
     ),
 ]

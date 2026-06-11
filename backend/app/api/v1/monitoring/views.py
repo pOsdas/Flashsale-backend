@@ -1,7 +1,9 @@
 from django.db.models import Prefetch
 from django.shortcuts import get_object_or_404
-from drf_spectacular.utils import OpenApiParameter, OpenApiTypes, extend_schema, extend_schema_view
-from rest_framework import generics
+from drf_spectacular.utils import OpenApiParameter, OpenApiTypes, extend_schema, extend_schema_view, OpenApiResponse
+from rest_framework import generics, permissions, status
+from rest_framework.response import Response
+from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 
 from app.api.v1.monitoring.models import (
@@ -16,8 +18,12 @@ from app.api.v1.monitoring.serializers import (
     AlertSerializer,
     MonitoringTargetSerializer,
     ProductSnapshotSerializer,
+    ProductPreviewRequestSerializer,
+    ProductPreviewResponseSerializer,
+    ProductPreviewErrorResponseSerializer,
 )
 from app.api.v1.monitoring.services.target_service import create_monitoring_target
+from app.api.v1.monitoring.services.product_preview import ProductPreviewService, ProductPreviewError
 
 
 @extend_schema_view(
@@ -212,3 +218,69 @@ class AlertListAPIView(generics.ListAPIView):
             queryset = queryset.filter(status=status)
 
         return queryset
+
+
+@extend_schema(
+    tags=["Product Preview"],
+    description=(
+        "Checks whether a product can be parsed from the provided marketplace URL. "
+        "This endpoint does not create MonitoringTarget, ProductSnapshot or Alert records."
+    ),
+    request=ProductPreviewRequestSerializer,
+    responses={
+        200: OpenApiResponse(
+            response=ProductPreviewResponseSerializer,
+            description="Product was successfully parsed.",
+        ),
+        400: OpenApiResponse(
+            response=ProductPreviewErrorResponseSerializer,
+            description="Product could not be parsed or request data is invalid.",
+        ),
+    },
+)
+class ProductPreviewView(APIView):
+    permission_classes = [permissions.IsAuthenticated,]
+
+    def post(self, request):
+        serializer = ProductPreviewRequestSerializer(
+            data=request.data,
+        )
+        serializer.is_valid(
+            raise_exception=True,
+        )
+
+        service = ProductPreviewService()
+
+        try:
+            preview = service.preview_product(
+                marketplace=serializer.validated_data["marketplace"],
+                url=serializer.validated_data["url"],
+            )
+
+        except ProductPreviewError as exc:
+            return Response(
+                {
+                    "success": False,
+                    "error": str(exc),
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        return Response(
+            {
+                "success": True,
+                "product": {
+                    "external_id": preview.external_id,
+                    "title": preview.title,
+                    "seller_name": preview.seller_name,
+                    "brand": preview.brand,
+                    "price": preview.price,
+                    "old_price": preview.old_price,
+                    "currency": preview.currency,
+                    "is_available": preview.is_available,
+                    "rating": preview.rating,
+                    "reviews_count": preview.reviews_count,
+                },
+            },
+            status=status.HTTP_200_OK,
+        )

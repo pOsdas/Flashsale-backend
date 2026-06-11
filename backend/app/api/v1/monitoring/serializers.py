@@ -234,3 +234,26 @@ class AlertQuerySerializer(serializers.Serializer):
         choices=AlertStatus.choices,
         required=False,
     )
+
+
+class ProductPreviewRequestSerializer(serializers.Serializer):
+    marketplace = serializers.ChoiceField(
+        choices=[
+            ("wb", "Wildberries"),
+            ("ozon", "Ozon"),
+        ],
+    )
+    url = serializers.URLField(
+        max_length=2000,
+    )
+
+
+class ProductPreviewResponseSerializer(serializers.Serializer):
+    success = serializers.BooleanField()
+    product = serializers.DictField()
+
+
+class ProductPreviewErrorResponseSerializer(serializers.Serializer):
+    success = serializers.BooleanField()
+    error = serializers.CharField()
+
