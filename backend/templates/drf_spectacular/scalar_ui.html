@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="ru" class="scalar-dark-mode">
+<head>
+    <title>API Documentation</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <script>
+        (function () {
+            const savedTheme = localStorage.getItem("scalar-theme");
+
+            if (savedTheme === "light") {
+                document.documentElement.classList.remove("scalar-dark-mode");
+                document.documentElement.classList.add("scalar-light-mode");
+            } else {
+                document.documentElement.classList.remove("scalar-light-mode");
+                document.documentElement.classList.add("scalar-dark-mode");
+            }
+        })();
+    </script>
+
+    <style>
+        html,
+        body {
+            margin: 0;
+            min-height: 100%;
+        }
+
+        html.scalar-dark-mode,
+        html.scalar-dark-mode body {
+            background: #0f172a;
+            color: #e5e7eb;
+        }
+
+        html.scalar-light-mode,
+        html.scalar-light-mode body {
+            background: #f8fafc;
+            color: #0f172a;
+        }
+
+        html.scalar-dark-mode .dark-mode {
+            --scalar-color-1: #e5e7eb;
+            --scalar-color-2: #b8c0cc;
+            --scalar-color-3: #94a3b8;
+            --scalar-color-accent: #a855f7;
+
+            --scalar-background-1: #0f172a;
+            --scalar-background-2: #1e293b;
+            --scalar-background-3: #111827;
+            --scalar-background-accent: rgba(168, 85, 247, 0.12);
+
+            --scalar-border-color: #334155;
+        }
+
+        html.scalar-dark-mode .dark-mode .sidebar {
+            --scalar-sidebar-background-1: #020617;
+            --scalar-sidebar-item-hover-color: #e5e7eb;
+            --scalar-sidebar-item-hover-background: #1e293b;
+            --scalar-sidebar-item-active-background: rgba(168, 85, 247, 0.18);
+            --scalar-sidebar-border-color: #334155;
+            --scalar-sidebar-color-1: #e5e7eb;
+            --scalar-sidebar-color-2: #b8c0cc;
+            --scalar-sidebar-color-active: #ffffff;
+            --scalar-sidebar-search-background: #0f172a;
+            --scalar-sidebar-search-border-color: #334155;
+            --scalar-sidebar-search-color: #94a3b8;
+        }
+
+        html.scalar-light-mode .light-mode {
+            --scalar-color-1: #0f172a;
+            --scalar-color-2: #334155;
+            --scalar-color-3: #64748b;
+            --scalar-color-accent: #7e22ce;
+
+            --scalar-background-1: #ffffff;
+            --scalar-background-2: #f8fafc;
+            --scalar-background-3: #f1f5f9;
+            --scalar-background-accent: rgba(126, 34, 206, 0.08);
+
+            --scalar-border-color: #cbd5e1;
+        }
+
+        html.scalar-light-mode .light-mode .sidebar {
+            --scalar-sidebar-background-1: #ffffff;
+            --scalar-sidebar-item-hover-color: #0f172a;
+            --scalar-sidebar-item-hover-background: #f1f5f9;
+            --scalar-sidebar-item-active-background: rgba(126, 34, 206, 0.1);
+            --scalar-sidebar-border-color: #cbd5e1;
+            --scalar-sidebar-color-1: #0f172a;
+            --scalar-sidebar-color-2: #334155;
+            --scalar-sidebar-color-active: #0f172a;
+            --scalar-sidebar-search-background: #f8fafc;
+            --scalar-sidebar-search-border-color: #cbd5e1;
+            --scalar-sidebar-search-color: #64748b;
+        }
+
+        .scalar-theme-toggle {
+            position: fixed;
+            top: 18px;
+            right: 24px;
+            z-index: 9999;
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            border: 1px solid #64748b;
+            background: #1e293b;
+            color: #e5e7eb;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 20px;
+            line-height: 1;
+            box-shadow: 0 10px 24px rgba(0, 0, 0, 0.25);
+            transition:
+                background 0.2s ease,
+                border-color 0.2s ease,
+                color 0.2s ease,
+                transform 0.15s ease,
+                box-shadow 0.2s ease;
+        }
+
+        html.scalar-light-mode .scalar-theme-toggle {
+            background: #ffffff;
+            color: #0f172a;
+            border-color: #cbd5e1;
+            box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
+        }
+
+        .scalar-theme-toggle:hover {
+            transform: translateY(-1px);
+        }
+
+        html.scalar-dark-mode .scalar-theme-toggle:hover {
+            background: #334155;
+        }
+
+        html.scalar-light-mode .scalar-theme-toggle:hover {
+            background: #f1f5f9;
+        }
+
+        .scalar-theme-toggle:active {
+            transform: translateY(0);
+        }
+
+        .scalar-theme-toggle:focus {
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.35);
+        }
+    </style>
+</head>
+
+<body>
+    <button
+        id="scalar-theme-toggle"
+        class="scalar-theme-toggle"
+        type="button"
+        aria-label="Переключить тему Scalar"
+        title="Переключить тему"
+    >
+        ☀️
+    </button>
+
+    <script
+        id="api-reference"
+        data-url="{% url 'schema' %}?format=json"
+        data-configuration='{
+            "theme": "purple",
+            "layout": "modern",
+            "darkMode": true,
+            "hideDarkModeToggle": true,
+            "showSidebar": true,
+            "defaultHttpClient": {
+                "targetKey": "python",
+                "clientKey": "requests"
+            }
+        }'>
+    </script>
+
+    <script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference"></script>
+
+    <script>
+        (function () {
+            const toggleButton = document.getElementById("scalar-theme-toggle");
+            const apiReference = document.getElementById("api-reference");
+
+            function isDarkMode() {
+                return document.documentElement.classList.contains("scalar-dark-mode");
+            }
+
+            function updateButtonIcon() {
+                if (isDarkMode()) {
+                    toggleButton.textContent = "☀️";
+                    toggleButton.title = "Включить светлую тему";
+                    toggleButton.setAttribute("aria-label", "Включить светлую тему Scalar");
+                } else {
+                    toggleButton.textContent = "🌙";
+                    toggleButton.title = "Включить темную тему";
+                    toggleButton.setAttribute("aria-label", "Включить темную тему Scalar");
+                }
+            }
+
+            function setScalarDarkModeClass(isDark) {
+                const scalarRoot = document.querySelector(".scalar-api-reference")
+                    || document.querySelector(".scalar-app")
+                    || document.querySelector("[data-scalar-api-reference]");
+
+                if (!scalarRoot) {
+                    return;
+                }
+
+                if (isDark) {
+                    scalarRoot.classList.remove("light-mode");
+                    scalarRoot.classList.add("dark-mode");
+                } else {
+                    scalarRoot.classList.remove("dark-mode");
+                    scalarRoot.classList.add("light-mode");
+                }
+            }
+
+            function updateScalarConfiguration(theme) {
+                const currentConfig = JSON.parse(
+                    apiReference.getAttribute("data-configuration") || "{}"
+                );
+
+                currentConfig.darkMode = theme === "dark";
+                currentConfig.hideDarkModeToggle = true;
+
+                apiReference.setAttribute(
+                    "data-configuration",
+                    JSON.stringify(currentConfig)
+                );
+            }
+
+            function setTheme(theme) {
+                const shouldUseDarkMode = theme === "dark";
+
+                if (shouldUseDarkMode) {
+                    document.documentElement.classList.remove("scalar-light-mode");
+                    document.documentElement.classList.add("scalar-dark-mode");
+                } else {
+                    document.documentElement.classList.remove("scalar-dark-mode");
+                    document.documentElement.classList.add("scalar-light-mode");
+                }
+
+                localStorage.setItem("scalar-theme", theme);
+
+                updateScalarConfiguration(theme);
+                setScalarDarkModeClass(shouldUseDarkMode);
+                updateButtonIcon();
+            }
+
+            toggleButton.addEventListener("click", function () {
+                if (isDarkMode()) {
+                    setTheme("light");
+                } else {
+                    setTheme("dark");
+                }
+            });
+
+            const savedTheme = localStorage.getItem("scalar-theme") || "dark";
+
+            updateScalarConfiguration(savedTheme);
+            updateButtonIcon();
+
+            window.addEventListener("load", function () {
+                setTimeout(function () {
+                    setScalarDarkModeClass(savedTheme !== "light");
+                }, 300);
+            });
+        })();
+    </script>
+</body>
+</html>

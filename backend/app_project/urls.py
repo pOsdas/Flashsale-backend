@@ -40,7 +40,7 @@ if settings.DEBUG:
         path(
             f'{API_PREFIX}{API_V1_PREFIX}/scalar-docs/',
             TemplateView.as_view(
-                template_name="drf_spectacular/scalar_dark.html"
+                template_name="drf_spectacular/scalar_ui.html"
             ),
             name="scalar-docs",
         ),
@@ -48,7 +48,7 @@ if settings.DEBUG:
             f'{API_PREFIX}{API_V1_PREFIX}/docs/',
             SpectacularSwaggerView.as_view(
                 url_name='schema',
-                template_name='drf_spectacular/swagger_dark_ui.html'
+                template_name='drf_spectacular/swagger_ui.html'
             ),
             name='swagger-ui'
         ),

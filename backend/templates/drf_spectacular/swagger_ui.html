@@ -1,0 +1,297 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="ru" class="dark-mode">
+<head>
+    <title>{{ title|default:"Swagger UI" }}</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    {% if favicon_href %}
+        <link rel="icon" href="{{ favicon_href }}">
+    {% endif %}
+
+    <link rel="stylesheet" href="{{ swagger_ui_css }}">
+
+    <script>
+        (function () {
+            const savedTheme = localStorage.getItem("swagger-theme");
+
+            if (savedTheme === "light") {
+                document.documentElement.classList.remove("dark-mode");
+                document.documentElement.classList.add("light-mode");
+            } else {
+                document.documentElement.classList.remove("light-mode");
+                document.documentElement.classList.add("dark-mode");
+            }
+        })();
+    </script>
+
+    <style>
+        :root {
+            --swagger-bg: #0f172a;
+            --swagger-panel-bg: #1e293b;
+            --swagger-panel-bg-soft: #111827;
+            --swagger-topbar-bg: #020617;
+            --swagger-input-bg: #020617;
+            --swagger-code-bg: #020617;
+            --swagger-border: #334155;
+            --swagger-border-soft: #475569;
+            --swagger-text: #e5e7eb;
+            --swagger-text-muted: #b8c0cc;
+            --swagger-title: #cbd5e1;
+            --swagger-button-bg: #1e293b;
+            --swagger-button-hover-bg: #334155;
+            --swagger-badge-bg: #e2e8f0;
+            --swagger-badge-text: #0f172a;
+            --swagger-badge-border: #64748b;
+        }
+
+        html.light-mode {
+            --swagger-bg: #f8fafc;
+            --swagger-panel-bg: #ffffff;
+            --swagger-panel-bg-soft: #f1f5f9;
+            --swagger-topbar-bg: #ffffff;
+            --swagger-input-bg: #ffffff;
+            --swagger-code-bg: #f8fafc;
+            --swagger-border: #cbd5e1;
+            --swagger-border-soft: #94a3b8;
+            --swagger-text: #0f172a;
+            --swagger-text-muted: #334155;
+            --swagger-title: #0f172a;
+            --swagger-button-bg: #ffffff;
+            --swagger-button-hover-bg: #e2e8f0;
+            --swagger-badge-bg: #0f172a;
+            --swagger-badge-text: #ffffff;
+            --swagger-badge-border: #0f172a;
+        }
+
+        html,
+        body {
+            background: var(--swagger-bg) !important;
+            color: var(--swagger-text) !important;
+            transition: background 0.2s ease, color 0.2s ease;
+        }
+
+        .swagger-ui {
+            background: var(--swagger-bg) !important;
+            color: var(--swagger-text) !important;
+        }
+
+        .swagger-ui .topbar {
+            background: var(--swagger-topbar-bg) !important;
+            border-bottom: 1px solid var(--swagger-border) !important;
+        }
+
+        .swagger-ui .scheme-container,
+        .swagger-ui .opblock,
+        .swagger-ui .model-box,
+        .swagger-ui section.models {
+            background: var(--swagger-panel-bg) !important;
+            border-color: var(--swagger-border) !important;
+            box-shadow: none !important;
+        }
+
+        .swagger-ui .opblock-summary {
+            background: var(--swagger-panel-bg-soft) !important;
+        }
+
+        .swagger-ui .info .title {
+            color: var(--swagger-title) !important;
+        }
+
+        .swagger-ui .info .title small {
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            min-height: 26px !important;
+            margin-left: 10px !important;
+            padding: 2px 9px !important;
+            background: var(--swagger-badge-bg) !important;
+            color: var(--swagger-badge-text) !important;
+            border: 1px solid var(--swagger-badge-border) !important;
+            border-radius: 999px !important;
+            box-shadow: none !important;
+            vertical-align: middle !important;
+        }
+
+        .swagger-ui .info .title small.version-stamp {
+            background: #16a34a !important;
+            color: #ffffff !important;
+            border-color: #22c55e !important;
+        }
+
+        .swagger-ui .info .title small pre,
+        .swagger-ui .info .title small .version,
+        .swagger-ui .info .title small.version-stamp pre,
+        .swagger-ui .info .title small.version-stamp .version {
+            margin: 0 !important;
+            padding: 0 !important;
+            background: transparent !important;
+            color: inherit !important;
+            border: none !important;
+            box-shadow: none !important;
+            font-family: Inter, Arial, sans-serif !important;
+            font-size: 14px !important;
+            font-weight: 700 !important;
+            line-height: 1 !important;
+        }
+
+        .swagger-ui .info p,
+        .swagger-ui .info li,
+        .swagger-ui .opblock-tag,
+        .swagger-ui table thead tr td,
+        .swagger-ui table thead tr th,
+        .swagger-ui .parameter__name,
+        .swagger-ui .parameter__type,
+        .swagger-ui .response-col_status,
+        .swagger-ui .response-col_description,
+        .swagger-ui .model-title,
+        .swagger-ui .model,
+        .swagger-ui p,
+        .swagger-ui span,
+        .swagger-ui label,
+        .swagger-ui h1,
+        .swagger-ui h2,
+        .swagger-ui h3,
+        .swagger-ui h4 {
+            color: var(--swagger-text-muted) !important;
+        }
+
+        .swagger-ui input,
+        .swagger-ui textarea,
+        .swagger-ui select {
+            background: var(--swagger-input-bg) !important;
+            color: var(--swagger-text) !important;
+            border-color: var(--swagger-border-soft) !important;
+        }
+
+        .swagger-ui .btn {
+            color: var(--swagger-text) !important;
+            border-color: var(--swagger-border-soft) !important;
+            background: transparent !important;
+        }
+
+        .swagger-ui .btn:hover {
+            background: var(--swagger-button-hover-bg) !important;
+        }
+
+        .swagger-ui .highlight-code,
+        .swagger-ui pre,
+        .swagger-ui .microlight {
+            background: var(--swagger-code-bg) !important;
+            color: var(--swagger-text) !important;
+        }
+
+        .swagger-theme-toggle {
+            position: fixed;
+            top: 22px;
+            right: 28px;
+            z-index: 9999;
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            border: 1px solid var(--swagger-border-soft);
+            background: var(--swagger-button-bg);
+            color: var(--swagger-text);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 20px;
+            line-height: 1;
+            box-shadow: 0 10px 24px rgba(0, 0, 0, 0.25);
+            transition:
+                background 0.2s ease,
+                border-color 0.2s ease,
+                transform 0.15s ease,
+                box-shadow 0.2s ease;
+        }
+
+        .swagger-theme-toggle:hover {
+            background: var(--swagger-button-hover-bg);
+            transform: translateY(-1px);
+            box-shadow: 0 14px 30px rgba(0, 0, 0, 0.3);
+        }
+
+        .swagger-theme-toggle:active {
+            transform: translateY(0);
+        }
+
+        .swagger-theme-toggle:focus {
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.45);
+        }
+    </style>
+</head>
+
+<body>
+    <button
+        id="swagger-theme-toggle"
+        class="swagger-theme-toggle"
+        type="button"
+        aria-label="Переключить тему Swagger"
+        title="Переключить тему"
+    >
+        ☀️
+    </button>
+
+    <div id="swagger-ui"></div>
+
+    <script src="{{ swagger_ui_bundle }}"></script>
+    <script src="{{ swagger_ui_standalone }}"></script>
+
+    {% if script_url %}
+        <script src="{{ script_url }}"></script>
+    {% else %}
+        <script>
+            {% include template_name_js %}
+        </script>
+    {% endif %}
+
+    <script>
+        (function () {
+            const toggleButton = document.getElementById("swagger-theme-toggle");
+
+            function isDarkMode() {
+                return document.documentElement.classList.contains("dark-mode");
+            }
+
+            function updateButtonIcon() {
+                if (isDarkMode()) {
+                    toggleButton.textContent = "☀️";
+                    toggleButton.title = "Включить светлую тему";
+                    toggleButton.setAttribute("aria-label", "Включить светлую тему Swagger");
+                } else {
+                    toggleButton.textContent = "🌙";
+                    toggleButton.title = "Включить темную тему";
+                    toggleButton.setAttribute("aria-label", "Включить темную тему Swagger");
+                }
+            }
+
+            function setTheme(theme) {
+                if (theme === "light") {
+                    document.documentElement.classList.remove("dark-mode");
+                    document.documentElement.classList.add("light-mode");
+                    localStorage.setItem("swagger-theme", "light");
+                } else {
+                    document.documentElement.classList.remove("light-mode");
+                    document.documentElement.classList.add("dark-mode");
+                    localStorage.setItem("swagger-theme", "dark");
+                }
+
+                updateButtonIcon();
+            }
+
+            toggleButton.addEventListener("click", function () {
+                if (isDarkMode()) {
+                    setTheme("light");
+                } else {
+                    setTheme("dark");
+                }
+            });
+
+            updateButtonIcon();
+        })();
+    </script>
+</body>
+</html>
