@@ -3,6 +3,10 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from drf_spectacular.utils import extend_schema
 
+from app.api.v1.notifications.filters.history import NotificationDeliveryHistoryFilter
+from app.api.v1.notifications.models import NotificationDelivery
+from app.api.v1.notifications.serializers import NotificationDeliveryHistorySerializer
+
 from app.api.v1.notifications.models import NotificationChannel
 from app.api.v1.notifications.serializers import (
     NotificationChannelSerializer,
@@ -70,7 +74,7 @@ class TelegramConnectLinkView(APIView):
 
 
 @extend_schema(
-    tags=["Debug [Notifications]"],
+    tags=["Debug (Notifications)"],
     request=TelegramOnboardingSerializer,
     responses={
         200: TelegramOnboardingResponseSerializer,
@@ -102,4 +106,42 @@ class TelegramOnboardingView(APIView):
         return Response(
             response_serializer.data,
             status=response_status,
+        )
+
+
+@extend_schema(tags=["Notification History"])
+class NotificationDeliveryHistoryListView(generics.ListAPIView):
+    serializer_class = NotificationDeliveryHistorySerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        queryset = (
+            NotificationDelivery.objects
+            .select_related(
+                "channel",
+                "alert",
+            )
+            .filter(user=self.request.user)
+            .order_by("-created_at")
+        )
+
+        return NotificationDeliveryHistoryFilter(
+            queryset=queryset,
+            query_params=self.request.query_params,
+        ).apply()
+
+
+@extend_schema(tags=["Notification History"])
+class NotificationDeliveryHistoryDetailView(generics.RetrieveAPIView):
+    serializer_class = NotificationDeliveryHistorySerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return (
+            NotificationDelivery.objects
+            .select_related(
+                "channel",
+                "alert",
+            )
+            .filter(user=self.request.user)
         )

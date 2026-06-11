@@ -5,6 +5,8 @@ from app.api.v1.notifications.views import (
     NotificationChannelListCreateView,
     TelegramConnectLinkView,
     TelegramOnboardingView,
+    NotificationDeliveryHistoryDetailView,
+    NotificationDeliveryHistoryListView,
 )
 
 
@@ -28,5 +30,15 @@ urlpatterns = [
         "telegram/onboarding/",
         TelegramOnboardingView.as_view(),
         name="telegram-onboarding",
+    ),
+    path(
+        "history/",
+        NotificationDeliveryHistoryListView.as_view(),
+        name="notification-history-list",
+    ),
+    path(
+        "history/<int:pk>/",
+        NotificationDeliveryHistoryDetailView.as_view(),
+        name="notification-history-detail",
     ),
 ]

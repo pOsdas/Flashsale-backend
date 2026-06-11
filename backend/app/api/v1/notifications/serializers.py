@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from app.api.v1.notifications.models import NotificationChannel
+from app.api.v1.notifications.models import NotificationChannel, NotificationDelivery
 
 
 class NotificationChannelSerializer(serializers.ModelSerializer):
@@ -73,17 +73,13 @@ class NotificationChannelSerializer(serializers.ModelSerializer):
         if channel_type == NotificationChannel.ChannelType.EMAIL:
             if not email:
                 raise serializers.ValidationError(
-                    {
-                        "email": "Для Email-канала нужно указать email."
-                    }
+                    {"email": "Для Email-канала нужно указать email."}
                 )
 
         if channel_type == NotificationChannel.ChannelType.WEBHOOK:
             if not webhook_url:
                 raise serializers.ValidationError(
-                    {
-                        "webhook_url": "Для Webhook-канала нужно указать webhook_url."
-                    }
+                    {"webhook_url": "Для Webhook-канала нужно указать webhook_url."}
                 )
 
         return attrs
@@ -177,3 +173,61 @@ class TelegramOnboardingResponseSerializer(serializers.ModelSerializer):
 
     def get_message(self, obj) -> str:
         return "Telegram успешно подключен."
+
+
+class NotificationDeliveryHistorySerializer(serializers.ModelSerializer):
+    channel_id = serializers.IntegerField(source="channel.id", read_only=True)
+    channel_type = serializers.CharField(source="channel.type", read_only=True)
+    channel_is_active = serializers.BooleanField(
+        source="channel.is_active", read_only=True
+    )
+
+    alert_id = serializers.SerializerMethodField()
+    # alert_type = serializers.SerializerMethodField()
+    # target_id = serializers.SerializerMethodField()
+
+    class Meta:
+        model = NotificationDelivery
+        fields = [
+            "id",
+            "status",
+            "channel_id",
+            "channel_type",
+            "channel_is_active",
+            "alert_id",
+            # "alert_type",
+            # "target_id",
+            "message_text",
+            "error",
+            "created_at",
+            "updated_at",
+            "sent_at",
+        ]
+        read_only_fields = fields
+
+    def get_alert_id(self, obj):
+        if obj.alert_id is None:
+            return None
+
+        return str(obj.alert_id)
+
+    # def get_alert_type(self, obj):
+    #     alert = getattr(obj, "alert", None)
+    #
+    #     if alert is None:
+    #         return None
+    #
+    #     return getattr(alert, "type", None)
+
+    # def get_target_id(self, obj):
+    #     alert = getattr(obj, "alert", None)
+    #
+    #     if alert is None:
+    #         return None
+    #
+    #     target = getattr(alert, "target", None)
+    #
+    #     if target is None:
+    #         return None
+    #
+    #     return getattr(target, "id", None)
