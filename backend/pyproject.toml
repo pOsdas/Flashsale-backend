@@ -36,4 +36,5 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.group.dev.dependencies]
 colorlog = "^6.10.1"
+black = "^26.5.1"
 
