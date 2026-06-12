@@ -52,6 +52,7 @@ class Settings(BaseSettings):
 
     # BACKEND
     debug: bool = False
+    enable_https_redirect: bool = True
     secret_key: str
     allowed_hosts: List[str] = Field(
         default_factory=lambda: ["localhost", "127.0.0.1"]

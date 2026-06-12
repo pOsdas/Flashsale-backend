@@ -15,6 +15,7 @@ s = get_settings()
 # Основные настройки
 SECRET_KEY = s.secret_key
 DEBUG = s.debug
+ENABLE_HTTPS_REDIRECT = s.enable_https_redirect
 ALLOWED_HOSTS = s.allowed_hosts
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
@@ -148,7 +149,15 @@ RABBITMQ_URL = os.getenv("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/")
 RABBITMQ_EXCHANGE = os.getenv("RABBITMQ_EXCHANGE", "flashsale.events")
 
 # Security
-if not DEBUG:
+SECURE_SSL_REDIRECT = False
+SESSION_COOKIE_SECURE = False
+CSRF_COOKIE_SECURE = False
+
+SECURE_HSTS_SECONDS = 0
+SECURE_HSTS_INCLUDE_SUBDOMAINS = False
+SECURE_HSTS_PRELOAD = False
+
+if ENABLE_HTTPS_REDIRECT:
     SECURE_SSL_REDIRECT = True
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
@@ -159,8 +168,6 @@ if not DEBUG:
 
     # if Nginx/Ingress
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
-else:
-    SECURE_SSL_REDIRECT = False
 
 # Passwords
 PASSWORD_HASHERS = [
