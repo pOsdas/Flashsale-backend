@@ -19,6 +19,7 @@ import (
 	"github.com/joho/godotenv"
 
 	"go_fetcher/internal/config"
+	"go_fetcher/internal/cookies"
 	"go_fetcher/internal/httpserver"
 	"go_fetcher/internal/parsers/ozon"
 	"go_fetcher/internal/parsers/wildberries"
@@ -56,18 +57,6 @@ func main() {
 		logger.Error("failed to load config", slog.String("error", err.Error()))
 		os.Exit(1)
 	}
-
-	logger.Info(
-		"wb cookie status",
-		slog.Bool("has_wb_cookie", cfg.WBCookie != ""),
-		slog.Int("wb_cookie_len", len(cfg.WBCookie)),
-	)
-
-	logger.Info(
-		"ozon cookie status",
-		slog.Bool("has_ozon_cookie", cfg.OzonCookie != ""),
-		slog.Int("ozon_cookie_len", len(cfg.OzonCookie)),
-	)
 
 	if len(os.Args) >= 2 && os.Args[1] == commandServe {
 		runHTTPServer(logger, cfg)
@@ -139,9 +128,18 @@ func runHTTPServer(
 	)
 	defer stop()
 
+	wbCookieProvider := cookies.NewFileCookieProvider(
+		"secrets/wb_cookie.txt",
+		30*time.Second,
+	)
+	ozonCookieProvider := cookies.NewFileCookieProvider(
+		"secrets/ozon_cookie.txt",
+		30*time.Second,
+	)
+
 	wbParser := wildberries.NewParser(
 		wildberries.ParserConfig{
-			Cookie:         cfg.WBCookie,
+			CookieProvider: wbCookieProvider,
 			Timeout:        cfg.Timeout,
 			RequestDelay:   cfg.WBRequestDelay,
 			MaxRetries:     cfg.WBMaxRetries,
@@ -152,7 +150,7 @@ func runHTTPServer(
 
 	ozonParser := ozon.NewParser(
 		ozon.ParserConfig{
-			Cookie:         cfg.OzonCookie,
+			CookieProvider: ozonCookieProvider,
 			Timeout:        cfg.Timeout,
 			RequestDelay:   cfg.OzonRequestDelay,
 			MaxRetries:     cfg.OzonMaxRetries,
@@ -196,6 +194,8 @@ func runHTTPServer(
 
 			return productToDTO(products[0]), nil
 		},
+		wbParser,
+		ozonParser,
 	)
 
 	if err := server.Run(ctx); err != nil {
@@ -213,9 +213,14 @@ func runWBCommand(
 	command string,
 	importPipeline *pipeline.ImportPipeline,
 ) {
+	wbCookieProvider := cookies.NewFileCookieProvider(
+		"secrets/wb_cookie.txt",
+		30*time.Second,
+	)
+
 	wbParser := wildberries.NewParser(
 		wildberries.ParserConfig{
-			Cookie:         cfg.WBCookie,
+			CookieProvider: wbCookieProvider,
 			Timeout:        cfg.Timeout,
 			RequestDelay:   cfg.WBRequestDelay,
 			MaxRetries:     cfg.WBMaxRetries,
@@ -387,9 +392,14 @@ func runOzonCommand(
 	command string,
 	importPipeline *pipeline.ImportPipeline,
 ) {
+	ozonCookieProvider := cookies.NewFileCookieProvider(
+		"secrets/ozon_cookie.txt",
+		30*time.Second,
+	)
+
 	ozonParser := ozon.NewParser(
 		ozon.ParserConfig{
-			Cookie:         cfg.OzonCookie,
+			CookieProvider: ozonCookieProvider,
 			Timeout:        cfg.Timeout,
 			RequestDelay:   cfg.OzonRequestDelay,
 			MaxRetries:     cfg.OzonMaxRetries,

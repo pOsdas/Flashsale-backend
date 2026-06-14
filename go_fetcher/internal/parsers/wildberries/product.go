@@ -48,7 +48,7 @@ func (p *Parser) fetchCatalogProducts(
 			return nil, fmt.Errorf("fetch page %d: %w", page, err)
 		}
 
-		pageProducts := normalizeWBProducts(response.Products)
+		pageProducts := normalizeWBProducts(response.productList())
 
 		addedOnPage := 0
 

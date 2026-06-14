@@ -2,7 +2,6 @@ package ozon
 
 import (
 	"encoding/json"
-	"fmt"
 	"go_fetcher/internal/models"
 	"html"
 	"strings"
@@ -12,7 +11,7 @@ func extractProductsFromWidgetStates(widgetStates map[string]string) []models.Pr
 	result := make([]models.Product, 0)
 
 	mainProduct, ok := extractMainProductFromWidgetStates(widgetStates)
-	if ok {
+	if ok && mainProduct.PriceCents > 0 {
 		result = append(result, mainProduct)
 	}
 
@@ -48,32 +47,17 @@ func extractProductsFromTileGridWidget(rawWidgetState string) []models.Product {
 	var grid ozonTileGridWidget
 
 	if err := json.Unmarshal([]byte(rawWidgetState), &grid); err != nil {
-		fmt.Println("TILE GRID UNMARSHAL ERROR:", err)
 		return nil
 	}
-
-	fmt.Println("TILE GRID ITEMS:", len(grid.Items))
 
 	products := make([]models.Product, 0, len(grid.Items))
 
 	for _, tile := range grid.Items {
-		//fmt.Println("TILE GRID RAW TILE")
-		//fmt.Println("  id:", tile.ID)
-		//fmt.Println("  skuId:", tile.SKUID)
-		//fmt.Println("  link:", extractLinkFromTile(tile))
-		//fmt.Println("  states:", len(tile.State))
-		//fmt.Println("  mainStates:", len(tile.MainState))
-		//fmt.Println("  title:", extractTitleFromTile(tile))
-		//fmt.Println("  priceCents:", extractPriceCentsFromTile(tile))
-		//fmt.Println("  available:", extractAvailableFromTile(tile))
-
 		product, ok := normalizeOzonProductTile(tile)
 		if !ok {
-			fmt.Println("  result: dropped")
 			continue
 		}
 
-		fmt.Println("  result: accepted")
 		products = append(products, product)
 	}
 

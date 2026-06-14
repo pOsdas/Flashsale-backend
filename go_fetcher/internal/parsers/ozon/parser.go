@@ -3,6 +3,7 @@ package ozon
 import (
 	"context"
 	"fmt"
+	"go_fetcher/internal/cookies"
 	"go_fetcher/internal/models"
 	"log/slog"
 	"net/http"
@@ -20,6 +21,7 @@ type Parser struct {
 	client         *http.Client
 	logger         *slog.Logger
 	cookie         string
+	cookieProvider cookies.Provider
 	requestDelay   time.Duration
 	maxRetries     int
 	retryBaseDelay time.Duration
@@ -27,6 +29,7 @@ type Parser struct {
 
 type ParserConfig struct {
 	Cookie         string
+	CookieProvider cookies.Provider
 	Timeout        time.Duration
 	RequestDelay   time.Duration
 	MaxRetries     int
@@ -60,6 +63,7 @@ func NewParser(cfg ParserConfig, logger *slog.Logger) *Parser {
 		},
 		logger:         logger,
 		cookie:         cfg.Cookie,
+		cookieProvider: cfg.CookieProvider,
 		requestDelay:   cfg.RequestDelay,
 		maxRetries:     cfg.MaxRetries,
 		retryBaseDelay: cfg.RetryBaseDelay,
@@ -148,4 +152,36 @@ func (p *Parser) CategoryProducts(ctx context.Context, categoryInput string, lim
 		Input: categoryInput,
 		Limit: limit,
 	})
+}
+
+func (p *Parser) currentCookie() string {
+	if p == nil {
+		return ""
+	}
+
+	if p.cookieProvider != nil {
+		return strings.TrimSpace(p.cookieProvider.GetCookie())
+	}
+
+	return strings.TrimSpace(p.cookie)
+}
+
+func (p *Parser) hasCookie() bool {
+	return strings.TrimSpace(p.currentCookie()) != ""
+}
+
+func (p *Parser) cookieSource() string {
+	if p == nil {
+		return ""
+	}
+
+	if p.cookieProvider != nil {
+		return p.cookieProvider.Source()
+	}
+
+	if strings.TrimSpace(p.cookie) != "" {
+		return "env"
+	}
+
+	return "empty"
 }

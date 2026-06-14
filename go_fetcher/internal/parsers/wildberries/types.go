@@ -7,6 +7,19 @@ type wbHTTPError struct {
 
 type wbProductsResponse struct {
 	Products []wbProduct `json:"products"`
+	Data     wbData      `json:"data"`
+}
+
+func (r wbProductsResponse) productList() []wbProduct {
+	if len(r.Products) > 0 {
+		return r.Products
+	}
+
+	return r.Data.Products
+}
+
+type wbData struct {
+	Products []wbProduct `json:"products"`
 }
 
 type wbProduct struct {

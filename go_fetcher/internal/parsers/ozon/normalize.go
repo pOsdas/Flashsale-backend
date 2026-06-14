@@ -12,9 +12,12 @@ func normalizeOzonProductTile(tile ozonProductTile) (models.Product, bool) {
 		return models.Product{}, false
 	}
 
+	productPath := extractProductPathFromTile(tile)
+	productURL := buildOzonProductURL(productPath)
+
 	title := extractTitleFromTile(tile)
 	if title == "" {
-		title = buildTitleFromOzonProductURL(extractLinkFromTile(tile))
+		title = buildTitleFromOzonProductURL(productPath)
 	}
 
 	if title == "" {
@@ -32,12 +35,14 @@ func normalizeOzonProductTile(tile ozonProductTile) (models.Product, bool) {
 	}
 
 	return models.Product{
-		SKU:        sku,
-		Title:      title,
-		PriceCents: priceCents,
-		Currency:   defaultCurrency,
-		Available:  available,
-		IsActive:   true,
+		SKU:         sku,
+		Title:       title,
+		PriceCents:  priceCents,
+		Currency:    defaultCurrency,
+		Available:   available,
+		IsActive:    true,
+		URL:         productURL,
+		ProductPath: productPath,
 	}, true
 }
 
@@ -52,7 +57,7 @@ func extractSKUFromTile(tile ozonProductTile) string {
 		return sku
 	}
 
-	link := extractLinkFromTile(tile)
+	link := extractProductPathFromTile(tile)
 	if link == "" {
 		return ""
 	}
@@ -60,18 +65,68 @@ func extractSKUFromTile(tile ozonProductTile) string {
 	return extractProductID(link)
 }
 
-func extractLinkFromTile(tile ozonProductTile) string {
+func extractProductPathFromTile(tile ozonProductTile) string {
 	link := strings.TrimSpace(tile.Link)
 	if link != "" {
-		return link
+		return normalizeOzonProductPath(link)
 	}
 
 	link = strings.TrimSpace(tile.Action.Link)
 	if link != "" {
-		return link
+		return normalizeOzonProductPath(link)
 	}
 
 	return ""
+}
+
+func normalizeOzonProductPath(link string) string {
+	link = strings.TrimSpace(link)
+	if link == "" {
+		return ""
+	}
+
+	if strings.HasPrefix(link, "https://www.ozon.ru") {
+		link = strings.TrimPrefix(link, "https://www.ozon.ru")
+	}
+
+	if strings.HasPrefix(link, "http://www.ozon.ru") {
+		link = strings.TrimPrefix(link, "http://www.ozon.ru")
+	}
+
+	if strings.HasPrefix(link, "https://ozon.ru") {
+		link = strings.TrimPrefix(link, "https://ozon.ru")
+	}
+
+	if strings.HasPrefix(link, "http://ozon.ru") {
+		link = strings.TrimPrefix(link, "http://ozon.ru")
+	}
+
+	if queryIndex := strings.Index(link, "?"); queryIndex >= 0 {
+		link = link[:queryIndex]
+	}
+
+	if !strings.HasPrefix(link, "/") {
+		link = "/" + link
+	}
+
+	return link
+}
+
+func buildOzonProductURL(productPath string) string {
+	productPath = strings.TrimSpace(productPath)
+	if productPath == "" {
+		return ""
+	}
+
+	if strings.HasPrefix(productPath, "http://") || strings.HasPrefix(productPath, "https://") {
+		return productPath
+	}
+
+	if !strings.HasPrefix(productPath, "/") {
+		productPath = "/" + productPath
+	}
+
+	return "https://www.ozon.ru" + productPath
 }
 
 func extractStatesFromTile(tile ozonProductTile) []ozonTileState {
@@ -109,7 +164,7 @@ func extractTitleFromTile(tile ozonProductTile) string {
 		return alt
 	}
 
-	return buildTitleFromOzonProductURL(extractLinkFromTile(tile))
+	return buildTitleFromOzonProductURL(extractProductPathFromTile(tile))
 }
 
 func extractPriceCentsFromTile(tile ozonProductTile) int {

@@ -2,3 +2,5 @@
 /backend/.env.docker
 /backend/TODO.md
 /go_fetcher/.env
+/go_fetcher/secrets/wb_cookie.txt
+/go_fetcher/secrets/ozon_cookie.txt

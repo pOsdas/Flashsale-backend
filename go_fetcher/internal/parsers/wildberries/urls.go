@@ -9,14 +9,17 @@ import (
 
 func buildDetailURL(nmID string) string {
 	values := url.Values{}
+
 	values.Set("appType", "1")
 	values.Set("curr", "rub")
-	values.Set("dest", "-1257786")
+	values.Set("dest", "123589323")
 	values.Set("spp", "30")
-	values.Set("hide_dtype", "10")
-	values.Set("ab_testing", "false")
+	values.Set("hide_vflags", "4294967296")
+	values.Set("hide_dtype", "15")
+	values.Set("mdg", "110")
 	values.Set("lang", "ru")
-	values.Set("nm", nmID)
+	values.Set("ab_testing", "false")
+	values.Set("nm", strings.TrimSpace(nmID))
 
 	return detailURL + "?" + values.Encode()
 }

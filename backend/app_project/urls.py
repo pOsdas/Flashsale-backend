@@ -29,6 +29,7 @@ urlpatterns = [
     path(f"{API_PREFIX}{API_V1_PREFIX}/prometheus/", include("django_prometheus.urls")),
     path(f"{API_PREFIX}{API_V1_PREFIX}/notifications/", include("app.api.v1.notifications.urls")),
     path(f"{API_PREFIX}{API_V1_PREFIX}/dashboard/", include("app.api.v1.dashboard.urls")),
+    path(f"{API_PREFIX}{API_V1_PREFIX}/system/", include("app.api.v1.system.urls")),
 ]
 
 if settings.DEBUG:

@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -23,7 +24,7 @@ func setOzonHeaders(req *http.Request, cookie string) {
 	req.Header.Set("sec-ch-ua-mobile", "?0")
 	req.Header.Set("sec-ch-ua-platform", `"Windows"`)
 
-	if cookie != "" {
+	if strings.TrimSpace(cookie) != "" {
 		req.Header.Set("Cookie", cookie)
 	}
 }
@@ -35,7 +36,6 @@ func isRetryableOzonError(err error) bool {
 	}
 
 	return httpErr.StatusCode == http.StatusTooManyRequests ||
-		httpErr.StatusCode == 403 ||
 		httpErr.StatusCode >= 503
 }
 
@@ -84,7 +84,7 @@ func (p *Parser) doJSONRequestOnce(ctx context.Context, requestURL string, targe
 		return fmt.Errorf("create request: %w", err)
 	}
 
-	setOzonHeaders(req, p.cookie)
+	setOzonHeaders(req, p.currentCookie())
 
 	resp, err := p.client.Do(req)
 	if err != nil {

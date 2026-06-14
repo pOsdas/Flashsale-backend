@@ -10,8 +10,6 @@ import (
 type Config struct {
 	DjangoURL     string
 	FetcherAPIKey string
-	WBCookie      string
-	OzonCookie    string
 
 	Timeout time.Duration
 
@@ -28,8 +26,6 @@ func Load() (*Config, error) {
 	cfg := &Config{
 		DjangoURL:     os.Getenv("DJANGO_URL"),
 		FetcherAPIKey: os.Getenv("FETCHER_API_KEY"),
-		WBCookie:      os.Getenv("WB_COOKIE"),
-		OzonCookie:    os.Getenv("OZON_COOKIE"),
 
 		Timeout: 30 * time.Second,
 
@@ -48,10 +44,6 @@ func Load() (*Config, error) {
 
 	if cfg.FetcherAPIKey == "" {
 		return nil, fmt.Errorf("FETCHER_API_KEY is required")
-	}
-
-	if cfg.WBCookie == "" {
-		return nil, fmt.Errorf("WB_COOKIE is required")
 	}
 
 	if cfg.WBMaxRetries < 0 {

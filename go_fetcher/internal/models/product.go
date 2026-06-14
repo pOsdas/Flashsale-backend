@@ -11,6 +11,8 @@ type Product struct {
 	IsActive     bool
 	Rating       float64
 	ReviewsCount int
+	ProductPath  string
+	URL          string
 }
 
 type ProductImport struct {

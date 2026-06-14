@@ -7,10 +7,33 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 )
 
+const maxWBErrorBodyPreviewLength = 500
+
+type wbTemporaryBlockedError struct {
+	Reason       string
+	BlockedUntil time.Time
+}
+
+func (e *wbTemporaryBlockedError) Error() string {
+	return fmt.Sprintf(
+		"wildberries parser is temporarily blocked: reason=%s, blocked_until=%s",
+		e.Reason,
+		e.BlockedUntil.Format(time.RFC3339),
+	)
+}
+
 func (p *Parser) doJSONRequest(ctx context.Context, requestURL string, target any) error {
+	if blocked, until, reason := p.isTemporarilyBlocked(); blocked {
+		return &wbTemporaryBlockedError{
+			Reason:       reason,
+			BlockedUntil: until,
+		}
+	}
+
 	var lastErr error
 
 	for attempt := 0; attempt <= p.maxRetries; attempt++ {
@@ -41,6 +64,24 @@ func (p *Parser) doJSONRequest(ctx context.Context, requestURL string, target an
 
 		lastErr = err
 
+		if isWBRateLimitedError(err) {
+			p.blockTemporarily("rate_limited", 10*time.Minute)
+			return err
+		}
+
+		if isWBBlockedByAntibotError(err) {
+			p.logger.Warn(
+				"wildberries antibot response received, forcing cookie reload",
+				slog.String("url", requestURL),
+				slog.String("cookie_source", p.cookieSource()),
+				slog.Bool("cookie_present", p.hasCookie()),
+			)
+
+			p.forceReloadCookie()
+			p.blockTemporarily("blocked_by_antibot", 15*time.Minute)
+			return err
+		}
+
 		if !isRetryableWBError(err) {
 			return err
 		}
@@ -55,7 +96,7 @@ func (p *Parser) doJSONRequestOnce(ctx context.Context, requestURL string, targe
 		return fmt.Errorf("create request: %w", err)
 	}
 
-	setWBHeaders(req, p.cookie)
+	setWBHeaders(req, p.currentCookie())
 
 	resp, err := p.client.Do(req)
 	if err != nil {
@@ -76,7 +117,7 @@ func (p *Parser) doJSONRequestOnce(ctx context.Context, requestURL string, targe
 	}
 
 	if err := json.Unmarshal(responseBody, target); err != nil {
-		return fmt.Errorf("decode response: %w, body: %s", err, string(responseBody))
+		return fmt.Errorf("decode response: %w, body: %s", err, truncateWBBodyPreview(string(responseBody)))
 	}
 
 	return nil
@@ -91,18 +132,49 @@ func setWBHeaders(req *http.Request, cookie string) {
 	req.Header.Set("Accept", "application/json, text/plain, */*")
 	req.Header.Set("Accept-Language", "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7")
 	req.Header.Set("Connection", "keep-alive")
-	req.Header.Set("Referer", "https://www.wildberries.ru/catalog/0/search.aspx?search=iphone")
-	req.Header.Set("Sec-Fetch-Dest", "empty")
-	req.Header.Set("Sec-Fetch-Mode", "cors")
-	req.Header.Set("Sec-Fetch-Site", "same-origin")
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36")
 	req.Header.Set("sec-ch-ua", `"Chromium";v="148", "Google Chrome";v="148", "Not-A.Brand";v="99"`)
 	req.Header.Set("sec-ch-ua-mobile", "?0")
 	req.Header.Set("sec-ch-ua-platform", `"Windows"`)
 
-	if cookie != "" {
+	host := req.URL.Hostname()
+
+	switch host {
+	case "search.wb.ru":
+		setWBSearchHeaders(req)
+
+	case "www.wildberries.ru", "wildberries.ru":
+		setWBInternalHeaders(req)
+
+	default:
+		setWBDefaultHeaders(req)
+	}
+
+	if strings.TrimSpace(cookie) != "" {
 		req.Header.Set("Cookie", cookie)
 	}
+}
+
+func setWBSearchHeaders(req *http.Request) {
+	req.Header.Set("Origin", "https://www.wildberries.ru")
+	req.Header.Set("Referer", "https://www.wildberries.ru/catalog/0/search.aspx?search=iphone")
+	req.Header.Set("Sec-Fetch-Dest", "empty")
+	req.Header.Set("Sec-Fetch-Mode", "cors")
+	req.Header.Set("Sec-Fetch-Site", "cross-site")
+}
+
+func setWBInternalHeaders(req *http.Request) {
+	req.Header.Set("Referer", "https://www.wildberries.ru/catalog/0/search.aspx?search=iphone")
+	req.Header.Set("Sec-Fetch-Dest", "empty")
+	req.Header.Set("Sec-Fetch-Mode", "cors")
+	req.Header.Set("Sec-Fetch-Site", "same-origin")
+}
+
+func setWBDefaultHeaders(req *http.Request) {
+	req.Header.Set("Referer", "https://www.wildberries.ru/")
+	req.Header.Set("Sec-Fetch-Dest", "empty")
+	req.Header.Set("Sec-Fetch-Mode", "cors")
+	req.Header.Set("Sec-Fetch-Site", "same-origin")
 }
 
 func sleepWithContext(ctx context.Context, delay time.Duration) error {
@@ -123,11 +195,46 @@ func isRetryableWBError(err error) bool {
 		return false
 	}
 
-	return httpErr.StatusCode == http.StatusTooManyRequests ||
-		httpErr.StatusCode == 498 ||
-		httpErr.StatusCode >= 500
+	return httpErr.StatusCode >= 500
+}
+
+func isWBRateLimitedError(err error) bool {
+	httpErr, ok := err.(*wbHTTPError)
+	if !ok {
+		return false
+	}
+
+	return httpErr.StatusCode == http.StatusTooManyRequests
+}
+
+func isWBBlockedByAntibotError(err error) bool {
+	httpErr, ok := err.(*wbHTTPError)
+	if !ok {
+		return false
+	}
+
+	body := strings.ToLower(httpErr.Body)
+
+	return httpErr.StatusCode == 498 ||
+		strings.Contains(body, "__wbaas/challenges/antibot") ||
+		strings.Contains(body, "почти готово") ||
+		strings.Contains(body, "antibot")
 }
 
 func (e *wbHTTPError) Error() string {
-	return fmt.Sprintf("unexpected WB status code: %d, body: %s", e.StatusCode, e.Body)
+	return fmt.Sprintf(
+		"unexpected WB status code: %d, body: %s",
+		e.StatusCode,
+		truncateWBBodyPreview(e.Body),
+	)
+}
+
+func truncateWBBodyPreview(value string) string {
+	value = strings.TrimSpace(value)
+
+	if len(value) <= maxWBErrorBodyPreviewLength {
+		return value
+	}
+
+	return value[:maxWBErrorBodyPreviewLength] + "...[truncated]"
 }
