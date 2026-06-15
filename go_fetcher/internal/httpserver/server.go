@@ -75,6 +75,7 @@ func (s *Server) Run(ctx context.Context) error {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/health", s.handleHealth)
+	mux.HandleFunc("/health/", s.handleHealth)
 	mux.HandleFunc("/api/v1/fetch/product/", s.handleFetchProduct)
 	mux.HandleFunc("/api/v1/parser/health", s.handleParserHealth)
 	mux.HandleFunc("/api/v1/parser/health/", s.handleParserHealth)

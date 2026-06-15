@@ -8,7 +8,7 @@ from strawberry.django.views import GraphQLView
 
 from app.core.config import get_settings
 from app.api.v1.schema import schema
-from app.core.views import home_view, page_not_found_view
+from app.core.views import home_view, page_not_found_view, system_health_ui_view
 
 core_settings = get_settings()
 
@@ -21,6 +21,7 @@ handler404 = "app.core.views.page_not_found_view"
 
 urlpatterns = [
     path("", home_view, name="home"),
+    path("system/health/", system_health_ui_view, name="system-health-ui"),
     path(f"{API_PREFIX}{API_V1_PREFIX}/admin/", admin.site.urls),
     path(f"{API_PREFIX}{API_V1_PREFIX}/graphql/", GraphQLView.as_view(schema=schema)),
     path(f"{API_PREFIX}{API_V1_PREFIX}/payments/", include("app.api.v1.payments.urls")),

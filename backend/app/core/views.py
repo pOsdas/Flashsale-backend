@@ -12,6 +12,10 @@ def home_view(request):
             "title": "GraphQL",
             "url": "/api/v1/graphql/",
         },
+        {
+            "title": "System Health",
+            "url": "/system/health/",
+        },
     ]
 
     if settings.DEBUG:
@@ -65,7 +69,6 @@ def home_view(request):
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <title>Flashsale Backend API</title>
-
         <style>
             :root {{
                 --bg: #0f172a;
@@ -179,11 +182,7 @@ def home_view(request):
                 border: 1px solid var(--link-border);
                 text-decoration: none;
                 color: var(--text);
-                transition:
-                    transform 0.15s ease,
-                    border-color 0.15s ease,
-                    background 0.15s ease,
-                    box-shadow 0.15s ease;
+                transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
             }}
 
             .link-card:hover {{
@@ -223,14 +222,6 @@ def home_view(request):
                 color: var(--accent-hover);
                 font-size: 20px;
                 flex-shrink: 0;
-                transition:
-                    background 0.15s ease,
-                    color 0.15s ease;
-            }}
-
-            .link-card:hover .arrow {{
-                background: rgba(139, 92, 246, 0.24);
-                color: #ffffff;
             }}
 
             .notice {{
@@ -278,10 +269,6 @@ def home_view(request):
                 .grid {{
                     grid-template-columns: 1fr;
                 }}
-
-                .link-card {{
-                    min-height: 78px;
-                }}
             }}
         </style>
     </head>
@@ -314,6 +301,326 @@ def home_view(request):
                 </div>
             </section>
         </main>
+    </body>
+    </html>
+    """
+
+    return HttpResponse(html)
+
+
+def system_health_ui_view(request):
+    html = """
+    <!doctype html>
+    <html lang="ru">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>Flashsale System Health</title>
+
+        <style>
+            :root {
+                --bg: #0f172a;
+                --card-bg: rgba(30, 41, 59, 0.96);
+                --card-border: #334155;
+                --text: #e5e7eb;
+                --muted: #94a3b8;
+                --title: #f8fafc;
+                --ok: #22c55e;
+                --bad: #ef4444;
+                --warn: #f59e0b;
+                --panel: #111827;
+            }
+
+            * {
+                box-sizing: border-box;
+            }
+
+            body {
+                margin: 0;
+                min-height: 100vh;
+                font-family: Arial, sans-serif;
+                background:
+                    radial-gradient(circle at top, rgba(139, 92, 246, 0.24), transparent 36%),
+                    radial-gradient(circle at bottom right, rgba(34, 197, 94, 0.12), transparent 32%),
+                    var(--bg);
+                color: var(--text);
+                padding: 32px 16px;
+            }
+
+            .page {
+                width: 100%;
+                max-width: 860px;
+                margin: 0 auto;
+            }
+
+            .back {
+                display: inline-block;
+                margin-bottom: 22px;
+                color: #c4b5fd;
+                text-decoration: none;
+                font-weight: 700;
+            }
+
+            .card {
+                background: var(--card-bg);
+                border: 1px solid var(--card-border);
+                border-radius: 28px;
+                padding: 32px;
+                box-shadow: 0 28px 80px rgba(0, 0, 0, 0.38);
+            }
+
+            .header {
+                display: flex;
+                justify-content: space-between;
+                align-items: flex-start;
+                gap: 24px;
+                margin-bottom: 28px;
+            }
+
+            h1 {
+                margin: 0 0 10px;
+                color: var(--title);
+                font-size: 38px;
+                letter-spacing: -0.04em;
+            }
+
+            p {
+                margin: 0;
+                color: var(--muted);
+                line-height: 1.6;
+            }
+
+            .status-badge {
+                display: inline-flex;
+                align-items: center;
+                gap: 10px;
+                padding: 10px 15px;
+                border-radius: 999px;
+                font-size: 14px;
+                font-weight: 800;
+                white-space: nowrap;
+                border: 1px solid var(--card-border);
+                background: var(--panel);
+            }
+
+            .status-dot {
+                width: 10px;
+                height: 10px;
+                border-radius: 50%;
+                background: var(--muted);
+            }
+
+            .status-ok {
+                color: #bbf7d0;
+                border-color: rgba(34, 197, 94, 0.35);
+                background: rgba(34, 197, 94, 0.12);
+            }
+
+            .status-ok .status-dot {
+                background: var(--ok);
+                box-shadow: 0 0 14px rgba(34, 197, 94, 0.85);
+            }
+
+            .status-bad {
+                color: #fecaca;
+                border-color: rgba(239, 68, 68, 0.35);
+                background: rgba(239, 68, 68, 0.12);
+            }
+
+            .status-bad .status-dot {
+                background: var(--bad);
+                box-shadow: 0 0 14px rgba(239, 68, 68, 0.85);
+            }
+
+            .status-warn {
+                color: #fde68a;
+                border-color: rgba(245, 158, 11, 0.35);
+                background: rgba(245, 158, 11, 0.12);
+            }
+
+            .status-warn .status-dot {
+                background: var(--warn);
+                box-shadow: 0 0 14px rgba(245, 158, 11, 0.85);
+            }
+
+            .grid {
+                display: grid;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                gap: 16px;
+            }
+
+            .service {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                gap: 16px;
+                background: var(--panel);
+                border: 1px solid var(--card-border);
+                border-radius: 20px;
+                padding: 20px;
+            }
+
+            .service-title {
+                color: var(--title);
+                font-size: 18px;
+                font-weight: 900;
+            }
+
+            .loading,
+            .error {
+                padding: 18px;
+                border-radius: 16px;
+                background: var(--panel);
+                border: 1px solid var(--card-border);
+                color: var(--muted);
+            }
+
+            .error {
+                color: #fecaca;
+                background: rgba(239, 68, 68, 0.12);
+                border-color: rgba(239, 68, 68, 0.35);
+            }
+
+            @media (max-width: 780px) {
+                .header {
+                    flex-direction: column;
+                }
+
+                .grid {
+                    grid-template-columns: 1fr;
+                }
+
+                h1 {
+                    font-size: 30px;
+                }
+
+                .card {
+                    padding: 24px;
+                }
+
+                .service {
+                    align-items: flex-start;
+                    flex-direction: column;
+                }
+            }
+        </style>
+    </head>
+
+    <body>
+        <main class="page">
+            <a class="back" href="/">← Back to home</a>
+
+            <section class="card">
+                <div class="header">
+                    <div>
+                        <h1>System Health</h1>
+                        <p>Current status of Flashsale Backend services.</p>
+                    </div>
+
+                    <div id="global-status" class="status-badge">
+                        <span class="status-dot"></span>
+                        Loading...
+                    </div>
+                </div>
+
+                <div id="content" class="loading">
+                    Loading current health status...
+                </div>
+            </section>
+        </main>
+
+        <script>
+            function normalizeStatusClass(status) {
+                if (status === "healthy" || status === "ok") {
+                    return "status-ok";
+                }
+
+                if (status === "degraded" || status === "warning") {
+                    return "status-warn";
+                }
+
+                return "status-bad";
+            }
+
+            function formatServiceName(name) {
+                return name
+                    .replaceAll("_", " ")
+                    .replace(/\\b\\w/g, function(char) {
+                        return char.toUpperCase();
+                    });
+            }
+
+            function renderStatusBadge(status) {
+                return `
+                    <div class="status-badge ${normalizeStatusClass(status)}">
+                        <span class="status-dot"></span>
+                        ${status}
+                    </div>
+                `;
+            }
+
+            function renderHealth(data) {
+                const globalStatus = data.status || "unknown";
+                const checks = data.checks || {};
+
+                document.getElementById("global-status").className =
+                    `status-badge ${normalizeStatusClass(globalStatus)}`;
+
+                document.getElementById("global-status").innerHTML = `
+                    <span class="status-dot"></span>
+                    ${globalStatus}
+                `;
+
+                const cardsHtml = Object.entries(checks)
+                    .map(([name, check]) => {
+                        const status = check.status || "unknown";
+
+                        return `
+                            <article class="service">
+                                <div class="service-title">${formatServiceName(name)}</div>
+                                ${renderStatusBadge(status)}
+                            </article>
+                        `;
+                    })
+                    .join("");
+
+                document.getElementById("content").className = "grid";
+                document.getElementById("content").innerHTML = cardsHtml;
+            }
+
+            function renderError(error) {
+                document.getElementById("global-status").className = "status-badge status-bad";
+                document.getElementById("global-status").innerHTML = `
+                    <span class="status-dot"></span>
+                    error
+                `;
+
+                document.getElementById("content").className = "error";
+                document.getElementById("content").innerHTML =
+                    `Failed to load current health status: ${error}`;
+            }
+
+            const healthUrl = `/api/v1/system/health/?_=${Date.now()}`;
+
+            fetch(healthUrl, {
+                method: "GET",
+                cache: "no-store",
+                headers: {
+                    "Accept": "application/json",
+                    "Cache-Control": "no-cache",
+                    "Pragma": "no-cache"
+                }
+            })
+                .then((response) => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
+
+                    return response.json();
+                })
+                .then(renderHealth)
+                .catch(renderError);
+        </script>
     </body>
     </html>
     """
