@@ -18,7 +18,7 @@ const (
 	defaultCurrency = "RUB"
 
 	detailURL  = "https://www.wildberries.ru/__internal/card/cards/v4/detail"
-	catalogURL = "https://search.wb.ru/exactmatch/ru/common/v18/search"
+	catalogURL = "https://www.wildberries.ru/__internal/search/exactmatch/ru/common/v18/search"
 
 	defaultPageSize = 100
 

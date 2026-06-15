@@ -4,3 +4,7 @@
 /go_fetcher/.env
 /go_fetcher/secrets/wb_cookie.txt
 /go_fetcher/secrets/ozon_cookie.txt
+/go_fetcher/secrets/
+/go_fetcher/tools/diagnostics/
+/go_fetcher/tools/playwright/user_data/
+/go_fetcher/tools/playwright/edge_profiles/

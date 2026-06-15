@@ -74,3 +74,12 @@ docker run --rm --env-file .env-docker go_fetcher ozon search --limit=10 "iphone
 ```shell
 docker run --rm --env-file .env-docker go_fetcher wb search --limit=10 "iphone"
 ```
+
+## Playwright for cookies update
+> cd backend
+```shell
+poetry run python ..\go_fetcher\tools\playwright\update_marketplace_cookie.py --marketplace wb
+```
+```shell
+poetry run python ..\go_fetcher\tools\playwright\update_marketplace_cookie.py --marketplace ozon
+```
