@@ -349,7 +349,7 @@ def system_health_ui_view(request):
 
             .page {
                 width: 100%;
-                max-width: 860px;
+                max-width: 920px;
                 margin: 0 auto;
             }
 
@@ -460,10 +460,25 @@ def system_health_ui_view(request):
                 padding: 20px;
             }
 
+            .service-info {
+                min-width: 0;
+            }
+
             .service-title {
                 color: var(--title);
                 font-size: 18px;
                 font-weight: 900;
+                margin-bottom: 6px;
+            }
+
+            .service-details {
+                color: var(--muted);
+                font-size: 13px;
+                line-height: 1.4;
+                max-width: 420px;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
             }
 
             .loading,
@@ -542,14 +557,6 @@ def system_health_ui_view(request):
                 return "status-bad";
             }
 
-            function formatServiceName(name) {
-                return name
-                    .replaceAll("_", " ")
-                    .replace(/\\b\\w/g, function(char) {
-                        return char.toUpperCase();
-                    });
-            }
-
             function renderStatusBadge(status) {
                 return `
                     <div class="status-badge ${normalizeStatusClass(status)}">
@@ -559,9 +566,132 @@ def system_health_ui_view(request):
                 `;
             }
 
-            function renderHealth(data) {
-                const globalStatus = data.status || "unknown";
-                const checks = data.checks || {};
+            function escapeHtml(value) {
+                return String(value || "")
+                    .replaceAll("&", "&amp;")
+                    .replaceAll("<", "&lt;")
+                    .replaceAll(">", "&gt;")
+                    .replaceAll('"', "&quot;")
+                    .replaceAll("'", "&#039;");
+            }
+
+            function getBaseServiceStatus(healthData, name) {
+                const checks = healthData.checks || {};
+                const check = checks[name] || {};
+
+                return check.status || "unknown";
+            }
+
+            function getParserStatus(parserHealthData, marketplace) {
+                const checks = parserHealthData.checks || {};
+                const check = checks[marketplace] || {};
+
+                return check.status || "unknown";
+            }
+
+            function getParserDetails(parserHealthData, marketplace) {
+                const checks = parserHealthData.checks || {};
+                const check = checks[marketplace] || {};
+                const details = check.details || {};
+
+                if (!details || Object.keys(details).length === 0) {
+                    return "No parser details";
+                }
+
+                if (check.status === "ok") {
+                    const duration = details.duration_ms ? `${details.duration_ms} ms` : "unknown time";
+                    const title = details.parsed_title || details.selected_title || "";
+                    const sku = details.parsed_sku || details.selected_sku || "";
+
+                    if (title && sku) {
+                        return `${sku} · ${title} · ${duration}`;
+                    }
+
+                    if (title) {
+                        return `${title} · ${duration}`;
+                    }
+
+                    return `completed · ${duration}`;
+                }
+
+                const step = details.step || "unknown step";
+                const message = details.message || details.error || details.error_type || "parser failed";
+
+                return `${step} · ${message}`;
+            }
+
+            function resolveGlobalStatus(healthData, parserHealthData) {
+                const baseStatus = healthData.status || "unknown";
+                const parserStatus = parserHealthData.status || "unknown";
+
+                if (baseStatus === "unhealthy" || parserStatus === "unhealthy") {
+                    return "unhealthy";
+                }
+
+                if (baseStatus === "degraded" || parserStatus === "degraded") {
+                    return "degraded";
+                }
+
+                if (baseStatus === "healthy" && parserStatus === "healthy") {
+                    return "healthy";
+                }
+
+                return "degraded";
+            }
+
+            function buildCards(healthData, parserHealthData) {
+                return [
+                    {
+                        title: "Database",
+                        status: getBaseServiceStatus(healthData, "database"),
+                        details: ""
+                    },
+                    {
+                        title: "Redis",
+                        status: getBaseServiceStatus(healthData, "redis"),
+                        details: ""
+                    },
+                    {
+                        title: "RabbitMQ",
+                        status: getBaseServiceStatus(healthData, "rabbitmq"),
+                        details: ""
+                    },
+                    {
+                        title: "Telegram",
+                        status: getBaseServiceStatus(healthData, "telegram"),
+                        details: ""
+                    },
+                    {
+                        title: "Go Fetcher - Ozon",
+                        status: getParserStatus(parserHealthData, "ozon"),
+                        details: getParserDetails(parserHealthData, "ozon")
+                    },
+                    {
+                        title: "Go Fetcher - WB",
+                        status: getParserStatus(parserHealthData, "wb"),
+                        details: getParserDetails(parserHealthData, "wb")
+                    }
+                ];
+            }
+
+            function renderCard(card) {
+                const detailsHtml = card.details
+                    ? `<div class="service-details" title="${escapeHtml(card.details)}">${escapeHtml(card.details)}</div>`
+                    : "";
+
+                return `
+                    <article class="service">
+                        <div class="service-info">
+                            <div class="service-title">${escapeHtml(card.title)}</div>
+                            ${detailsHtml}
+                        </div>
+                        ${renderStatusBadge(card.status)}
+                    </article>
+                `;
+            }
+
+            function renderHealth(healthData, parserHealthData) {
+                const globalStatus = resolveGlobalStatus(healthData, parserHealthData);
 
                 document.getElementById("global-status").className =
                     `status-badge ${normalizeStatusClass(globalStatus)}`;
@@ -571,18 +701,8 @@ def system_health_ui_view(request):
                     ${globalStatus}
                 `;
 
-                const cardsHtml = Object.entries(checks)
-                    .map(([name, check]) => {
-                        const status = check.status || "unknown";
-
-                        return `
-                            <article class="service">
-                                <div class="service-title">${formatServiceName(name)}</div>
-                                ${renderStatusBadge(status)}
-                            </article>
-                        `;
-                    })
-                    .join("");
+                const cards = buildCards(healthData, parserHealthData);
+                const cardsHtml = cards.map(renderCard).join("");
 
                 document.getElementById("content").className = "grid";
                 document.getElementById("content").innerHTML = cardsHtml;
@@ -597,28 +717,38 @@ def system_health_ui_view(request):
 
                 document.getElementById("content").className = "error";
                 document.getElementById("content").innerHTML =
-                    `Failed to load current health status: ${error}`;
+                    `Failed to load current health status: ${escapeHtml(error)}`;
             }
 
-            const healthUrl = `/api/v1/system/health/?_=${Date.now()}`;
-
-            fetch(healthUrl, {
-                method: "GET",
-                cache: "no-store",
-                headers: {
-                    "Accept": "application/json",
-                    "Cache-Control": "no-cache",
-                    "Pragma": "no-cache"
-                }
-            })
-                .then((response) => {
+            function fetchJson(url) {
+                return fetch(url, {
+                    method: "GET",
+                    cache: "no-store",
+                    headers: {
+                        "Accept": "application/json",
+                        "Cache-Control": "no-cache",
+                        "Pragma": "no-cache"
+                    }
+                }).then((response) => {
                     if (!response.ok) {
-                        throw new Error(`HTTP ${response.status}`);
+                        throw new Error(`${url} returned HTTP ${response.status}`);
                     }
 
                     return response.json();
+                });
+            }
+
+            const cacheBuster = Date.now();
+            const healthUrl = `/api/v1/system/health/?_=${cacheBuster}`;
+            const parserHealthUrl = `/api/v1/system/parser-health/?_=${cacheBuster}`;
+
+            Promise.all([
+                fetchJson(healthUrl),
+                fetchJson(parserHealthUrl)
+            ])
+                .then(([healthData, parserHealthData]) => {
+                    renderHealth(healthData, parserHealthData);
                 })
-                .then(renderHealth)
                 .catch(renderError);
         </script>
     </body>
