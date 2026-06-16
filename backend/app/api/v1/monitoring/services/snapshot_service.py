@@ -9,6 +9,7 @@ from app.api.v1.monitoring.models import (
     MonitoringTarget,
     ProductSnapshot,
     SnapshotParseStatus,
+    SnapshotSource,
 )
 from app.api.v1.monitoring.services.alert_service import create_alerts_for_snapshot
 from app.core.logging import get_logger
@@ -21,6 +22,7 @@ def create_product_snapshot(
     *,
     target: MonitoringTarget,
     parse_status: str = SnapshotParseStatus.SUCCESS,
+    source: str = SnapshotSource.PARSER,
     price: Decimal | int | str | None = None,
     old_price: Decimal | int | str | None = None,
     currency: str = "RUB",
@@ -41,6 +43,7 @@ def create_product_snapshot(
         snapshot = ProductSnapshot.objects.create(
             target=target,
             parse_status=parse_status,
+            source=source,
             price=_to_decimal_or_none(price),
             old_price=_to_decimal_or_none(old_price),
             currency=currency,
@@ -62,7 +65,18 @@ def create_product_snapshot(
         )
 
     if snapshot.parse_status == SnapshotParseStatus.SUCCESS:
-        create_alerts_for_snapshot(snapshot=snapshot)
+        try:
+            create_alerts_for_snapshot(snapshot=snapshot)
+        except Exception as exc:
+            logger.exception(
+                "monitoring alerts creation failed after successful snapshot",
+                extra={
+                    "service": "monitoring",
+                    "target_id": str(target.id),
+                    "snapshot_id": str(snapshot.id),
+                    "error": str(exc),
+                },
+            )
 
     logger.info(
         "monitoring product snapshot created",
@@ -71,6 +85,7 @@ def create_product_snapshot(
             "target_id": str(target.id),
             "snapshot_id": str(snapshot.id),
             "parse_status": snapshot.parse_status,
+            "source": snapshot.source,
             "price": str(snapshot.price) if snapshot.price is not None else None,
         },
     )

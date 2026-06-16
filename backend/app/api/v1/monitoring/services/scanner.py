@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from django.db import transaction
 from django.utils import timezone
 
@@ -6,8 +8,9 @@ from app.api.v1.monitoring.models import (
     MonitoringTargetStatus,
     SnapshotParseStatus,
 )
-from app.api.v1.monitoring.services.fetcher_client import (
-    build_monitoring_fetcher_client,
+from app.api.v1.monitoring.services.product_cache import (
+    ProductCacheBusyError,
+    ProductCacheService,
 )
 from app.api.v1.monitoring.services.snapshot_service import create_product_snapshot
 from app.core.logging import get_logger
@@ -19,7 +22,7 @@ logger = get_logger(__name__)
 class MonitoringScanner:
     def __init__(self, batch_size: int = 50) -> None:
         self.batch_size = batch_size
-        self.fetcher_client = build_monitoring_fetcher_client()
+        self.product_cache_service = ProductCacheService()
 
     def run_once(self) -> int:
         targets = self._get_due_targets()
@@ -66,11 +69,15 @@ class MonitoringScanner:
         )
 
         try:
-            fetched_data = self.fetcher_client.fetch_target(target=target)
+            cache_result = self.product_cache_service.get_or_refresh_product(
+                target=target,
+            )
+            fetched_data = cache_result.product
 
             create_product_snapshot(
                 target=target,
                 parse_status=SnapshotParseStatus.SUCCESS,
+                source=cache_result.source,
                 external_id=fetched_data.external_id,
                 price=fetched_data.price,
                 old_price=fetched_data.old_price,
@@ -81,7 +88,7 @@ class MonitoringScanner:
                 title=fetched_data.title,
                 seller_name=fetched_data.seller_name,
                 brand=fetched_data.brand,
-                raw_data=fetched_data.raw_data,
+                raw_data=cache_result.build_snapshot_raw_data(),
             )
 
             logger.info(
@@ -90,7 +97,26 @@ class MonitoringScanner:
                     "service": "monitoring_scanner",
                     "target_id": str(target.id),
                     "marketplace": target.marketplace,
+                    "cache_source": cache_result.source,
+                    "cache_is_stale": cache_result.is_stale,
+                    "effective_cache_minutes": cache_result.effective_cache_minutes,
                 },
+            )
+
+        except ProductCacheBusyError as exc:
+            logger.warning(
+                "monitoring target postponed because product cache refresh is already in progress",
+                extra={
+                    "service": "monitoring_scanner",
+                    "target_id": str(target.id),
+                    "marketplace": target.marketplace,
+                    "error": str(exc),
+                },
+            )
+
+            self._postpone_target_after_cache_busy(
+                target=target,
+                error=str(exc),
             )
 
         except Exception as exc:
@@ -109,11 +135,34 @@ class MonitoringScanner:
                 error=str(exc),
             )
 
+    def _postpone_target_after_cache_busy(
+            self,
+            *,
+            target: MonitoringTarget,
+            error: str,
+    ) -> None:
+        with transaction.atomic():
+            locked_target = (
+                MonitoringTarget.objects
+                .select_for_update()
+                .get(id=target.id)
+            )
+
+            locked_target.next_check_at = timezone.now() + timedelta(minutes=5)
+            locked_target.last_error = error
+            locked_target.save(
+                update_fields=[
+                    "next_check_at",
+                    "last_error",
+                    "updated_at",
+                ]
+            )
+
     def _mark_target_failed(
-        self,
-        *,
-        target: MonitoringTarget,
-        error: str,
+            self,
+            *,
+            target: MonitoringTarget,
+            error: str,
     ) -> None:
         with transaction.atomic():
             locked_target = (

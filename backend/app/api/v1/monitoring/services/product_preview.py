@@ -1,20 +1,20 @@
 from dataclasses import dataclass
+from decimal import Decimal
 from typing import Any
 
-import httpx
-from django.conf import settings
-
+from app.api.v1.monitoring.services.product_cache import (
+    ProductCacheBusyError,
+    ProductCacheError,
+    ProductCacheService,
+)
+from app.api.v1.monitoring.services.fetcher_client import MonitoringFetcherError
 from app.core.logging import get_logger
 
 
 logger = get_logger(__name__)
 
 
-class ProductPreviewError(Exception):
-    pass
-
-
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ProductPreviewData:
     external_id: str
     title: str
@@ -29,72 +29,35 @@ class ProductPreviewData:
     raw_data: dict[str, Any]
 
 
+class ProductPreviewError(Exception):
+    pass
+
+
 class ProductPreviewService:
-    def preview_product(
-        self,
-        *,
-        marketplace: str,
-        url: str,
-    ) -> ProductPreviewData:
-        client = ProductPreviewFetcherClient(
-            base_url=settings.GO_FETCHER_BASE_URL,
-            product_endpoint=settings.GO_FETCHER_PRODUCT_ENDPOINT,
-            api_key=getattr(settings, "GO_FETCHER_API_KEY", ""),
-            timeout_seconds=getattr(settings, "GO_FETCHER_TIMEOUT_SECONDS", 15),
-        )
-
-        return client.fetch_product_preview(
-            marketplace=marketplace,
-            url=url,
-        )
-
-
-class ProductPreviewFetcherClient:
     def __init__(
-        self,
-        *,
-        base_url: str,
-        product_endpoint: str,
-        api_key: str,
-        timeout_seconds: int,
+            self,
+            *,
+            product_cache_service: ProductCacheService | None = None,
     ) -> None:
-        self.base_url = base_url.rstrip("/")
-        self.product_endpoint = product_endpoint
-        self.api_key = api_key
-        self.timeout_seconds = timeout_seconds
+        self.product_cache_service = product_cache_service or ProductCacheService()
 
-    def fetch_product_preview(
-        self,
-        *,
-        marketplace: str,
-        url: str,
+    def preview_product(
+            self,
+            *,
+            marketplace: str,
+            url: str,
     ) -> ProductPreviewData:
-        endpoint = self._build_endpoint()
-
-        payload = {
-            "marketplace": marketplace,
-            "url": url,
-        }
-
-        headers = {
-            "Content-Type": "application/json",
-        }
-
-        if self.api_key:
-            headers["X-Fetcher-Api-Key"] = self.api_key
-
         try:
-            response = httpx.post(
-                endpoint,
-                json=payload,
-                headers=headers,
-                timeout=self.timeout_seconds,
+            cache_result = self.product_cache_service.get_or_refresh_product_by_identity(
+                marketplace=marketplace,
+                url=url,
+                fallback_interval_minutes=60,
+                log_identity="product_preview",
             )
-            response.raise_for_status()
 
-        except httpx.TimeoutException as exc:
+        except ProductCacheBusyError as exc:
             logger.warning(
-                "Product preview fetcher timeout",
+                "Product preview cache refresh is busy",
                 extra={
                     "service": "product_preview",
                     "marketplace": marketplace,
@@ -103,27 +66,40 @@ class ProductPreviewFetcherClient:
                 },
             )
             raise ProductPreviewError(
-                "Не удалось получить товар: сервис парсинга не ответил вовремя."
+                "Товар уже обновляется. Попробуйте еще раз через несколько секунд."
             ) from exc
 
-        except httpx.HTTPStatusError as exc:
+        except MonitoringFetcherError as exc:
             logger.warning(
-                "Product preview fetcher returned HTTP error",
+                "Product preview fetcher error",
                 extra={
                     "service": "product_preview",
                     "marketplace": marketplace,
                     "url": url,
-                    "status_code": exc.response.status_code,
-                    "response_text": exc.response.text,
+                    "error": str(exc),
                 },
             )
             raise ProductPreviewError(
                 "Не удалось получить товар. Проверьте ссылку или попробуйте позже."
             ) from exc
 
-        except httpx.RequestError as exc:
+        except ProductCacheError as exc:
             logger.warning(
-                "Product preview fetcher request error",
+                "Product preview cache error",
+                extra={
+                    "service": "product_preview",
+                    "marketplace": marketplace,
+                    "url": url,
+                    "error": str(exc),
+                },
+            )
+            raise ProductPreviewError(
+                "Не удалось получить товар из кеша."
+            ) from exc
+
+        except Exception as exc:
+            logger.warning(
+                "Product preview unexpected error",
                 extra={
                     "service": "product_preview",
                     "marketplace": marketplace,
@@ -135,125 +111,50 @@ class ProductPreviewFetcherClient:
                 "Сервис парсинга временно недоступен."
             ) from exc
 
-        try:
-            data = response.json()
+        product = cache_result.product
 
-        except ValueError as exc:
-            logger.warning(
-                "Product preview fetcher returned invalid JSON",
-                extra={
-                    "service": "product_preview",
-                    "marketplace": marketplace,
-                    "url": url,
-                    "response_text": response.text,
-                },
-            )
-            raise ProductPreviewError(
-                "Сервис парсинга вернул некорректный ответ."
-            ) from exc
-
-        return self._parse_response(data=data)
-
-    def _build_endpoint(self) -> str:
-        product_endpoint = self.product_endpoint
-
-        if not product_endpoint.startswith("/"):
-            product_endpoint = f"/{product_endpoint}"
-
-        return f"{self.base_url}{product_endpoint}"
-
-    def _parse_response(self, *, data: dict[str, Any]) -> ProductPreviewData:
-        product = data.get("product")
-
-        if product is None:
-            product = data
-
-        external_id = self._as_str(
-            product.get("external_id")
-            or product.get("sku")
-            or product.get("id")
-        )
-        title = self._as_str(product.get("title"))
-
-        if not external_id:
+        if not product.external_id:
             raise ProductPreviewError(
                 "Товар найден, но сервис парсинга не вернул внешний идентификатор товара."
             )
 
-        if not title:
+        if not product.title:
             raise ProductPreviewError(
                 "Товар найден, но сервис парсинга не вернул название товара."
             )
 
         return ProductPreviewData(
-            external_id=external_id,
-            title=title,
-            seller_name=self._as_str(product.get("seller_name")),
-            brand=self._as_str(product.get("brand")),
-            price=self._as_optional_int(
-                product.get("price")
-                or product.get("price_cents")
-            ),
-            old_price=self._as_optional_int(
-                product.get("old_price")
-                or product.get("old_price_cents")
-            ),
-            currency=self._as_str(product.get("currency") or "RUB"),
-            is_available=self._as_bool(
-                product.get("is_available")
-                if "is_available" in product
-                else product.get("available", 0)
-            ),
-            rating=self._as_optional_float(product.get("rating")),
-            reviews_count=self._as_optional_int(product.get("reviews_count")),
-            raw_data=data,
+            external_id=product.external_id,
+            title=product.title,
+            seller_name=product.seller_name,
+            brand=product.brand,
+            price=self._decimal_to_int_or_none(product.price),
+            old_price=self._decimal_to_int_or_none(product.old_price),
+            currency=product.currency,
+            is_available=bool(product.is_available),
+            rating=self._decimal_to_float_or_none(product.rating),
+            reviews_count=product.reviews_count,
+            raw_data={
+                "source": "product_cache_service",
+                "cache": {
+                    "source": cache_result.source,
+                    "is_stale": cache_result.is_stale,
+                    "parsed_at": cache_result.parsed_at.isoformat(),
+                    "expires_at": cache_result.expires_at.isoformat(),
+                    "effective_cache_minutes": cache_result.effective_cache_minutes,
+                },
+                "product": product.raw_data,
+            },
         )
 
-    def _as_str(self, value: Any) -> str:
-        if value is None:
-            return ""
-
-        return str(value).strip()
-
-    def _as_optional_int(self, value: Any) -> int | None:
+    def _decimal_to_int_or_none(self, value: Decimal | None) -> int | None:
         if value is None:
             return None
 
-        if value == "":
-            return None
+        return int(value)
 
-        try:
-            return int(value)
-
-        except (TypeError, ValueError):
-            return None
-
-    def _as_optional_float(self, value: Any) -> float | None:
+    def _decimal_to_float_or_none(self, value: Decimal | None) -> float | None:
         if value is None:
             return None
 
-        if value == "":
-            return None
-
-        try:
-            return float(value)
-
-        except (TypeError, ValueError):
-            return None
-
-    def _as_bool(self, value: Any) -> bool:
-        if isinstance(value, bool):
-            return value
-
-        if isinstance(value, int):
-            return value > 0
-
-        if isinstance(value, str):
-            return value.strip().lower() in {
-                "true",
-                "1",
-                "yes",
-                "available",
-            }
-
-        return bool(value)
+        return float(value)

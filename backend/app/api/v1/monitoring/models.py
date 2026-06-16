@@ -29,6 +29,12 @@ class SnapshotParseStatus(models.TextChoices):
     MARKETPLACE_ERROR = "marketplace_error", "Marketplace error"
 
 
+class SnapshotSource(models.TextChoices):
+    PARSER = "parser", "Parser"
+    CACHE = "cache", "Cache"
+    STALE_CACHE = "stale_cache", "Stale cache"
+
+
 class AlertType(models.TextChoices):
     PRICE_CHANGED = "price_changed", "Price changed"
     PRICE_DROPPED = "price_dropped", "Price dropped"
@@ -154,6 +160,96 @@ class MonitoringTarget(models.Model):
         return f"{self.marketplace}: {title}"
 
 
+class ProductCacheEntry(models.Model):
+    """
+    Shared current product cache.
+
+    One row represents one marketplace product by canonical identity:
+    marketplace + external_id.
+    MonitoringTarget rows only define how often different users need this product.
+    """
+
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+    )
+    marketplace = models.CharField(
+        max_length=20,
+        choices=Marketplace.choices,
+    )
+    external_id = models.CharField(
+        max_length=255,
+        db_index=True,
+    )
+
+    url = models.URLField(
+        max_length=2000,
+        blank=True,
+    )
+    title = models.CharField(
+        max_length=500,
+        blank=True,
+    )
+    seller_name = models.CharField(
+        max_length=255,
+        blank=True,
+    )
+    brand = models.CharField(
+        max_length=255,
+        blank=True,
+    )
+
+    data = models.JSONField(
+        default=dict,
+        blank=True,
+    )
+
+    parsed_at = models.DateTimeField(
+        db_index=True,
+    )
+    expires_at = models.DateTimeField(
+        db_index=True,
+    )
+    effective_cache_minutes = models.PositiveIntegerField(
+        default=60,
+    )
+
+    last_success_at = models.DateTimeField(
+        null=True,
+        blank=True,
+    )
+    last_error = models.TextField(
+        blank=True,
+    )
+
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        db_index=True,
+    )
+    updated_at = models.DateTimeField(
+        auto_now=True,
+    )
+
+    class Meta:
+        ordering = ["-updated_at"]
+        indexes = [
+            models.Index(fields=["marketplace", "external_id"]),
+            models.Index(fields=["expires_at"]),
+            models.Index(fields=["parsed_at"]),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["marketplace", "external_id"],
+                name="unique_monitoring_product_cache_entry",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        title = self.title or self.external_id
+        return f"{self.marketplace}: {title}"
+
+
 class ProductSnapshot(models.Model):
     """
     Historical product state.
@@ -177,6 +273,12 @@ class ProductSnapshot(models.Model):
         max_length=30,
         choices=SnapshotParseStatus.choices,
         default=SnapshotParseStatus.SUCCESS,
+        db_index=True,
+    )
+    source = models.CharField(
+        max_length=32,
+        choices=SnapshotSource.choices,
+        default=SnapshotSource.PARSER,
         db_index=True,
     )
 
@@ -246,6 +348,7 @@ class ProductSnapshot(models.Model):
         indexes = [
             models.Index(fields=["target", "-checked_at"]),
             models.Index(fields=["parse_status", "checked_at"]),
+            models.Index(fields=["source", "-checked_at"]),
         ]
 
     def __str__(self) -> str:
@@ -417,3 +520,4 @@ class Alert(models.Model):
 
     def __str__(self) -> str:
         return f"{self.alert_type}: {self.title}"
+    

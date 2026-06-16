@@ -2,11 +2,13 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any
 from urllib.parse import urljoin
+
 import httpx
 from django.conf import settings
 
 from app.api.v1.monitoring.models import Marketplace, MonitoringTarget
 from app.core.logging import get_logger
+
 
 logger = get_logger(__name__)
 
@@ -32,6 +34,27 @@ class MonitoringFetcherError(Exception):
 
 class MonitoringFetcherClient:
     def fetch_target(self, *, target: MonitoringTarget) -> FetchedProductData:
+        return self.fetch_product(
+            marketplace=target.marketplace,
+            url=target.url,
+            external_id=target.external_id,
+            title=target.title,
+            seller_name=target.seller_name,
+            brand=target.brand,
+            log_identity=str(target.id),
+        )
+
+    def fetch_product(
+            self,
+            *,
+            marketplace: str,
+            url: str,
+            external_id: str = "",
+            title: str = "",
+            seller_name: str = "",
+            brand: str = "",
+            log_identity: str = "",
+    ) -> FetchedProductData:
         raise NotImplementedError
 
 
@@ -49,13 +72,23 @@ class HttpMonitoringFetcherClient(MonitoringFetcherClient):
         self.api_key = api_key
         self.timeout_seconds = timeout_seconds
 
-    def fetch_target(self, *, target: MonitoringTarget) -> FetchedProductData:
-        url = urljoin(self.base_url, self.product_endpoint)
+    def fetch_product(
+            self,
+            *,
+            marketplace: str,
+            url: str,
+            external_id: str = "",
+            title: str = "",
+            seller_name: str = "",
+            brand: str = "",
+            log_identity: str = "",
+    ) -> FetchedProductData:
+        endpoint = urljoin(self.base_url, self.product_endpoint)
 
         payload = {
-            "marketplace": target.marketplace,
-            "url": target.url,
-            "external_id": target.external_id,
+            "marketplace": marketplace,
+            "url": url,
+            "external_id": external_id,
         }
 
         headers = {
@@ -69,11 +102,11 @@ class HttpMonitoringFetcherClient(MonitoringFetcherClient):
             "GO_FETCHER_REQUEST_URL",
             extra={
                 "service": "monitoring",
-                "target_id": str(target.id),
-                "marketplace": target.marketplace,
+                "log_identity": log_identity,
+                "marketplace": marketplace,
                 "base_url": self.base_url,
                 "product_endpoint": self.product_endpoint,
-                "full_url": url,
+                "full_url": endpoint,
                 "timeout_seconds": self.timeout_seconds,
                 "has_api_key": bool(self.api_key),
             },
@@ -82,7 +115,7 @@ class HttpMonitoringFetcherClient(MonitoringFetcherClient):
         try:
             with httpx.Client(timeout=self.timeout_seconds) as client:
                 response = client.post(
-                    url,
+                    endpoint,
                     json=payload,
                     headers=headers,
                 )
@@ -102,14 +135,13 @@ class HttpMonitoringFetcherClient(MonitoringFetcherClient):
             ) from exc
 
         except httpx.HTTPError as exc:
-
             logger.exception(
                 "GO_FETCHER_REQUEST_FAILED",
                 extra={
                     "service": "monitoring",
-                    "target_id": str(target.id),
-                    "marketplace": target.marketplace,
-                    "full_url": url,
+                    "log_identity": log_identity,
+                    "marketplace": marketplace,
+                    "full_url": endpoint,
                     "error": str(exc),
                 },
             )
@@ -125,13 +157,22 @@ class HttpMonitoringFetcherClient(MonitoringFetcherClient):
                 "go_fetcher returned invalid JSON"
             ) from exc
 
-        return self._parse_response(data=data, target=target)
+        return self._parse_response(
+            data=data,
+            fallback_external_id=external_id,
+            fallback_title=title,
+            fallback_seller_name=seller_name,
+            fallback_brand=brand,
+        )
 
     def _parse_response(
             self,
             *,
             data: dict[str, Any],
-            target: MonitoringTarget,
+            fallback_external_id: str = "",
+            fallback_title: str = "",
+            fallback_seller_name: str = "",
+            fallback_brand: str = "",
     ) -> FetchedProductData:
         if not isinstance(data, dict):
             raise MonitoringFetcherError("go_fetcher response must be JSON object")
@@ -149,38 +190,40 @@ class HttpMonitoringFetcherClient(MonitoringFetcherClient):
             product_data.get("external_id")
             or product_data.get("sku")
             or product_data.get("id")
-            or target.external_id
+            or fallback_external_id
             or ""
         )
 
         title = str(
             product_data.get("title")
             or product_data.get("name")
-            or target.title
+            or fallback_title
             or ""
         )
 
         seller_name = str(
             product_data.get("seller_name")
             or product_data.get("seller")
-            or target.seller_name
+            or fallback_seller_name
             or ""
         )
 
         brand = str(
             product_data.get("brand")
-            or target.brand
+            or fallback_brand
             or ""
         )
 
         price = _to_decimal_or_none(
             product_data.get("price")
+            or product_data.get("price_cents")
             or product_data.get("sale_price")
             or product_data.get("final_price")
         )
 
         old_price = _to_decimal_or_none(
             product_data.get("old_price")
+            or product_data.get("old_price_cents")
             or product_data.get("base_price")
         )
 
@@ -253,11 +296,11 @@ class FakeMonitoringFetcherClient(MonitoringFetcherClient):
             reviews_count = 128
             is_available = False
 
-        external_id = target.external_id or self._extract_demo_external_id(target=target)
+        external_id = target.external_id or self._extract_demo_external_id(marketplace=target.marketplace)
 
         return FetchedProductData(
             external_id=external_id,
-            title=target.title or self._build_demo_title(target=target),
+            title=target.title or self._build_demo_title(marketplace=target.marketplace),
             seller_name=target.seller_name or "Demo Seller",
             brand=target.brand or "Demo Brand",
             price=price,
@@ -274,20 +317,52 @@ class FakeMonitoringFetcherClient(MonitoringFetcherClient):
             },
         )
 
-    def _extract_demo_external_id(self, *, target: MonitoringTarget) -> str:
-        if target.marketplace == Marketplace.WILDBERRIES:
+    def fetch_product(
+            self,
+            *,
+            marketplace: str,
+            url: str,
+            external_id: str = "",
+            title: str = "",
+            seller_name: str = "",
+            brand: str = "",
+            log_identity: str = "",
+    ) -> FetchedProductData:
+        resolved_external_id = external_id or self._extract_demo_external_id(marketplace=marketplace)
+
+        return FetchedProductData(
+            external_id=resolved_external_id,
+            title=title or self._build_demo_title(marketplace=marketplace),
+            seller_name=seller_name or "Demo Seller",
+            brand=brand or "Demo Brand",
+            price=Decimal("1000.00"),
+            old_price=Decimal("1200.00"),
+            currency="RUB",
+            is_available=True,
+            rating=Decimal("4.80"),
+            reviews_count=100,
+            raw_data={
+                "source": "fake_monitoring_fetcher",
+                "marketplace": marketplace,
+                "url": url,
+                "log_identity": log_identity,
+            },
+        )
+
+    def _extract_demo_external_id(self, *, marketplace: str) -> str:
+        if marketplace == Marketplace.WILDBERRIES:
             return "fake-wb-product"
 
-        if target.marketplace == Marketplace.OZON:
+        if marketplace == Marketplace.OZON:
             return "fake-ozon-product"
 
         return "fake-product"
 
-    def _build_demo_title(self, *, target: MonitoringTarget) -> str:
-        if target.marketplace == Marketplace.WILDBERRIES:
+    def _build_demo_title(self, *, marketplace: str) -> str:
+        if marketplace == Marketplace.WILDBERRIES:
             return "Demo Wildberries Product"
 
-        if target.marketplace == Marketplace.OZON:
+        if marketplace == Marketplace.OZON:
             return "Demo Ozon Product"
 
         return "Demo Marketplace Product"

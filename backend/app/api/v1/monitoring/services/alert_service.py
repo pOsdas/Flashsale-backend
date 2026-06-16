@@ -1,3 +1,8 @@
+from datetime import date, datetime
+from decimal import Decimal
+from typing import Any
+from uuid import UUID
+
 from django.db import IntegrityError, transaction
 
 from app.api.v1.orders.models import OutboxEvent
@@ -78,17 +83,20 @@ def _create_alert_from_candidate(
                 severity=candidate.severity,
                 title=candidate.title,
                 message=candidate.message,
-                old_value=candidate.old_value,
-                new_value=candidate.new_value,
+                old_value=_to_json_safe(candidate.old_value),
+                new_value=_to_json_safe(candidate.new_value),
                 dedup_key=candidate.dedup_key,
             )
 
             OutboxEvent.objects.create(
                 topic="alert.created",
                 payload={
-                    "alert_id": alert.id,
-                    "user_id": alert.user_id,
-                    "target_id": alert.target_id,
+                    "alert_id": str(alert.id),
+                    "user_id": str(alert.user_id),
+                    "target_id": str(alert.target_id),
+                    "snapshot_id": str(snapshot.id),
+                    "alert_type": alert.alert_type,
+                    "severity": alert.severity,
                 },
             )
 
@@ -105,3 +113,40 @@ def _create_alert_from_candidate(
             },
         )
         return None
+
+
+def _to_json_safe(value: Any) -> Any:
+    if value is None:
+        return None
+
+    if isinstance(value, UUID):
+        return str(value)
+
+    if isinstance(value, Decimal):
+        return str(value)
+
+    if isinstance(value, datetime):
+        return value.isoformat()
+
+    if isinstance(value, date):
+        return value.isoformat()
+
+    if isinstance(value, dict):
+        return {
+            str(key): _to_json_safe(item)
+            for key, item in value.items()
+        }
+
+    if isinstance(value, list):
+        return [
+            _to_json_safe(item)
+            for item in value
+        ]
+
+    if isinstance(value, tuple):
+        return [
+            _to_json_safe(item)
+            for item in value
+        ]
+
+    return value
