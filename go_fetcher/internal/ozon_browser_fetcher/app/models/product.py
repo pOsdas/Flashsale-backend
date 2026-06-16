@@ -13,3 +13,6 @@ class Product:
     is_active: bool = True
     rating: float = 0.0
     reviews_count: int = 0
+    url: str = ""
+    product_path: str = ""
+    

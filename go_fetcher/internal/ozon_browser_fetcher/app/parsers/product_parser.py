@@ -1,5 +1,6 @@
 import json
 import re
+from urllib.parse import urlparse
 from typing import Any, Dict, List, Optional
 
 from playwright.sync_api import Page, TimeoutError as PlaywrightTimeoutError
@@ -683,11 +684,16 @@ def parse_product_from_page(page: Page, url: str) -> Product:
     )
 
     if json_ld_product is not None and is_meaningful_title(json_ld_product.title):
-        return prepare_product_for_return(
+        product = prepare_product_for_return(
             product=json_ld_product,
             expected_sku=product_id,
             page=page,
         )
+
+        product.url = normalized_url
+        product.product_path = extract_product_path_from_url(normalized_url)
+
+        return product
 
     body_text = page.locator("body").inner_text(timeout=4_000)
 
@@ -697,8 +703,20 @@ def parse_product_from_page(page: Page, url: str) -> Product:
         body_text=body_text,
     )
 
-    return prepare_product_for_return(
+    product = prepare_product_for_return(
         product=dom_product,
         expected_sku=product_id,
         page=page,
     )
+
+    product.url = normalized_url
+    product.product_path = extract_product_path_from_url(normalized_url)
+
+    return product
+
+
+def extract_product_path_from_url(url: str) -> str:
+    try:
+        return urlparse(url).path
+    except Exception:
+        return ""

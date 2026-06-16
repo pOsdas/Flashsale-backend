@@ -1,6 +1,8 @@
 package ozon
 
 import (
+	"compress/gzip"
+	"compress/zlib"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -11,21 +13,32 @@ import (
 	"time"
 )
 
-func setOzonHeaders(req *http.Request, cookie string) {
+func applyOzonPageAPIHeaders(req *http.Request, cookieHeader string, referer string) {
+	req.Header.Set("User-Agent", ozonUserAgent)
 	req.Header.Set("Accept", "application/json, text/plain, */*")
 	req.Header.Set("Accept-Language", "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7")
-	req.Header.Set("Connection", "keep-alive")
-	req.Header.Set("Referer", "https://www.ozon.ru/")
+	req.Header.Set("Accept-Encoding", "gzip, deflate")
+	req.Header.Set("Cache-Control", "no-cache")
+	req.Header.Set("Pragma", "no-cache")
+
+	req.Header.Set("Origin", "https://www.ozon.ru")
+
+	if strings.TrimSpace(referer) != "" {
+		req.Header.Set("Referer", referer)
+	} else {
+		req.Header.Set("Referer", "https://www.ozon.ru/")
+	}
+
+	req.Header.Set("Sec-Ch-Ua", `"Microsoft Edge";v="125", "Chromium";v="125", "Not.A/Brand";v="24"`)
+	req.Header.Set("Sec-Ch-Ua-Mobile", "?0")
+	req.Header.Set("Sec-Ch-Ua-Platform", `"Windows"`)
+
 	req.Header.Set("Sec-Fetch-Dest", "empty")
 	req.Header.Set("Sec-Fetch-Mode", "cors")
 	req.Header.Set("Sec-Fetch-Site", "same-origin")
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36")
-	req.Header.Set("sec-ch-ua", `"Chromium";v="148", "Google Chrome";v="148", "Not-A.Brand";v="99"`)
-	req.Header.Set("sec-ch-ua-mobile", "?0")
-	req.Header.Set("sec-ch-ua-platform", `"Windows"`)
 
-	if strings.TrimSpace(cookie) != "" {
-		req.Header.Set("Cookie", cookie)
+	if strings.TrimSpace(cookieHeader) != "" {
+		req.Header.Set("Cookie", strings.TrimSpace(cookieHeader))
 	}
 }
 
@@ -37,6 +50,31 @@ func isRetryableOzonError(err error) bool {
 
 	return httpErr.StatusCode == http.StatusTooManyRequests ||
 		httpErr.StatusCode >= 503
+}
+
+func readOzonResponseBody(resp *http.Response) ([]byte, error) {
+	switch strings.ToLower(strings.TrimSpace(resp.Header.Get("Content-Encoding"))) {
+	case "", "identity":
+		return io.ReadAll(resp.Body)
+	case "gzip":
+		reader, err := gzip.NewReader(resp.Body)
+		if err != nil {
+			return nil, fmt.Errorf("create gzip reader: %w", err)
+		}
+		defer reader.Close()
+
+		return io.ReadAll(reader)
+	case "deflate":
+		reader, err := zlib.NewReader(resp.Body)
+		if err != nil {
+			return nil, fmt.Errorf("create deflate reader: %w", err)
+		}
+		defer reader.Close()
+
+		return io.ReadAll(reader)
+	default:
+		return nil, fmt.Errorf("unsupported response content encoding: %s", resp.Header.Get("Content-Encoding"))
+	}
 }
 
 func (p *Parser) doJSONRequest(ctx context.Context, requestURL string, target any) error {
@@ -84,7 +122,7 @@ func (p *Parser) doJSONRequestOnce(ctx context.Context, requestURL string, targe
 		return fmt.Errorf("create request: %w", err)
 	}
 
-	setOzonHeaders(req, p.currentCookie())
+	applyOzonPageAPIHeaders(req, p.currentCookie(), "")
 
 	resp, err := p.client.Do(req)
 	if err != nil {
@@ -92,7 +130,7 @@ func (p *Parser) doJSONRequestOnce(ctx context.Context, requestURL string, targe
 	}
 	defer resp.Body.Close()
 
-	responseBody, err := io.ReadAll(resp.Body)
+	responseBody, err := readOzonResponseBody(resp)
 	if err != nil {
 		return fmt.Errorf("read Ozon response body: %w", err)
 	}

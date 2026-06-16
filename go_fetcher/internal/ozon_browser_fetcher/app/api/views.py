@@ -6,12 +6,51 @@ from ozon_browser_fetcher.app.browser.worker import get_browser_worker
 bp = Blueprint("api", __name__)
 
 
+def get_request_json() -> dict:
+    return request.get_json(silent=True) or {}
+
+
+def get_int_value(data: dict, key: str, default: int, min_value: int, max_value: int) -> int:
+    raw_value = data.get(key, default)
+
+    try:
+        value = int(raw_value)
+    except (TypeError, ValueError):
+        value = default
+
+    if value < min_value:
+        return min_value
+
+    if value > max_value:
+        return max_value
+
+    return value
+
+
+def make_worker_response(result: dict):
+    if result.get("ok"):
+        return jsonify(result["data"]), 200
+
+    return jsonify(
+        {
+            "error": result.get("error", "unknown parser error"),
+            "trace": result.get("trace", ""),
+        }
+    ), 500
+
+
 @bp.route("/api/v1/product", methods=["POST"])
 def product():
-    data = request.get_json(silent=True) or {}
+    data = get_request_json()
 
-    url = data.get("url")
-    timeout_seconds = int(data.get("timeout_seconds", 90))
+    url = str(data.get("url") or "").strip()
+    timeout_seconds = get_int_value(
+        data=data,
+        key="timeout_seconds",
+        default=90,
+        min_value=5,
+        max_value=180,
+    )
 
     if not url:
         return jsonify({"error": "url is required"}), 400
@@ -24,15 +63,89 @@ def product():
             timeout_seconds=timeout_seconds,
         )
 
-        if result.get("ok"):
-            return jsonify(result["data"]), 200
+        return make_worker_response(result)
 
-        return jsonify(
-            {
-                "error": result.get("error", "unknown parser error"),
-                "trace": result.get("trace", ""),
-            }
-        ), 500
+    except TimeoutError as exc:
+        return jsonify({"error": str(exc)}), 504
+
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
+@bp.route("/api/v1/search", methods=["POST"])
+def search():
+    data = get_request_json()
+
+    query = str(data.get("query") or "").strip()
+    limit = get_int_value(
+        data=data,
+        key="limit",
+        default=10,
+        min_value=1,
+        max_value=100,
+    )
+    timeout_seconds = get_int_value(
+        data=data,
+        key="timeout_seconds",
+        default=90,
+        min_value=5,
+        max_value=180,
+    )
+
+    if not query:
+        return jsonify({"error": "query is required"}), 400
+
+    worker = get_browser_worker()
+
+    try:
+        result = worker.parse_search(
+            query=query,
+            limit=limit,
+            timeout_seconds=timeout_seconds,
+        )
+
+        return make_worker_response(result)
+
+    except TimeoutError as exc:
+        return jsonify({"error": str(exc)}), 504
+
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
+@bp.route("/api/v1/category", methods=["POST"])
+def category():
+    data = get_request_json()
+
+    url = str(data.get("url") or data.get("category_url") or "").strip()
+    limit = get_int_value(
+        data=data,
+        key="limit",
+        default=10,
+        min_value=1,
+        max_value=100,
+    )
+    timeout_seconds = get_int_value(
+        data=data,
+        key="timeout_seconds",
+        default=90,
+        min_value=5,
+        max_value=180,
+    )
+
+    if not url:
+        return jsonify({"error": "url is required"}), 400
+
+    worker = get_browser_worker()
+
+    try:
+        result = worker.parse_category(
+            url=url,
+            limit=limit,
+            timeout_seconds=timeout_seconds,
+        )
+
+        return make_worker_response(result)
 
     except TimeoutError as exc:
         return jsonify({"error": str(exc)}), 504

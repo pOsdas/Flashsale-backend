@@ -150,11 +150,14 @@ func runHTTPServer(
 
 	ozonParser := ozon.NewParser(
 		ozon.ParserConfig{
-			CookieProvider: ozonCookieProvider,
-			Timeout:        cfg.Timeout,
-			RequestDelay:   cfg.OzonRequestDelay,
-			MaxRetries:     cfg.OzonMaxRetries,
-			RetryBaseDelay: cfg.OzonRetryBaseDelay,
+			CookieProvider:        ozonCookieProvider,
+			Timeout:               cfg.Timeout,
+			RequestDelay:          cfg.OzonRequestDelay,
+			MaxRetries:            cfg.OzonMaxRetries,
+			RetryBaseDelay:        cfg.OzonRetryBaseDelay,
+			BrowserFetcherURL:     cfg.OzonBrowserFetcherURL,
+			BrowserFetcherEnabled: cfg.OzonBrowserFetcherEnabled,
+			BrowserFetcherTimeout: time.Duration(cfg.OzonBrowserFetcherTimeoutSeconds) * time.Second,
 		},
 		logger,
 	)
@@ -399,11 +402,14 @@ func runOzonCommand(
 
 	ozonParser := ozon.NewParser(
 		ozon.ParserConfig{
-			CookieProvider: ozonCookieProvider,
-			Timeout:        cfg.Timeout,
-			RequestDelay:   cfg.OzonRequestDelay,
-			MaxRetries:     cfg.OzonMaxRetries,
-			RetryBaseDelay: cfg.OzonRetryBaseDelay,
+			CookieProvider:        ozonCookieProvider,
+			Timeout:               cfg.Timeout,
+			RequestDelay:          cfg.OzonRequestDelay,
+			MaxRetries:            cfg.OzonMaxRetries,
+			RetryBaseDelay:        cfg.OzonRetryBaseDelay,
+			BrowserFetcherURL:     cfg.OzonBrowserFetcherURL,
+			BrowserFetcherEnabled: cfg.OzonBrowserFetcherEnabled,
+			BrowserFetcherTimeout: time.Duration(cfg.OzonBrowserFetcherTimeoutSeconds) * time.Second,
 		},
 		logger,
 	)

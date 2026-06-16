@@ -1,7 +1,25 @@
 # Important
 
 Ozon parser may return 403 Antibot Challenge when running inside Docker.
-For Ozon, use local execution with a valid OZON_COOKIE.
+For Ozon, we have a fallback scenario with Playwright parser:
+
+Local:
+```shell
+OZON_BROWSER_FETCHER_ENABLED=true
+OZON_BROWSER_FETCHER_URL=http://127.0.0.1:8095
+OZON_BROWSER_FETCHER_TIMEOUT_SECONDS=30
+```
+
+Docker:
+```shell
+OZON_BROWSER_FETCHER_ENABLED=true
+OZON_BROWSER_FETCHER_URL=http://ozon_browser_fetcher:8095
+OZON_BROWSER_FETCHER_TIMEOUT_SECONDS=30
+```
+
+Cookies are stored in the secrets folder:
+- secrets/wb_cookie.txt
+- secrets/ozon_cookie.txt
 
 # Commands
 

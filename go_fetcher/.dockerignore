@@ -17,3 +17,6 @@ fetcher
 Thumbs.db
 
 tools/
+internal/ozon_browser_fetcher/
+tools/playwright/
+tools/diagnostics/

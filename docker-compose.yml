@@ -48,6 +48,30 @@ services:
     command: ["serve"]
     ports:
       - "127.0.0.1:8090:8090"
+    depends_on:
+      ozon_browser_fetcher:
+        condition: service_healthy
+    restart: unless-stopped
+
+  ozon_browser_fetcher:
+    build:
+      context: ./go_fetcher/internal
+      dockerfile: ozon_browser_fetcher/Dockerfile
+    container_name: flashsale_ozon_browser_fetcher
+    environment:
+      OZON_COOKIE_PATH: /app/secrets/ozon_cookie.txt
+      OZON_BROWSER_HEADLESS: "true"
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      - ./go_fetcher/secrets:/app/secrets:ro
+    ports:
+      - "8095:8095"
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8095/api/v1/health', timeout=5)\"" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   migrate:
     build:
