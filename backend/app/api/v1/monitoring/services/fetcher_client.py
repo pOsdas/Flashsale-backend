@@ -214,18 +214,8 @@ class HttpMonitoringFetcherClient(MonitoringFetcherClient):
             or ""
         )
 
-        price = _to_decimal_or_none(
-            product_data.get("price")
-            or product_data.get("price_cents")
-            or product_data.get("sale_price")
-            or product_data.get("final_price")
-        )
-
-        old_price = _to_decimal_or_none(
-            product_data.get("old_price")
-            or product_data.get("old_price_cents")
-            or product_data.get("base_price")
-        )
+        price = _cents_to_decimal_or_none(product_data.get("price_cents"))
+        old_price = _cents_to_decimal_or_none(product_data.get("old_price_cents"))
 
         currency = str(
             product_data.get("currency")
@@ -399,6 +389,14 @@ def _to_decimal_or_none(value: Any) -> Decimal | None:
         return Decimal(str(value))
     except Exception as exc:
         raise MonitoringFetcherError(f"Invalid decimal value: {value!r}") from exc
+
+
+def _cents_to_decimal_or_none(value: Any) -> Decimal | None:
+    cents = _to_int_or_none(value)
+    if cents is None:
+        return None
+
+    return Decimal(cents) / Decimal("100")
 
 
 def _to_int_or_none(value: Any) -> int | None:

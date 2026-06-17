@@ -8,6 +8,7 @@ class Product:
     seller_name: str = ""
     brand: str = ""
     price_cents: int = 0
+    old_price_cents: int = 0
     currency: str = "RUB"
     available: int = 0
     is_active: bool = True

@@ -192,12 +192,15 @@ class BrowserWorker:
 
 def product_to_dict(product: Product) -> Dict[str, Any]:
     return {
+        "external_id": product.sku,
         "sku": product.sku,
         "title": product.title,
         "seller_name": product.seller_name,
         "brand": product.brand,
         "price_cents": product.price_cents,
+        "old_price_cents": product.old_price_cents,
         "currency": product.currency,
+        "is_available": product.available > 0,
         "available": product.available,
         "is_active": product.is_active,
         "rating": product.rating,

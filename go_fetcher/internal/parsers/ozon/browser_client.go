@@ -64,7 +64,7 @@ func (c *BrowserClient) ParseProduct(ctx context.Context, productInput string) (
 		return models.Product{}, fmt.Errorf("ozon browser fetcher is not configured")
 	}
 
-	var productResponse ozonBrowserProductResponse
+	var productResponse ozonBrowserProductEnvelope
 	if err := c.doPost(ctx, ozonBrowserProductPath, ozonBrowserProductRequest{
 		URL:            strings.TrimSpace(productInput),
 		TimeoutSeconds: int(c.timeout.Seconds()),
@@ -72,7 +72,11 @@ func (c *BrowserClient) ParseProduct(ctx context.Context, productInput string) (
 		return models.Product{}, err
 	}
 
-	product := productResponse.toProduct(productInput)
+	if strings.EqualFold(strings.TrimSpace(productResponse.Status), "error") {
+		return models.Product{}, fmt.Errorf("browser fetcher error: %s", strings.TrimSpace(productResponse.Error))
+	}
+
+	product := productResponse.Product.toProduct(productInput)
 	if !isValidOzonProduct(product) {
 		return models.Product{}, fmt.Errorf("browser fetcher returned invalid Ozon product")
 	}
@@ -182,11 +186,46 @@ func (c *BrowserClient) doPost(ctx context.Context, path string, requestPayload 
 		return fmt.Errorf("browser fetcher status %d: %s", resp.StatusCode, limitString(string(responseBody), 1000))
 	}
 
+	if productEnvelope, ok := responsePayload.(*ozonBrowserProductEnvelope); ok {
+		if err := decodeBrowserProductResponse(responseBody, productEnvelope); err != nil {
+			return fmt.Errorf("decode browser fetcher response: %w, body: %s", err, limitString(string(responseBody), 1000))
+		}
+
+		return nil
+	}
+
 	if err := json.Unmarshal(responseBody, responsePayload); err != nil {
 		return fmt.Errorf("decode browser fetcher response: %w, body: %s", err, limitString(string(responseBody), 1000))
 	}
 
 	return nil
+}
+
+func decodeBrowserProductResponse(responseBody []byte, responsePayload *ozonBrowserProductEnvelope) error {
+	if err := json.Unmarshal(responseBody, responsePayload); err == nil && strings.TrimSpace(responsePayload.Status) != "" {
+		return nil
+	}
+
+	var productResponse ozonBrowserProductResponse
+	if err := json.Unmarshal(responseBody, &productResponse); err != nil {
+		return err
+	}
+
+	responsePayload.Status = "ok"
+	responsePayload.Product = productResponse
+
+	return nil
+}
+
+func firstNonEmptyString(values ...string) string {
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value != "" {
+			return value
+		}
+	}
+
+	return ""
 }
 
 func (r ozonBrowserProductResponse) toProduct(productInput string) models.Product {
@@ -206,18 +245,19 @@ func (r ozonBrowserProductResponse) toProduct(productInput string) models.Produc
 	}
 
 	return models.Product{
-		SKU:          strings.TrimSpace(r.SKU),
-		Title:        strings.TrimSpace(r.Title),
-		SellerName:   strings.TrimSpace(r.SellerName),
-		Brand:        strings.TrimSpace(r.Brand),
-		PriceCents:   r.PriceCents,
-		Currency:     currency,
-		Available:    r.Available,
-		IsActive:     r.IsActive,
-		Rating:       r.Rating,
-		ReviewsCount: r.ReviewsCount,
-		ProductPath:  productPath,
-		URL:          productURL,
+		SKU:           firstNonEmptyString(r.ExternalID, r.SKU),
+		Title:         strings.TrimSpace(r.Title),
+		SellerName:    strings.TrimSpace(r.SellerName),
+		Brand:         strings.TrimSpace(r.Brand),
+		PriceCents:    r.PriceCents,
+		OldPriceCents: r.OldPriceCents,
+		Currency:      currency,
+		Available:     r.Available,
+		IsActive:      r.IsActive,
+		Rating:        r.Rating,
+		ReviewsCount:  r.ReviewsCount,
+		ProductPath:   productPath,
+		URL:           productURL,
 	}
 }
 

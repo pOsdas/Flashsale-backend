@@ -236,6 +236,7 @@ func parsePriceRubles(rawPrice string) int {
 	cleaned = strings.ReplaceAll(cleaned, "₽", "")
 	cleaned = strings.ReplaceAll(cleaned, "р.", "")
 	cleaned = strings.ReplaceAll(cleaned, "руб.", "")
+	cleaned = strings.ReplaceAll(cleaned, "руб", "")
 	cleaned = strings.ReplaceAll(cleaned, ",", ".")
 	cleaned = strings.TrimSpace(cleaned)
 

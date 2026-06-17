@@ -129,23 +129,32 @@ type ozonBrowserCategoryRequest struct {
 }
 
 type ozonBrowserProductResponse struct {
-	SKU          string  `json:"sku"`
-	Title        string  `json:"title"`
-	SellerName   string  `json:"seller_name"`
-	Brand        string  `json:"brand"`
-	PriceCents   int     `json:"price_cents"`
-	Currency     string  `json:"currency"`
-	Available    int     `json:"available"`
-	IsActive     bool    `json:"is_active"`
-	Rating       float64 `json:"rating"`
-	ReviewsCount int     `json:"reviews_count"`
-	URL          string  `json:"url"`
-	ProductPath  string  `json:"product_path"`
+	ExternalID    string  `json:"external_id"`
+	SKU           string  `json:"sku"`
+	Title         string  `json:"title"`
+	SellerName    string  `json:"seller_name"`
+	Brand         string  `json:"brand"`
+	PriceCents    int     `json:"price_cents"`
+	OldPriceCents int     `json:"old_price_cents"`
+	Currency      string  `json:"currency"`
+	Available     int     `json:"available"`
+	IsActive      bool    `json:"is_active"`
+	Rating        float64 `json:"rating"`
+	ReviewsCount  int     `json:"reviews_count"`
+	URL           string  `json:"url"`
+	ProductPath   string  `json:"product_path"`
 }
 
 type ozonBrowserErrorResponse struct {
 	Error string `json:"error"`
 	Trace string `json:"trace"`
+}
+
+type ozonBrowserProductEnvelope struct {
+	Status  string                     `json:"status"`
+	Product ozonBrowserProductResponse `json:"product"`
+	Error   string                     `json:"error"`
+	Trace   string                     `json:"trace"`
 }
 
 type OzonCategoryCandidate struct {

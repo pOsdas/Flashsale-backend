@@ -105,3 +105,17 @@ func extractPriceCents(product wbProduct) int {
 
 	return 0
 }
+
+func extractOldPriceCents(product wbProduct) int {
+	currentPrice := extractPriceCents(product)
+
+	if product.PriceU > 0 && product.PriceU != currentPrice {
+		return product.PriceU
+	}
+
+	if len(product.Sizes) > 0 && product.Sizes[0].Price.Basic > 0 && product.Sizes[0].Price.Basic != currentPrice {
+		return product.Sizes[0].Price.Basic
+	}
+
+	return 0
+}

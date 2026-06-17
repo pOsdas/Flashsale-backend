@@ -39,6 +39,24 @@ def make_worker_response(result: dict):
     ), 500
 
 
+def make_product_response(result: dict):
+    if result.get("ok"):
+        return jsonify(
+            {
+                "status": "ok",
+                "product": result["data"],
+            }
+        ), 200
+
+    return jsonify(
+        {
+            "status": "error",
+            "error": result.get("error", "unknown parser error"),
+            "trace": result.get("trace", ""),
+        }
+    ), 500
+
+
 @bp.route("/api/v1/product", methods=["POST"])
 def product():
     data = get_request_json()
@@ -63,7 +81,7 @@ def product():
             timeout_seconds=timeout_seconds,
         )
 
-        return make_worker_response(result)
+        return make_product_response(result)
 
     except TimeoutError as exc:
         return jsonify({"error": str(exc)}), 504

@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -21,6 +20,7 @@ import (
 	"go_fetcher/internal/config"
 	"go_fetcher/internal/cookies"
 	"go_fetcher/internal/httpserver"
+	"go_fetcher/internal/models"
 	"go_fetcher/internal/parsers/ozon"
 	"go_fetcher/internal/parsers/wildberries"
 	"go_fetcher/internal/pipeline"
@@ -646,138 +646,21 @@ func buildWBProductInput(rawProductURL string) (string, error) {
 	return "", errors.New("wb nmID was not found in url")
 }
 
-func productToDTO(product any) *httpserver.ProductDTO {
-	productMap := productToMap(product)
-
+func productToDTO(product models.Product) *httpserver.ProductDTO {
 	return &httpserver.ProductDTO{
-		ExternalID:   getString(productMap, "external_id", "externalID", "ExternalID", "sku", "SKU", "id", "ID"),
-		Title:        getString(productMap, "title", "Title", "name", "Name"),
-		SellerName:   getString(productMap, "seller_name", "sellerName", "SellerName", "seller", "Seller"),
-		Brand:        getString(productMap, "brand", "Brand"),
-		Price:        getInt(productMap, "price", "Price"),
-		OldPrice:     getInt(productMap, "old_price", "oldPrice", "OldPrice"),
-		Currency:     getStringWithDefault(productMap, "RUB", "currency", "Currency"),
-		IsAvailable:  getBool(productMap, "is_available", "isAvailable", "IsAvailable", "available", "Available"),
-		Rating:       getFloat(productMap, "rating", "Rating"),
-		ReviewsCount: getInt(productMap, "reviews_count", "reviewsCount", "ReviewsCount", "feedbacks", "Feedbacks"),
+		ExternalID:    product.SKU,
+		Title:         product.Title,
+		SellerName:    product.SellerName,
+		Brand:         product.Brand,
+		PriceCents:    product.PriceCents,
+		OldPriceCents: product.OldPriceCents,
+		Currency:      product.Currency,
+		IsAvailable:   product.Available > 0,
+		Rating:        product.Rating,
+		ReviewsCount:  product.ReviewsCount,
+		ProductPath:   product.ProductPath,
+		URL:           product.URL,
 	}
-}
-
-func productToMap(product any) map[string]any {
-	data, err := json.Marshal(product)
-	if err != nil {
-		return map[string]any{}
-	}
-
-	var productMap map[string]any
-
-	if err := json.Unmarshal(data, &productMap); err != nil {
-		return map[string]any{}
-	}
-
-	return productMap
-}
-
-func getString(productMap map[string]any, keys ...string) string {
-	for _, key := range keys {
-		value, ok := productMap[key]
-		if !ok || value == nil {
-			continue
-		}
-
-		switch typedValue := value.(type) {
-		case string:
-			return typedValue
-		case float64:
-			return strconv.FormatFloat(typedValue, 'f', -1, 64)
-		case bool:
-			return strconv.FormatBool(typedValue)
-		default:
-			return fmt.Sprintf("%v", typedValue)
-		}
-	}
-
-	return ""
-}
-
-func getStringWithDefault(productMap map[string]any, defaultValue string, keys ...string) string {
-	value := getString(productMap, keys...)
-	if value == "" {
-		return defaultValue
-	}
-
-	return value
-}
-
-func getInt(productMap map[string]any, keys ...string) int {
-	for _, key := range keys {
-		value, ok := productMap[key]
-		if !ok || value == nil {
-			continue
-		}
-
-		switch typedValue := value.(type) {
-		case int:
-			return typedValue
-		case int64:
-			return int(typedValue)
-		case float64:
-			return int(typedValue)
-		case string:
-			parsedValue, err := strconv.Atoi(typedValue)
-			if err == nil {
-				return parsedValue
-			}
-		}
-	}
-
-	return 0
-}
-
-func getFloat(productMap map[string]any, keys ...string) float64 {
-	for _, key := range keys {
-		value, ok := productMap[key]
-		if !ok || value == nil {
-			continue
-		}
-
-		switch typedValue := value.(type) {
-		case float64:
-			return typedValue
-		case int:
-			return float64(typedValue)
-		case int64:
-			return float64(typedValue)
-		case string:
-			parsedValue, err := strconv.ParseFloat(typedValue, 64)
-			if err == nil {
-				return parsedValue
-			}
-		}
-	}
-
-	return 0
-}
-
-func getBool(productMap map[string]any, keys ...string) bool {
-	for _, key := range keys {
-		value, ok := productMap[key]
-		if !ok || value == nil {
-			continue
-		}
-
-		switch typedValue := value.(type) {
-		case bool:
-			return typedValue
-		case string:
-			parsedValue, err := strconv.ParseBool(typedValue)
-			if err == nil {
-				return parsedValue
-			}
-		}
-	}
-
-	return false
 }
 
 // --- Common ---
