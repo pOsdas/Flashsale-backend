@@ -9,7 +9,7 @@ from app.api.v1.fetcher.exceptions import (
     FetcherCurrencyNotSupportedError,
     FetcherImportInProgressError,
 )
-from app.api.v1.fetcher.services import FetcherImportService
+from app.api.v1.fetcher.services.fetcher_import_service import FetcherImportService
 from app.api.v1.orders.models import OutboxEvent
 from app.api.v1.payments.models import ProcessedWebhookEvent
 
@@ -142,7 +142,7 @@ class FetcherImportServiceTests(TestCase):
         self.assertEqual(Stock.objects.count(), 0)
         self.assertEqual(OutboxEvent.objects.count(), 0)
 
-    @patch("app.api.v1.fetcher.services.RedisLock.__enter__")
+    @patch("app.api.v1.fetcher.services.fetcher_import_service.RedisLock.__enter__")
     def test_service_raises_when_import_already_running(self, enter_mock):
         enter_mock.side_effect = RedisLockAlreadyAcquiredError(
             "Lock already acquired"
