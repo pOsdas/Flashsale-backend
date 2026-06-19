@@ -2,9 +2,11 @@ from django.urls import path
 
 from app.api.v1.monitoring.views import (
     AlertListAPIView,
+    MonitoringTargetCheckNowAPIView,
+    MonitoringTargetDetailAPIView,
     MonitoringTargetListCreateAPIView,
-    ProductSnapshotListAPIView,
     ProductPreviewView,
+    ProductSnapshotListAPIView,
 )
 
 
@@ -16,6 +18,16 @@ urlpatterns = [
         "targets/",
         MonitoringTargetListCreateAPIView.as_view(),
         name="target-list-create",
+    ),
+    path(
+        "targets/<uuid:target_id>/",
+        MonitoringTargetDetailAPIView.as_view(),
+        name="target-detail",
+    ),
+    path(
+        "targets/<uuid:target_id>/check-now/",
+        MonitoringTargetCheckNowAPIView.as_view(),
+        name="target-check-now",
     ),
     path(
         "targets/<uuid:target_id>/snapshots/",

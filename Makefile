@@ -16,6 +16,7 @@ test:
         app.api.v1.common.tests \
 		app.api.v1.notifications.tests \
         app.api.v1.fetcher.tests \
+		app.api.v1.monitoring.tests \
 		app.api.v1.orders.tests \
 		app.api.v1.payments.tests
 
