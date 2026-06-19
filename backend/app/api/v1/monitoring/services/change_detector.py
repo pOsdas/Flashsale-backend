@@ -9,9 +9,7 @@ from app.api.v1.monitoring.models import (
 )
 
 
-DEFAULT_PRICE_CHANGE_PERCENT_THRESHOLD = Decimal("5.00")
-DEFAULT_RATING_CHANGE_THRESHOLD = Decimal("0.10")
-DEFAULT_REVIEWS_COUNT_CHANGE_THRESHOLD = 10
+PERCENT_QUANTIZER = Decimal("0.01")
 
 
 @dataclass(frozen=True, slots=True)
@@ -23,6 +21,8 @@ class AlertCandidate:
     old_value: dict[str, Any]
     new_value: dict[str, Any]
     dedup_key: str
+    change_percent: Decimal | None = None
+    change_absolute: Decimal | None = None
 
 
 def detect_snapshot_changes(
@@ -83,15 +83,11 @@ def _detect_price_changes(
     if previous_price == current_price:
         return []
 
-    if previous_price <= 0:
-        return []
-
     difference = current_price - previous_price
-    percent_change = (difference / previous_price) * Decimal("100.00")
-    abs_percent_change = abs(percent_change)
-
-    if abs_percent_change < DEFAULT_PRICE_CHANGE_PERCENT_THRESHOLD:
-        return []
+    percent_change = _calculate_percent_change(
+        previous_value=previous_price,
+        current_value=current_price,
+    )
 
     if current_price < previous_price:
         alert_type = AlertType.PRICE_DROPPED
@@ -104,20 +100,31 @@ def _detect_price_changes(
         title = "Цена товара выросла"
         direction_text = "выросла"
 
-    target_title = current_snapshot.title or current_snapshot.target.title or current_snapshot.target.url
+    target_title = _get_target_title(
+        snapshot=current_snapshot,
+    )
+
+    percent_text = ""
+
+    if percent_change is not None:
+        percent_text = (
+            f" ({percent_change.quantize(PERCENT_QUANTIZER)}%)"
+        )
 
     message = (
         f"Цена товара «{target_title}» {direction_text}: "
-        f"{previous_price} ₽ → {current_price} ₽ "
-        f"({percent_change.quantize(Decimal('0.01'))}%)."
+        f"{previous_price} ₽ → {current_price} ₽"
+        f"{percent_text}."
     )
 
-    dedup_key = (
-        f"{current_snapshot.target_id}:"
-        f"{alert_type}:"
-        f"{previous_price}:"
-        f"{current_price}"
-    )
+    new_value: dict[str, Any] = {
+        "price": str(current_price),
+    }
+
+    if percent_change is not None:
+        new_value["percent_change"] = str(
+            percent_change.quantize(PERCENT_QUANTIZER)
+        )
 
     return [
         AlertCandidate(
@@ -128,11 +135,17 @@ def _detect_price_changes(
             old_value={
                 "price": str(previous_price),
             },
-            new_value={
-                "price": str(current_price),
-                "percent_change": str(percent_change.quantize(Decimal("0.01"))),
-            },
-            dedup_key=dedup_key,
+            new_value=new_value,
+            dedup_key=_build_dedup_key(
+                snapshot=current_snapshot,
+                alert_type=alert_type,
+            ),
+            change_percent=(
+                abs(percent_change)
+                if percent_change is not None
+                else None
+            ),
+            change_absolute=abs(difference),
         )
     ]
 
@@ -162,16 +175,11 @@ def _detect_availability_changes(
         title = "Товар пропал из наличия"
         message_text = "пропал из наличия"
 
-    target_title = current_snapshot.title or current_snapshot.target.title or current_snapshot.target.url
+    target_title = _get_target_title(
+        snapshot=current_snapshot,
+    )
 
     message = f"Товар «{target_title}» {message_text}."
-
-    dedup_key = (
-        f"{current_snapshot.target_id}:"
-        f"{alert_type}:"
-        f"{previous_available}:"
-        f"{current_available}"
-    )
 
     return [
         AlertCandidate(
@@ -185,7 +193,10 @@ def _detect_availability_changes(
             new_value={
                 "is_available": current_available,
             },
-            dedup_key=dedup_key,
+            dedup_key=_build_dedup_key(
+                snapshot=current_snapshot,
+                alert_type=alert_type,
+            ),
         )
     ]
 
@@ -205,9 +216,10 @@ def _detect_rating_changes(
         return []
 
     difference = current_rating - previous_rating
-
-    if abs(difference) < DEFAULT_RATING_CHANGE_THRESHOLD:
-        return []
+    percent_change = _calculate_percent_change(
+        previous_value=previous_rating,
+        current_value=current_rating,
+    )
 
     if current_rating < previous_rating:
         severity = AlertSeverity.MEDIUM
@@ -218,19 +230,23 @@ def _detect_rating_changes(
         title = "Рейтинг товара вырос"
         direction_text = "вырос"
 
-    target_title = current_snapshot.title or current_snapshot.target.title or current_snapshot.target.url
+    target_title = _get_target_title(
+        snapshot=current_snapshot,
+    )
 
     message = (
         f"Рейтинг товара «{target_title}» {direction_text}: "
         f"{previous_rating} → {current_rating}."
     )
 
-    dedup_key = (
-        f"{current_snapshot.target_id}:"
-        f"{AlertType.RATING_CHANGED}:"
-        f"{previous_rating}:"
-        f"{current_rating}"
-    )
+    new_value: dict[str, Any] = {
+        "rating": str(current_rating),
+    }
+
+    if percent_change is not None:
+        new_value["percent_change"] = str(
+            percent_change.quantize(PERCENT_QUANTIZER)
+        )
 
     return [
         AlertCandidate(
@@ -241,10 +257,17 @@ def _detect_rating_changes(
             old_value={
                 "rating": str(previous_rating),
             },
-            new_value={
-                "rating": str(current_rating),
-            },
-            dedup_key=dedup_key,
+            new_value=new_value,
+            dedup_key=_build_dedup_key(
+                snapshot=current_snapshot,
+                alert_type=AlertType.RATING_CHANGED,
+            ),
+            change_percent=(
+                abs(percent_change)
+                if percent_change is not None
+                else None
+            ),
+            change_absolute=abs(difference),
         )
     ]
 
@@ -257,16 +280,22 @@ def _detect_reviews_count_changes(
     previous_reviews_count = previous_snapshot.reviews_count
     current_reviews_count = current_snapshot.reviews_count
 
-    if previous_reviews_count is None or current_reviews_count is None:
+    if (
+        previous_reviews_count is None
+        or current_reviews_count is None
+    ):
         return []
 
     if previous_reviews_count == current_reviews_count:
         return []
 
-    difference = current_reviews_count - previous_reviews_count
-
-    if abs(difference) < DEFAULT_REVIEWS_COUNT_CHANGE_THRESHOLD:
-        return []
+    difference = (
+        current_reviews_count - previous_reviews_count
+    )
+    percent_change = _calculate_percent_change(
+        previous_value=Decimal(previous_reviews_count),
+        current_value=Decimal(current_reviews_count),
+    )
 
     if difference > 0:
         title = "Количество отзывов выросло"
@@ -277,19 +306,24 @@ def _detect_reviews_count_changes(
         message_text = "снизилось"
         severity = AlertSeverity.MEDIUM
 
-    target_title = current_snapshot.title or current_snapshot.target.title or current_snapshot.target.url
+    target_title = _get_target_title(
+        snapshot=current_snapshot,
+    )
 
     message = (
-        f"Количество отзывов у товара «{target_title}» {message_text}: "
+        f"Количество отзывов у товара «{target_title}» "
+        f"{message_text}: "
         f"{previous_reviews_count} → {current_reviews_count}."
     )
 
-    dedup_key = (
-        f"{current_snapshot.target_id}:"
-        f"{AlertType.REVIEWS_COUNT_CHANGED}:"
-        f"{previous_reviews_count}:"
-        f"{current_reviews_count}"
-    )
+    new_value: dict[str, Any] = {
+        "reviews_count": current_reviews_count,
+    }
+
+    if percent_change is not None:
+        new_value["percent_change"] = str(
+            percent_change.quantize(PERCENT_QUANTIZER)
+        )
 
     return [
         AlertCandidate(
@@ -300,10 +334,17 @@ def _detect_reviews_count_changes(
             old_value={
                 "reviews_count": previous_reviews_count,
             },
-            new_value={
-                "reviews_count": current_reviews_count,
-            },
-            dedup_key=dedup_key,
+            new_value=new_value,
+            dedup_key=_build_dedup_key(
+                snapshot=current_snapshot,
+                alert_type=AlertType.REVIEWS_COUNT_CHANGED,
+            ),
+            change_percent=(
+                abs(percent_change)
+                if percent_change is not None
+                else None
+            ),
+            change_absolute=Decimal(abs(difference)),
         )
     ]
 
@@ -327,13 +368,6 @@ def _detect_title_changes(
         f"«{previous_title}» → «{current_title}»."
     )
 
-    dedup_key = (
-        f"{current_snapshot.target_id}:"
-        f"{AlertType.TITLE_CHANGED}:"
-        f"{previous_title}:"
-        f"{current_title}"
-    )
-
     return [
         AlertCandidate(
             alert_type=AlertType.TITLE_CHANGED,
@@ -346,6 +380,47 @@ def _detect_title_changes(
             new_value={
                 "title": current_title,
             },
-            dedup_key=dedup_key,
+            dedup_key=_build_dedup_key(
+                snapshot=current_snapshot,
+                alert_type=AlertType.TITLE_CHANGED,
+            ),
         )
     ]
+
+
+def _calculate_percent_change(
+    *,
+    previous_value: Decimal,
+    current_value: Decimal,
+) -> Decimal | None:
+    if previous_value == 0:
+        return None
+
+    return (
+        (current_value - previous_value)
+        / previous_value
+        * Decimal("100.00")
+    )
+
+
+def _get_target_title(
+    *,
+    snapshot: ProductSnapshot,
+) -> str:
+    return (
+        snapshot.title
+        or snapshot.target.title
+        or snapshot.target.url
+    )
+
+
+def _build_dedup_key(
+    *,
+    snapshot: ProductSnapshot,
+    alert_type: str,
+) -> str:
+    return (
+        f"{snapshot.target_id}:"
+        f"{alert_type}:"
+        f"{snapshot.id}"
+    )

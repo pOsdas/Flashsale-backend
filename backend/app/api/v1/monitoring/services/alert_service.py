@@ -5,12 +5,19 @@ from uuid import UUID
 
 from django.db import IntegrityError, transaction
 
-from app.api.v1.orders.models import OutboxEvent
-from app.api.v1.monitoring.models import Alert, ProductSnapshot
+from app.api.v1.monitoring.models import (
+    Alert,
+    MonitoringTarget,
+    ProductSnapshot,
+)
+from app.api.v1.monitoring.services.alert_rule_service import (
+    evaluate_alert_candidate,
+)
 from app.api.v1.monitoring.services.change_detector import (
     AlertCandidate,
     detect_snapshot_changes,
 )
+from app.api.v1.orders.models import OutboxEvent
 from app.core.logging import get_logger
 
 
@@ -21,7 +28,9 @@ def create_alerts_for_snapshot(
     *,
     snapshot: ProductSnapshot,
 ) -> list[Alert]:
-    previous_snapshot = _get_previous_snapshot(snapshot=snapshot)
+    previous_snapshot = _get_previous_snapshot(
+        snapshot=snapshot,
+    )
 
     candidates = detect_snapshot_changes(
         previous_snapshot=previous_snapshot,
@@ -75,6 +84,58 @@ def _create_alert_from_candidate(
 ) -> Alert | None:
     try:
         with transaction.atomic():
+            (
+                MonitoringTarget.objects
+                .select_for_update()
+                .only("id")
+                .get(id=snapshot.target_id)
+            )
+
+            decision = evaluate_alert_candidate(
+                snapshot=snapshot,
+                candidate=candidate,
+            )
+
+            if not decision.allowed:
+                logger.info(
+                    "monitoring alert skipped by target rule",
+                    extra={
+                        "service": "monitoring",
+                        "target_id": str(snapshot.target_id),
+                        "snapshot_id": str(snapshot.id),
+                        "alert_type": candidate.alert_type,
+                        "reason": decision.reason,
+                        "rule_is_custom": decision.rule.is_custom,
+                        "rule_is_enabled": decision.rule.is_enabled,
+                        "threshold_percent": (
+                            str(decision.rule.threshold_percent)
+                            if decision.rule.threshold_percent
+                            is not None
+                            else None
+                        ),
+                        "threshold_absolute": (
+                            str(decision.rule.threshold_absolute)
+                            if decision.rule.threshold_absolute
+                            is not None
+                            else None
+                        ),
+                        "cooldown_minutes": (
+                            decision.rule.cooldown_minutes
+                        ),
+                        "candidate_change_percent": (
+                            str(candidate.change_percent)
+                            if candidate.change_percent is not None
+                            else None
+                        ),
+                        "candidate_change_absolute": (
+                            str(candidate.change_absolute)
+                            if candidate.change_absolute is not None
+                            else None
+                        ),
+                    },
+                )
+                return None
+
             alert = Alert.objects.create(
                 user=snapshot.target.user,
                 target=snapshot.target,
@@ -83,8 +144,12 @@ def _create_alert_from_candidate(
                 severity=candidate.severity,
                 title=candidate.title,
                 message=candidate.message,
-                old_value=_to_json_safe(candidate.old_value),
-                new_value=_to_json_safe(candidate.new_value),
+                old_value=_to_json_safe(
+                    candidate.old_value,
+                ),
+                new_value=_to_json_safe(
+                    candidate.new_value,
+                ),
                 dedup_key=candidate.dedup_key,
             )
 
@@ -115,7 +180,9 @@ def _create_alert_from_candidate(
         return None
 
 
-def _to_json_safe(value: Any) -> Any:
+def _to_json_safe(
+    value: Any,
+) -> Any:
     if value is None:
         return None
 

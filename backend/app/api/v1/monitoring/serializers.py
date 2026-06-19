@@ -11,6 +11,12 @@ from app.api.v1.monitoring.models import (
     ProductSnapshot,
     SnapshotSource,
 )
+from app.api.v1.monitoring.services.alert_rule_constants import (
+    ALERT_RULE_SOURCES,
+    MAX_ALERT_RULE_COOLDOWN_MINUTES,
+    NUMERIC_ALERT_TYPES,
+    SUPPORTED_TARGET_ALERT_TYPES,
+)
 
 
 class MonitoringTargetSerializer(serializers.ModelSerializer):
@@ -102,7 +108,7 @@ class MonitoringTargetSerializer(serializers.ModelSerializer):
                 "Check interval must be at least 15 minutes."
             )
 
-        if value > 24 * 60:
+        if value > 1440:
             raise serializers.ValidationError(
                 "Check interval must be less than or equal "
                 "to 1440 minutes."
@@ -298,6 +304,130 @@ class MonitoringTargetActionErrorSerializer(
     success = serializers.BooleanField()
     error_code = serializers.CharField()
     error = serializers.CharField()
+
+
+class AlertRuleSettingWriteSerializer(
+    serializers.Serializer,
+):
+    alert_type = serializers.ChoiceField(
+        choices=SUPPORTED_TARGET_ALERT_TYPES,
+    )
+    threshold_percent = serializers.DecimalField(
+        max_digits=7,
+        decimal_places=2,
+        allow_null=True,
+    )
+    threshold_absolute = serializers.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        allow_null=True,
+    )
+    cooldown_minutes = serializers.IntegerField(
+        min_value=0,
+        max_value=MAX_ALERT_RULE_COOLDOWN_MINUTES,
+    )
+    is_enabled = serializers.BooleanField()
+
+    def validate(self, attrs):
+        alert_type = attrs["alert_type"]
+
+        if alert_type not in NUMERIC_ALERT_TYPES:
+            if (
+                attrs["threshold_percent"] is not None
+                or attrs["threshold_absolute"] is not None
+            ):
+                raise serializers.ValidationError(
+                    "Thresholds are not supported for "
+                    f"alert type {alert_type}."
+                )
+
+        return attrs
+
+
+class MonitoringTargetAlertSettingsUpdateSerializer(
+    serializers.Serializer,
+):
+    rules = AlertRuleSettingWriteSerializer(
+        many=True,
+        allow_empty=False,
+    )
+
+    def validate_rules(self, rules):
+        received_types = [
+            rule["alert_type"]
+            for rule in rules
+        ]
+
+        duplicate_types = {
+            alert_type
+            for alert_type in received_types
+            if received_types.count(alert_type) > 1
+        }
+
+        if duplicate_types:
+            raise serializers.ValidationError(
+                "Duplicate alert rule types: "
+                f"{', '.join(sorted(duplicate_types))}."
+            )
+
+        received_type_set = set(received_types)
+        supported_type_set = set(
+            SUPPORTED_TARGET_ALERT_TYPES
+        )
+
+        missing_types = (
+            supported_type_set - received_type_set
+        )
+        unsupported_types = (
+            received_type_set - supported_type_set
+        )
+
+        if missing_types:
+            raise serializers.ValidationError(
+                "Missing alert rule types: "
+                f"{', '.join(sorted(missing_types))}."
+            )
+
+        if unsupported_types:
+            raise serializers.ValidationError(
+                "Unsupported alert rule types: "
+                f"{', '.join(sorted(unsupported_types))}."
+            )
+
+        return rules
+
+
+class AlertRuleSettingResponseSerializer(
+    serializers.Serializer,
+):
+    alert_type = serializers.ChoiceField(
+        choices=SUPPORTED_TARGET_ALERT_TYPES,
+    )
+    threshold_percent = serializers.DecimalField(
+        max_digits=7,
+        decimal_places=2,
+        allow_null=True,
+    )
+    threshold_absolute = serializers.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        allow_null=True,
+    )
+    cooldown_minutes = serializers.IntegerField()
+    is_enabled = serializers.BooleanField()
+    is_custom = serializers.BooleanField()
+    source = serializers.ChoiceField(
+        choices=ALERT_RULE_SOURCES,
+    )
+
+
+class MonitoringTargetAlertSettingsResponseSerializer(
+    serializers.Serializer,
+):
+    target_id = serializers.UUIDField()
+    rules = AlertRuleSettingResponseSerializer(
+        many=True,
+    )
 
 
 class AlertSerializer(serializers.ModelSerializer):

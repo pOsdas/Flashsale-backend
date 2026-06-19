@@ -23,6 +23,8 @@ from app.api.v1.monitoring.models import (
 from app.api.v1.monitoring.serializers import (
     AlertSerializer,
     MonitoringTargetActionErrorSerializer,
+    MonitoringTargetAlertSettingsResponseSerializer,
+    MonitoringTargetAlertSettingsUpdateSerializer,
     MonitoringTargetCheckNowResponseSerializer,
     MonitoringTargetSerializer,
     MonitoringTargetUpdateSerializer,
@@ -30,6 +32,12 @@ from app.api.v1.monitoring.serializers import (
     ProductPreviewRequestSerializer,
     ProductPreviewResponseSerializer,
     ProductSnapshotSerializer,
+)
+from app.api.v1.monitoring.services.alert_rule_service import (
+    AlertRuleSettingsValidationError,
+    AlertRuleTargetNotFoundError,
+    get_target_alert_settings,
+    replace_target_alert_settings,
 )
 from app.api.v1.monitoring.services.product_preview import (
     ProductPreviewError,
@@ -44,6 +52,8 @@ from app.api.v1.monitoring.services.target_service import (
     create_monitoring_target,
     delete_monitoring_target,
     get_monitoring_target_for_user,
+    pause_monitoring_target,
+    resume_monitoring_target,
     update_monitoring_target,
 )
 
@@ -242,9 +252,7 @@ class MonitoringTargetDetailAPIView(APIView):
             target = update_monitoring_target(
                 user=request.user,
                 target_id=target_id,
-                validated_data=(
-                    request_serializer.validated_data
-                ),
+                validated_data=request_serializer.validated_data,
             )
 
         except MonitoringTargetNotFoundError as exc:
@@ -318,6 +326,206 @@ class MonitoringTargetDetailAPIView(APIView):
             },
             status=status.HTTP_404_NOT_FOUND,
         )
+
+
+class MonitoringTargetAlertSettingsAPIView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    @extend_schema(
+        tags=["Monitoring"],
+        responses={
+            200: MonitoringTargetAlertSettingsResponseSerializer,
+            404: OpenApiResponse(
+                response=MonitoringTargetActionErrorSerializer,
+                description=(
+                    "The target does not exist or belongs "
+                    "to another user."
+                ),
+            ),
+        },
+    )
+    def get(
+        self,
+        request,
+        target_id,
+    ):
+        try:
+            target, rules = get_target_alert_settings(
+                user=request.user,
+                target_id=target_id,
+            )
+
+        except AlertRuleTargetNotFoundError as exc:
+            return self._not_found_response(exc=exc)
+
+        serializer = (
+            MonitoringTargetAlertSettingsResponseSerializer(
+                instance={
+                    "target_id": target.id,
+                    "rules": rules,
+                }
+            )
+        )
+
+        return Response(
+            serializer.data,
+            status=status.HTTP_200_OK,
+        )
+
+    @extend_schema(
+        tags=["Monitoring"],
+        request=MonitoringTargetAlertSettingsUpdateSerializer,
+        responses={
+            200: MonitoringTargetAlertSettingsResponseSerializer,
+            400: OpenApiResponse(
+                response=MonitoringTargetActionErrorSerializer,
+                description="Alert settings are invalid.",
+            ),
+            404: OpenApiResponse(
+                response=MonitoringTargetActionErrorSerializer,
+                description=(
+                    "The target does not exist or belongs "
+                    "to another user."
+                ),
+            ),
+        },
+    )
+    def put(
+        self,
+        request,
+        target_id,
+    ):
+        request_serializer = (
+            MonitoringTargetAlertSettingsUpdateSerializer(
+                data=request.data,
+            )
+        )
+        request_serializer.is_valid(
+            raise_exception=True,
+        )
+
+        try:
+            target, rules = replace_target_alert_settings(
+                user=request.user,
+                target_id=target_id,
+                rules_data=(
+                    request_serializer.validated_data["rules"]
+                ),
+            )
+
+        except AlertRuleTargetNotFoundError as exc:
+            return self._not_found_response(exc=exc)
+
+        except AlertRuleSettingsValidationError as exc:
+            return Response(
+                {
+                    "success": False,
+                    "error_code": "invalid_alert_settings",
+                    "error": str(exc),
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        response_serializer = (
+            MonitoringTargetAlertSettingsResponseSerializer(
+                instance={
+                    "target_id": target.id,
+                    "rules": rules,
+                }
+            )
+        )
+
+        return Response(
+            response_serializer.data,
+            status=status.HTTP_200_OK,
+        )
+
+    @staticmethod
+    def _not_found_response(
+        *,
+        exc: Exception,
+    ) -> Response:
+        return Response(
+            {
+                "success": False,
+                "error_code": "target_not_found",
+                "error": str(exc),
+            },
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+
+class MonitoringTargetActionAPIView(APIView):
+    permission_classes = (IsAuthenticated,)
+    action_name = ""
+    action_service = None
+
+    @extend_schema(
+        tags=["Monitoring"],
+        request=None,
+        responses={
+            200: MonitoringTargetSerializer,
+            404: OpenApiResponse(
+                response=MonitoringTargetActionErrorSerializer,
+                description=(
+                    "The target does not exist or belongs "
+                    "to another user."
+                ),
+            ),
+        },
+    )
+    def post(
+        self,
+        request,
+        target_id,
+    ):
+        if self.action_service is None:
+            raise RuntimeError(
+                "Monitoring target action service is not configured."
+            )
+
+        try:
+            target = self.action_service(
+                user=request.user,
+                target_id=target_id,
+            )
+
+        except MonitoringTargetNotFoundError as exc:
+            return Response(
+                {
+                    "success": False,
+                    "error_code": "target_not_found",
+                    "error": str(exc),
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        serializer = MonitoringTargetSerializer(
+            instance=target,
+        )
+
+        return Response(
+            serializer.data,
+            status=status.HTTP_200_OK,
+        )
+
+
+class MonitoringTargetPauseAPIView(
+    MonitoringTargetActionAPIView,
+):
+    action_name = "pause"
+    action_service = staticmethod(
+        pause_monitoring_target
+    )
+
+
+class MonitoringTargetResumeAPIView(
+    MonitoringTargetActionAPIView,
+):
+    action_name = "resume"
+    action_service = staticmethod(
+        resume_monitoring_target
+    )
 
 
 @extend_schema(
@@ -410,9 +618,7 @@ class MonitoringTargetCheckNowAPIView(APIView):
                     "snapshot": result.snapshot,
                     "alerts_count": result.alerts_count,
                     "cache_source": result.cache_source,
-                    "cache_is_stale": (
-                        result.cache_is_stale
-                    ),
+                    "cache_is_stale": result.cache_is_stale,
                     "effective_cache_minutes": (
                         result.effective_cache_minutes
                     ),
@@ -623,9 +829,7 @@ class ProductPreviewView(APIView):
                     "currency": preview.currency,
                     "is_available": preview.is_available,
                     "rating": preview.rating,
-                    "reviews_count": (
-                        preview.reviews_count
-                    ),
+                    "reviews_count": preview.reviews_count,
                 },
             },
             status=status.HTTP_200_OK,

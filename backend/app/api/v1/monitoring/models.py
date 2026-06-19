@@ -39,11 +39,20 @@ class AlertType(models.TextChoices):
     PRICE_CHANGED = "price_changed", "Price changed"
     PRICE_DROPPED = "price_dropped", "Price dropped"
     PRICE_INCREASED = "price_increased", "Price increased"
-    AVAILABILITY_CHANGED = "availability_changed", "Availability changed"
+    AVAILABILITY_CHANGED = (
+        "availability_changed",
+        "Availability changed",
+    )
     BECAME_AVAILABLE = "became_available", "Became available"
-    BECAME_UNAVAILABLE = "became_unavailable", "Became unavailable"
+    BECAME_UNAVAILABLE = (
+        "became_unavailable",
+        "Became unavailable",
+    )
     RATING_CHANGED = "rating_changed", "Rating changed"
-    REVIEWS_COUNT_CHANGED = "reviews_count_changed", "Reviews count changed"
+    REVIEWS_COUNT_CHANGED = (
+        "reviews_count_changed",
+        "Reviews count changed",
+    )
     TITLE_CHANGED = "title_changed", "Title changed"
 
 
@@ -166,7 +175,8 @@ class ProductCacheEntry(models.Model):
 
     One row represents one marketplace product by canonical identity:
     marketplace + external_id.
-    MonitoringTarget rows only define how often different users need this product.
+    MonitoringTarget rows only define how often different users need
+    this product.
     """
 
     id = models.UUIDField(
@@ -359,8 +369,11 @@ class AlertRule(models.Model):
     """
     User-configurable alert rule.
 
-    In the first MVP we can create default rules automatically.
-    Later frontend will allow users to edit thresholds.
+    A target-specific rule controls whether an Alert should be created
+    for one exact alert type of one MonitoringTarget.
+
+    If a target-specific rule does not exist, application-level default
+    settings are used by AlertRuleService.
     """
 
     id = models.UUIDField(
@@ -391,19 +404,27 @@ class AlertRule(models.Model):
         decimal_places=2,
         null=True,
         blank=True,
-        help_text="Minimum percent change required to trigger this rule.",
+        help_text=(
+            "Minimum percent change required to trigger this rule."
+        ),
     )
     threshold_absolute = models.DecimalField(
         max_digits=12,
         decimal_places=2,
         null=True,
         blank=True,
-        help_text="Minimum absolute value change required to trigger this rule.",
+        help_text=(
+            "Minimum absolute value change required to trigger "
+            "this rule."
+        ),
     )
 
     cooldown_minutes = models.PositiveIntegerField(
         default=360,
-        help_text="Do not send the same alert too often.",
+        help_text=(
+            "Do not create the same alert type for this target "
+            "too often."
+        ),
     )
     is_enabled = models.BooleanField(
         default=True,
@@ -424,9 +445,32 @@ class AlertRule(models.Model):
             models.Index(fields=["target", "alert_type"]),
             models.Index(fields=["is_enabled"]),
         ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["target", "alert_type"],
+                condition=models.Q(
+                    target__isnull=False,
+                ),
+                name="unique_monitoring_target_alert_rule",
+            ),
+            models.UniqueConstraint(
+                fields=["user", "alert_type"],
+                condition=models.Q(
+                    target__isnull=True,
+                ),
+                name="unique_monitoring_global_alert_rule",
+            ),
+        ]
 
     def __str__(self) -> str:
-        return f"{self.user_id}: {self.alert_type}"
+        if self.target_id:
+            return (
+                f"{self.user_id}:"
+                f"{self.target_id}:"
+                f"{self.alert_type}"
+            )
+
+        return f"{self.user_id}:global:{self.alert_type}"
 
 
 class Alert(models.Model):
@@ -520,4 +564,3 @@ class Alert(models.Model):
 
     def __str__(self) -> str:
         return f"{self.alert_type}: {self.title}"
-    

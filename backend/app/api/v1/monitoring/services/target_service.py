@@ -9,6 +9,7 @@ from django.utils import timezone
 from app.api.v1.monitoring.models import (
     MonitoringTarget,
     MonitoringTargetRole,
+    MonitoringTargetStatus,
     ProductSnapshot,
     SnapshotParseStatus,
 )
@@ -244,9 +245,7 @@ def update_monitoring_target(
             )
             target.next_check_at = _calculate_next_check_at(
                 target=target,
-                check_interval_minutes=(
-                    check_interval_minutes
-                ),
+                check_interval_minutes=check_interval_minutes,
             )
 
             update_fields.extend(
@@ -270,6 +269,128 @@ def update_monitoring_target(
             "target_id": str(target.id),
             "user_id": str(user.id),
             "updated_fields": update_fields,
+        },
+    )
+
+    return target
+
+
+def pause_monitoring_target(
+    *,
+    user,
+    target_id: UUID | str,
+) -> MonitoringTarget:
+    """
+    Pause a monitoring target.
+
+    The operation is idempotent. Repeated pause requests return the same
+    paused target without changing its schedule or creating side effects.
+    """
+
+    with transaction.atomic():
+        try:
+            target = (
+                MonitoringTarget.objects
+                .select_for_update()
+                .get(
+                    id=target_id,
+                    user=user,
+                )
+            )
+
+        except MonitoringTarget.DoesNotExist as exc:
+            raise MonitoringTargetNotFoundError(
+                "Monitoring target was not found."
+            ) from exc
+
+        if (
+            target.status == MonitoringTargetStatus.PAUSED
+            and not target.is_active
+        ):
+            return target
+
+        target.status = MonitoringTargetStatus.PAUSED
+        target.is_active = False
+
+        target.save(
+            update_fields=[
+                "status",
+                "is_active",
+                "updated_at",
+            ]
+        )
+
+    logger.info(
+        "monitoring target paused",
+        extra={
+            "service": "monitoring",
+            "target_id": str(target.id),
+            "user_id": str(user.id),
+            "marketplace": target.marketplace,
+        },
+    )
+
+    return target
+
+
+def resume_monitoring_target(
+    *,
+    user,
+    target_id: UUID | str,
+) -> MonitoringTarget:
+    """
+    Resume a paused or failed monitoring target.
+
+    Resumed targets become due immediately, so the scanner can process
+    them during its nearest iteration.
+
+    The operation is idempotent for targets that are already active.
+    """
+
+    with transaction.atomic():
+        try:
+            target = (
+                MonitoringTarget.objects
+                .select_for_update()
+                .get(
+                    id=target_id,
+                    user=user,
+                )
+            )
+
+        except MonitoringTarget.DoesNotExist as exc:
+            raise MonitoringTargetNotFoundError(
+                "Monitoring target was not found."
+            ) from exc
+
+        if (
+            target.status == MonitoringTargetStatus.ACTIVE
+            and target.is_active
+        ):
+            return target
+
+        target.status = MonitoringTargetStatus.ACTIVE
+        target.is_active = True
+        target.next_check_at = timezone.now()
+        target.last_error = ""
+
+        target.save(
+            update_fields=[
+                "status",
+                "is_active",
+                "next_check_at",
+                "last_error",
+                "updated_at",
+            ]
+        )
+
+    logger.info(
+        "monitoring target resumed",
+        extra={
+            "service": "monitoring",
+            "target_id": str(target.id),
+            "user_id": str(user.id),
+            "marketplace": target.marketplace,
         },
     )
 
@@ -395,9 +516,7 @@ def check_monitoring_target_now(
             "alerts_count": process_result.alerts_count,
             "cache_source": process_result.cache_source,
             "cache_is_stale": process_result.cache_is_stale,
-            "effective_cache_minutes": (
-                effective_cache_minutes
-            ),
+            "effective_cache_minutes": effective_cache_minutes,
         },
     )
 
