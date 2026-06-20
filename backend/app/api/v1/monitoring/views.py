@@ -12,6 +12,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from app.api.exceptions import APIError
 from app.api.pagination import StandardPageNumberPagination
 from app.api.v1.monitoring.models import (
     Alert,
@@ -209,7 +210,14 @@ class MonitoringTargetDetailAPIView(APIView):
             )
 
         except MonitoringTargetNotFoundError as exc:
-            return self._not_found_response(exc=exc)
+            raise APIError(
+                error_code="target_not_found",
+                message=str(exc),
+                status_code=status.HTTP_404_NOT_FOUND,
+                details={
+                    "target_id": str(target_id),
+                },
+            ) from exc
 
         serializer = MonitoringTargetSerializer(
             instance=target,
@@ -258,17 +266,24 @@ class MonitoringTargetDetailAPIView(APIView):
             )
 
         except MonitoringTargetNotFoundError as exc:
-            return self._not_found_response(exc=exc)
+            raise APIError(
+                error_code="target_not_found",
+                message=str(exc),
+                status_code=status.HTTP_404_NOT_FOUND,
+                details={
+                    "target_id": str(target_id),
+                },
+            ) from exc
 
         except MonitoringTargetUpdateError as exc:
-            return Response(
-                {
-                    "success": False,
-                    "error_code": "invalid_target_update",
-                    "error": str(exc),
+            raise APIError(
+                error_code="invalid_target_update",
+                message=str(exc),
+                status_code=status.HTTP_400_BAD_REQUEST,
+                details={
+                    "target_id": str(target_id),
                 },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            ) from exc
 
         response_serializer = MonitoringTargetSerializer(
             instance=target,
@@ -309,24 +324,17 @@ class MonitoringTargetDetailAPIView(APIView):
             )
 
         except MonitoringTargetNotFoundError as exc:
-            return self._not_found_response(exc=exc)
+            raise APIError(
+                error_code="target_not_found",
+                message=str(exc),
+                status_code=status.HTTP_404_NOT_FOUND,
+                details={
+                    "target_id": str(target_id),
+                },
+            ) from exc
 
         return Response(
             status=status.HTTP_204_NO_CONTENT,
-        )
-
-    @staticmethod
-    def _not_found_response(
-        *,
-        exc: Exception,
-    ) -> Response:
-        return Response(
-            {
-                "success": False,
-                "error_code": "target_not_found",
-                "error": str(exc),
-            },
-            status=status.HTTP_404_NOT_FOUND,
         )
 
 
@@ -358,7 +366,14 @@ class MonitoringTargetAlertSettingsAPIView(APIView):
             )
 
         except AlertRuleTargetNotFoundError as exc:
-            return self._not_found_response(exc=exc)
+            raise APIError(
+                error_code="target_not_found",
+                message=str(exc),
+                status_code=status.HTTP_404_NOT_FOUND,
+                details={
+                    "target_id": str(target_id),
+                },
+            ) from exc
 
         serializer = (
             MonitoringTargetAlertSettingsResponseSerializer(
@@ -416,17 +431,24 @@ class MonitoringTargetAlertSettingsAPIView(APIView):
             )
 
         except AlertRuleTargetNotFoundError as exc:
-            return self._not_found_response(exc=exc)
+            raise APIError(
+                error_code="target_not_found",
+                message=str(exc),
+                status_code=status.HTTP_404_NOT_FOUND,
+                details={
+                    "target_id": str(target_id),
+                },
+            ) from exc
 
         except AlertRuleSettingsValidationError as exc:
-            return Response(
-                {
-                    "success": False,
-                    "error_code": "invalid_alert_settings",
-                    "error": str(exc),
+            raise APIError(
+                error_code="invalid_alert_settings",
+                message=str(exc),
+                status_code=status.HTTP_400_BAD_REQUEST,
+                details={
+                    "target_id": str(target_id),
                 },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            ) from exc
 
         response_serializer = (
             MonitoringTargetAlertSettingsResponseSerializer(
@@ -440,20 +462,6 @@ class MonitoringTargetAlertSettingsAPIView(APIView):
         return Response(
             response_serializer.data,
             status=status.HTTP_200_OK,
-        )
-
-    @staticmethod
-    def _not_found_response(
-        *,
-        exc: Exception,
-    ) -> Response:
-        return Response(
-            {
-                "success": False,
-                "error_code": "target_not_found",
-                "error": str(exc),
-            },
-            status=status.HTTP_404_NOT_FOUND,
         )
 
 
@@ -493,14 +501,14 @@ class MonitoringTargetActionAPIView(APIView):
             )
 
         except MonitoringTargetNotFoundError as exc:
-            return Response(
-                {
-                    "success": False,
-                    "error_code": "target_not_found",
-                    "error": str(exc),
+            raise APIError(
+                error_code="target_not_found",
+                message=str(exc),
+                status_code=status.HTTP_404_NOT_FOUND,
+                details={
+                    "target_id": str(target_id),
                 },
-                status=status.HTTP_404_NOT_FOUND,
-            )
+            ) from exc
 
         serializer = MonitoringTargetSerializer(
             instance=target,
@@ -583,34 +591,34 @@ class MonitoringTargetCheckNowAPIView(APIView):
             )
 
         except MonitoringTargetNotFoundError as exc:
-            return Response(
-                {
-                    "success": False,
-                    "error_code": "target_not_found",
-                    "error": str(exc),
+            raise APIError(
+                error_code="target_not_found",
+                message=str(exc),
+                status_code=status.HTTP_404_NOT_FOUND,
+                details={
+                    "target_id": str(target_id),
                 },
-                status=status.HTTP_404_NOT_FOUND,
-            )
+            ) from exc
 
         except MonitoringTargetCheckBusyError as exc:
-            return Response(
-                {
-                    "success": False,
-                    "error_code": "refresh_busy",
-                    "error": str(exc),
+            raise APIError(
+                error_code="refresh_busy",
+                message=str(exc),
+                status_code=status.HTTP_409_CONFLICT,
+                details={
+                    "target_id": str(target_id),
                 },
-                status=status.HTTP_409_CONFLICT,
-            )
+            ) from exc
 
         except MonitoringTargetCheckError as exc:
-            return Response(
-                {
-                    "success": False,
-                    "error_code": "check_failed",
-                    "error": str(exc),
+            raise APIError(
+                error_code="check_failed",
+                message=str(exc),
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                details={
+                    "target_id": str(target_id),
                 },
-                status=status.HTTP_502_BAD_GATEWAY,
-            )
+            ) from exc
 
         response_serializer = (
             MonitoringTargetCheckNowResponseSerializer(
@@ -812,13 +820,17 @@ class ProductPreviewView(APIView):
             )
 
         except ProductPreviewError as exc:
-            return Response(
-                {
-                    "success": False,
-                    "error": str(exc),
+            raise APIError(
+                error_code="product_preview_failed",
+                message=str(exc),
+                status_code=status.HTTP_400_BAD_REQUEST,
+                details={
+                    "marketplace": (
+                        serializer.validated_data["marketplace"]
+                    ),
+                    "url": serializer.validated_data["url"],
                 },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            ) from exc
 
         return Response(
             {

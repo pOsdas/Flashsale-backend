@@ -61,7 +61,12 @@ class NotificationChannelDetailView(generics.RetrieveUpdateDestroyAPIView):
         )
 
 
-@extend_schema(tags=["Notifications"])
+@extend_schema(
+    tags=["Notifications"],
+    responses={
+        200: TelegramConnectLinkSerializer,
+    },
+)
 class TelegramConnectLinkView(APIView):
     permission_classes = [permissions.IsAuthenticated,]
 

@@ -450,7 +450,7 @@ class MonitoringTargetDetailAPITests(
         )
         self.assertIn(
             "check_interval_minutes",
-            response.data,
+            response.data["details"],
         )
 
         self.target.refresh_from_db()
@@ -479,7 +479,7 @@ class MonitoringTargetDetailAPITests(
         )
         self.assertIn(
             "check_interval_minutes",
-            response.data,
+            response.data["details"],
         )
 
         self.target.refresh_from_db()
@@ -508,7 +508,7 @@ class MonitoringTargetDetailAPITests(
         )
         self.assertIn(
             "role",
-            response.data,
+            response.data["details"],
         )
 
         self.target.refresh_from_db()
@@ -535,7 +535,7 @@ class MonitoringTargetDetailAPITests(
         )
         self.assertIn(
             "non_field_errors",
-            response.data,
+            response.data["details"],
         )
 
     def test_patch_does_not_allow_url_update(self):

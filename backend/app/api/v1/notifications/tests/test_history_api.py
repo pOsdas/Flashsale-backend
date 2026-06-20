@@ -209,7 +209,12 @@ class NotificationDeliveryHistoryAPITests(APITestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("channel_id", response.data)
+        self.assertEqual(
+            response.data["details"],
+            {
+                "channel_id": "channel_id должен быть числом.",
+            },
+        )
 
     def test_history_list_filter_by_created_from(self):
         self.client.force_authenticate(user=self.user)
@@ -282,7 +287,14 @@ class NotificationDeliveryHistoryAPITests(APITestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("created_from", response.data)
+        self.assertEqual(
+            response.data["details"],
+            {
+                "created_from": (
+                    "Дата должна быть в формате YYYY-MM-DD."
+                ),
+            },
+        )
 
     def test_history_list_filter_by_invalid_created_to_returns_400(self):
         self.client.force_authenticate(user=self.user)
@@ -295,7 +307,14 @@ class NotificationDeliveryHistoryAPITests(APITestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("created_to", response.data)
+        self.assertEqual(
+            response.data["details"],
+            {
+                "created_to": (
+                    "Дата должна быть в формате YYYY-MM-DD."
+                ),
+            },
+        )
 
     def _detail_url(self, delivery_id):
         return f"/api/v1/notifications/history/{delivery_id}/"

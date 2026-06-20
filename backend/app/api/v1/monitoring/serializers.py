@@ -304,6 +304,10 @@ class MonitoringTargetActionErrorSerializer(
     success = serializers.BooleanField()
     error_code = serializers.CharField()
     error = serializers.CharField()
+    details = serializers.JSONField(
+        required=False,
+        allow_null=True,
+    )
 
 
 class AlertRuleSettingWriteSerializer(
@@ -511,4 +515,9 @@ class ProductPreviewErrorResponseSerializer(
     serializers.Serializer,
 ):
     success = serializers.BooleanField()
+    error_code = serializers.CharField()
     error = serializers.CharField()
+    details = serializers.JSONField(
+        required=False,
+        allow_null=True,
+    )
