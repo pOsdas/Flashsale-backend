@@ -25,21 +25,11 @@ from rest_framework.views import (
 
 class APIError(APIException):
     """
-    Base exception for application-level API errors.
+    Base exception for expected application-level API errors.
 
-    Use this exception in views when an application service reports
-    an expected business error.
-
-    Example:
-
-        raise APIError(
-            error_code="target_not_found",
-            message="Monitoring target was not found.",
-            status_code=404,
-            details={
-                "target_id": str(target_id),
-            },
-        )
+    The standard DRF exception handler still controls the HTTP response
+    status and headers. The custom handler converts the response body
+    to the common API error format.
     """
 
     status_code = status.HTTP_400_BAD_REQUEST
@@ -71,21 +61,16 @@ def api_exception_handler(
     context: dict[str, Any],
 ) -> Response | None:
     """
-    Convert supported Django REST Framework exceptions to one format.
+    Convert supported DRF exceptions to a common response format.
 
-    The standard DRF exception handler is called first. It remains
-    responsible for:
-
-    - selecting the correct HTTP status;
+    DRF remains responsible for:
+    - selecting the HTTP status;
     - authentication headers;
     - Retry-After headers;
-    - handling DRF APIException subclasses;
-    - handling Django Http404 and PermissionDenied exceptions.
+    - Http404 and permission handling.
 
-    This function only replaces the response body.
-
-    Returning None for an unknown exception keeps normal Django error
-    handling and does not hide programming errors or tracebacks.
+    Unknown programming errors are not hidden. Returning None delegates
+    them back to Django so traceback and normal logging remain available.
     """
 
     normalized_exception = _normalize_exception(
@@ -115,6 +100,7 @@ def api_exception_handler(
         "details": _get_error_details(
             exc=normalized_exception,
             response_data=original_data,
+            context=context,
         ),
     }
 
@@ -126,10 +112,10 @@ def _normalize_exception(
     exc: Exception,
 ) -> Exception:
     """
-    Convert Django ValidationError to DRF ValidationError.
+    Convert django.core.exceptions.ValidationError to the DRF version.
 
-    DRF does not process django.core.exceptions.ValidationError through
-    its standard exception handler automatically.
+    Django ValidationError is not automatically processed by the
+    standard DRF exception handler.
     """
 
     if not isinstance(
@@ -250,6 +236,7 @@ def _get_error_details(
     *,
     exc: Exception,
     response_data: Any,
+    context: dict[str, Any],
 ) -> Any:
     if isinstance(exc, APIError):
         return _to_plain_value(
@@ -268,13 +255,104 @@ def _get_error_details(
 
     if isinstance(exc, MethodNotAllowed):
         return {
-            "method": exc.method,
+            "method": _get_request_method(
+                context=context,
+            ),
         }
 
     if isinstance(exc, UnsupportedMediaType):
         return {
-            "media_type": exc.media_type,
+            "media_type": _get_request_content_type(
+                context=context,
+            ),
         }
+
+    return None
+
+
+def _get_request_method(
+    *,
+    context: dict[str, Any],
+) -> str | None:
+    """
+    Read the HTTP method from the request passed by DRF.
+
+    MethodNotAllowed does not guarantee that the original method is
+    available as exc.method in every DRF version.
+    """
+
+    request = context.get("request")
+
+    if request is None:
+        return None
+
+    method = getattr(
+        request,
+        "method",
+        None,
+    )
+
+    if method is None:
+        return None
+
+    return str(method).upper()
+
+
+def _get_request_content_type(
+    *,
+    context: dict[str, Any],
+) -> str | None:
+    """
+    Read Content-Type from the request passed by DRF.
+
+    UnsupportedMediaType does not guarantee that the original media
+    type is available as exc.media_type in every DRF version.
+    """
+
+    request = context.get("request")
+
+    if request is None:
+        return None
+
+    content_type = getattr(
+        request,
+        "content_type",
+        None,
+    )
+
+    if content_type:
+        return str(content_type)
+
+    meta = getattr(
+        request,
+        "META",
+        {},
+    )
+
+    content_type = meta.get(
+        "CONTENT_TYPE",
+    )
+
+    if content_type:
+        return str(content_type)
+
+    underlying_request = getattr(
+        request,
+        "_request",
+        None,
+    )
+
+    if underlying_request is None:
+        return None
+
+    underlying_content_type = getattr(
+        underlying_request,
+        "content_type",
+        None,
+    )
+
+    if underlying_content_type:
+        return str(underlying_content_type)
 
     return None
 
@@ -307,6 +385,7 @@ def _to_message(
             first_value = next(
                 iter(value.values())
             )
+
             return _to_message(
                 value=first_value,
             )
@@ -319,7 +398,7 @@ def _to_plain_value(
     value: Any,
 ) -> Any:
     """
-    Convert DRF ErrorDetail objects to ordinary JSON-compatible values.
+    Convert DRF ErrorDetail objects to JSON-compatible values.
     """
 
     if isinstance(value, ErrorDetail):

@@ -1,11 +1,12 @@
-import os
 import logging.config
+import os
 from pathlib import Path
 
 import dj_database_url
 
 import app.core.logging_filters
 from app.core.config import get_settings
+
 
 # Base project dir
 BASE_DIR = Path(__file__).resolve().parent
@@ -28,16 +29,16 @@ USE_TZ = True
 
 # Applications
 INSTALLED_APPS = [
-    'django.contrib.admin',
-    'django.contrib.auth',
-    'django.contrib.contenttypes',
-    'django.contrib.sessions',
-    'django.contrib.messages',
-    'django.contrib.staticfiles',
-    'django_prometheus',
+    "django.contrib.admin",
+    "django.contrib.auth",
+    "django.contrib.contenttypes",
+    "django.contrib.sessions",
+    "django.contrib.messages",
+    "django.contrib.staticfiles",
+    "django_prometheus",
 
     # for webhooks
-    'rest_framework',
+    "rest_framework",
     "drf_spectacular",
 
     "app.api.v1.common.apps.V1CommonConfig",
@@ -47,45 +48,61 @@ INSTALLED_APPS = [
     "app.api.v1.monitoring.apps.V1MonitoringConfig",
     "app.api.v1.notifications.apps.V1NotificationsConfig",
 ]
+
 # Middleware
 MIDDLEWARE = [
-    'django_prometheus.middleware.PrometheusBeforeMiddleware',
-    'app.core.middleware.request_id.RequestIDMiddleware',
-    'django.middleware.security.SecurityMiddleware',
-    'django.contrib.sessions.middleware.SessionMiddleware',
-    'django.middleware.common.CommonMiddleware',
-    'django.middleware.csrf.CsrfViewMiddleware',
-    'django.contrib.auth.middleware.AuthenticationMiddleware',
-    'django.contrib.messages.middleware.MessageMiddleware',
-    'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'django_prometheus.middleware.PrometheusAfterMiddleware',
+    "django_prometheus.middleware.PrometheusBeforeMiddleware",
+    "app.core.middleware.request_id.RequestIDMiddleware",
+    "django.middleware.security.SecurityMiddleware",
+    "django.contrib.sessions.middleware.SessionMiddleware",
+    "django.middleware.common.CommonMiddleware",
+    "django.middleware.csrf.CsrfViewMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django.contrib.messages.middleware.MessageMiddleware",
+    "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "django_prometheus.middleware.PrometheusAfterMiddleware",
 ]
 
-ROOT_URLCONF = 'app_project.urls'
+ROOT_URLCONF = "app_project.urls"
 
 TEMPLATES = [
     {
-        'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        # 'DIRS': [BASE_DIR / 'templates'],
-        "DIRS": [BASE_DIR.parent / "templates"],
-        'APP_DIRS': True,
-        'OPTIONS': {
-            'context_processors': [
-                'django.template.context_processors.debug',
-                'django.template.context_processors.request',
-                'django.contrib.auth.context_processors.auth',
-                'django.contrib.messages.context_processors.messages',
+        "BACKEND": (
+            "django.template.backends.django.DjangoTemplates"
+        ),
+        "DIRS": [
+            BASE_DIR.parent / "templates",
+        ],
+        "APP_DIRS": True,
+        "OPTIONS": {
+            "context_processors": [
+                (
+                    "django.template.context_processors."
+                    "debug"
+                ),
+                (
+                    "django.template.context_processors."
+                    "request"
+                ),
+                (
+                    "django.contrib.auth.context_processors."
+                    "auth"
+                ),
+                (
+                    "django.contrib.messages.context_processors."
+                    "messages"
+                ),
             ],
         },
     },
 ]
 
-ASGI_APPLICATION = 'app_project.asgi.application'
-WSGI_APPLICATION = 'app_project.wsgi.application'
+ASGI_APPLICATION = "app_project.asgi.application"
+WSGI_APPLICATION = "app_project.wsgi.application"
 
 # Database
 DATABASES = {
-    'default': dj_database_url.parse(
+    "default": dj_database_url.parse(
         s.database_url,
         conn_max_age=60,
         ssl_require=False,
@@ -93,47 +110,118 @@ DATABASES = {
 }
 
 # Static
-STATIC_URL = '/static/'
-STATIC_ROOT = BASE_DIR / 'static'
+STATIC_URL = "/static/"
+STATIC_ROOT = BASE_DIR / "static"
 
 # Redis / Celery
 REDIS_URL = str(s.redis_url)
 
 CELERY_BROKER_URL = str(s.celery_broker_url)
-if s.celery_result_backend is not None:
-    CELERY_RESULT_BACKEND = str(s.celery_result_backend)
 
-CELERY_ACCEPT_CONTENT = ["json"]
+if s.celery_result_backend is not None:
+    CELERY_RESULT_BACKEND = str(
+        s.celery_result_backend
+    )
+
+CELERY_ACCEPT_CONTENT = [
+    "json",
+]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
 CELERY_TIMEZONE = TIME_ZONE
 
 # Go Fetcher
-MONITORING_FETCHER_MODE = os.getenv("MONITORING_FETCHER_MODE", "fake")
-
-GO_FETCHER_BASE_URL = os.getenv("GO_FETCHER_BASE_URL", "http://localhost:8090")
-GO_FETCHER_PARSER_HEALTH_ENDPOINT = os.getenv("GO_FETCHER_PARSER_HEALTH_ENDPOINT", "/api/v1/parser/health/")
-GO_FETCHER_PRODUCT_ENDPOINT = os.getenv("GO_FETCHER_PRODUCT_ENDPOINT", "/api/v1/fetch/product")
-GO_FETCHER_API_KEY = os.getenv("GO_FETCHER_API_KEY", "")
-GO_FETCHER_TIMEOUT_SECONDS = int(os.getenv("GO_FETCHER_TIMEOUT_SECONDS", "20"))
-
-# NOTIFICATIONS
-NOTIF_TELEGRAM_BOT_TOKEN = os.getenv("NOTIF_TELEGRAM_BOT_TOKEN", "")
-NOTIF_TELEGRAM_BOT_USERNAME = os.getenv("NOTIF_TELEGRAM_BOT_USERNAME", "")
-NOTIF_TELEGRAM_CONNECT_TOKEN_MAX_AGE_SECONDS = int(os.getenv("NOTIF_TELEGRAM_CONNECT_TOKEN_MAX_AGE_SECONDS", "900"))
-NOTIF_TELEGRAM_CONNECT_SIGNING_SALT = os.getenv("NOTIF_TELEGRAM_CONNECT_SIGNING_SALT", "")
-NOTIF_TELEGRAM_REPLY_RATE_LIMIT_LIMIT = int(os.getenv("NOTIF_TELEGRAM_REPLY_RATE_LIMIT_LIMIT", "1"))
-NOTIF_TELEGRAM_REPLY_RATE_LIMIT_WINDOW_SECONDS = int(os.getenv("NOTIF_TELEGRAM_REPLY_RATE_LIMIT_WINDOW_SECONDS", "10"))
-NOTIF_TELEGRAM_DROP_PENDING_UPDATES_ON_START = bool(
-    os.getenv("NOTIF_TELEGRAM_DROP_PENDING_UPDATES_ON_START", "False")
+MONITORING_FETCHER_MODE = os.getenv(
+    "MONITORING_FETCHER_MODE",
+    "fake",
 )
 
-NOTIFICATION_CONSUMER_METRICS_PORT = int(os.getenv("NOTIFICATION_CONSUMER_METRICS_PORT", "8011"))
+GO_FETCHER_BASE_URL = os.getenv(
+    "GO_FETCHER_BASE_URL",
+    "http://localhost:8090",
+)
+GO_FETCHER_PARSER_HEALTH_ENDPOINT = os.getenv(
+    "GO_FETCHER_PARSER_HEALTH_ENDPOINT",
+    "/api/v1/parser/health/",
+)
+GO_FETCHER_PRODUCT_ENDPOINT = os.getenv(
+    "GO_FETCHER_PRODUCT_ENDPOINT",
+    "/api/v1/fetch/product",
+)
+GO_FETCHER_API_KEY = os.getenv(
+    "GO_FETCHER_API_KEY",
+    "",
+)
+GO_FETCHER_TIMEOUT_SECONDS = int(
+    os.getenv(
+        "GO_FETCHER_TIMEOUT_SECONDS",
+        "20",
+    )
+)
 
-NOTIFICATION_RABBITMQ_QUEUE = os.getenv("NOTIFICATION_RABBITMQ_QUEUE", "flashsale.notifications")
-NOTIFICATION_RABBITMQ_DLQ = os.getenv("NOTIFICATION_RABBITMQ_DLQ", "flashsale.notifications.dlq")
-NOTIFICATION_RABBITMQ_DLX = os.getenv("NOTIFICATION_RABBITMQ_DLX", "flashsale.notifications.dlx")
-NOTIFICATION_RABBITMQ_PREFETCH_COUNT = int(os.getenv("NOTIFICATION_RABBITMQ_PREFETCH_COUNT", "10"))
+# Notifications
+NOTIF_TELEGRAM_BOT_TOKEN = os.getenv(
+    "NOTIF_TELEGRAM_BOT_TOKEN",
+    "",
+)
+NOTIF_TELEGRAM_BOT_USERNAME = os.getenv(
+    "NOTIF_TELEGRAM_BOT_USERNAME",
+    "",
+)
+NOTIF_TELEGRAM_CONNECT_TOKEN_MAX_AGE_SECONDS = int(
+    os.getenv(
+        "NOTIF_TELEGRAM_CONNECT_TOKEN_MAX_AGE_SECONDS",
+        "900",
+    )
+)
+NOTIF_TELEGRAM_CONNECT_SIGNING_SALT = os.getenv(
+    "NOTIF_TELEGRAM_CONNECT_SIGNING_SALT",
+    "",
+)
+NOTIF_TELEGRAM_REPLY_RATE_LIMIT_LIMIT = int(
+    os.getenv(
+        "NOTIF_TELEGRAM_REPLY_RATE_LIMIT_LIMIT",
+        "1",
+    )
+)
+NOTIF_TELEGRAM_REPLY_RATE_LIMIT_WINDOW_SECONDS = int(
+    os.getenv(
+        "NOTIF_TELEGRAM_REPLY_RATE_LIMIT_WINDOW_SECONDS",
+        "10",
+    )
+)
+NOTIF_TELEGRAM_DROP_PENDING_UPDATES_ON_START = bool(
+    os.getenv(
+        "NOTIF_TELEGRAM_DROP_PENDING_UPDATES_ON_START",
+        "False",
+    )
+)
+
+NOTIFICATION_CONSUMER_METRICS_PORT = int(
+    os.getenv(
+        "NOTIFICATION_CONSUMER_METRICS_PORT",
+        "8011",
+    )
+)
+
+NOTIFICATION_RABBITMQ_QUEUE = os.getenv(
+    "NOTIFICATION_RABBITMQ_QUEUE",
+    "flashsale.notifications",
+)
+NOTIFICATION_RABBITMQ_DLQ = os.getenv(
+    "NOTIFICATION_RABBITMQ_DLQ",
+    "flashsale.notifications.dlq",
+)
+NOTIFICATION_RABBITMQ_DLX = os.getenv(
+    "NOTIFICATION_RABBITMQ_DLX",
+    "flashsale.notifications.dlx",
+)
+NOTIFICATION_RABBITMQ_PREFETCH_COUNT = int(
+    os.getenv(
+        "NOTIFICATION_RABBITMQ_PREFETCH_COUNT",
+        "10",
+    )
+)
 
 NOTIFICATION_RABBITMQ_ROUTING_KEYS = [
     item.strip()
@@ -145,9 +233,18 @@ NOTIFICATION_RABBITMQ_ROUTING_KEYS = [
 ]
 
 # RabbitMQ
-OUTBOX_DISPATCH_MODE = os.getenv("OUTBOX_DISPATCH_MODE", "local")
-RABBITMQ_URL = os.getenv("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/")
-RABBITMQ_EXCHANGE = os.getenv("RABBITMQ_EXCHANGE", "flashsale.events")
+OUTBOX_DISPATCH_MODE = os.getenv(
+    "OUTBOX_DISPATCH_MODE",
+    "local",
+)
+RABBITMQ_URL = os.getenv(
+    "RABBITMQ_URL",
+    "amqp://guest:guest@localhost:5672/",
+)
+RABBITMQ_EXCHANGE = os.getenv(
+    "RABBITMQ_EXCHANGE",
+    "flashsale.events",
+)
 
 # Security
 SECURE_SSL_REDIRECT = False
@@ -168,35 +265,69 @@ if ENABLE_HTTPS_REDIRECT:
     SECURE_HSTS_PRELOAD = True
 
     # if Nginx/Ingress
-    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    SECURE_PROXY_SSL_HEADER = (
+        "HTTP_X_FORWARDED_PROTO",
+        "https",
+    )
 
 # Passwords
 PASSWORD_HASHERS = [
-    'django.contrib.auth.hashers.Argon2PasswordHasher',
-    'django.contrib.auth.hashers.PBKDF2PasswordHasher'
+    (
+        "django.contrib.auth.hashers."
+        "Argon2PasswordHasher"
+    ),
+    (
+        "django.contrib.auth.hashers."
+        "PBKDF2PasswordHasher"
+    ),
 ]
 
 AUTH_PASSWORD_VALIDATORS = [
-    {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
-    {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
-    {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
+    {
+        "NAME": (
+            "django.contrib.auth.password_validation."
+            "UserAttributeSimilarityValidator"
+        )
+    },
+    {
+        "NAME": (
+            "django.contrib.auth.password_validation."
+            "CommonPasswordValidator"
+        )
+    },
+    {
+        "NAME": (
+            "django.contrib.auth.password_validation."
+            "NumericPasswordValidator"
+        )
+    },
 ]
 
-# DRF for webhook
+# Django REST Framework
 REST_FRAMEWORK = {
-    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    "DEFAULT_SCHEMA_CLASS": (
+        "drf_spectacular.openapi.AutoSchema"
+    ),
     "DEFAULT_AUTHENTICATION_CLASSES": [
-        "rest_framework.authentication.SessionAuthentication",
+        (
+            "rest_framework.authentication."
+            "SessionAuthentication"
+        ),
     ],
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.AllowAny",
     ],
+    "EXCEPTION_HANDLER": (
+        "app.api.exceptions.api_exception_handler"
+    ),
 }
 
 
 SPECTACULAR_SETTINGS = {
     "TITLE": "Flashsale Backend API",
-    "DESCRIPTION": "API documentation for flashsale-backend",
+    "DESCRIPTION": (
+        "API documentation for flashsale-backend"
+    ),
     "VERSION": "1.0.0",
     "SERVE_INCLUDE_SCHEMA": False,
 
@@ -208,12 +339,27 @@ SPECTACULAR_SETTINGS = {
 }
 
 # Webhooks / Go fetcher
-STRIPE_WEBHOOK_SECRET = getattr(s, "stripe_webhook_secret", "dev_stripe_webhook_secret")
-FETCHER_QUEUE_KEY = getattr(s, "fetcher_queue_key", "fetcher:queue")
-FETCHER_RESULT_PREFIX = getattr(s, "fetcher_result_prefix", "fetcher:result:")
+STRIPE_WEBHOOK_SECRET = getattr(
+    s,
+    "stripe_webhook_secret",
+    "dev_stripe_webhook_secret",
+)
+FETCHER_QUEUE_KEY = getattr(
+    s,
+    "fetcher_queue_key",
+    "fetcher:queue",
+)
+FETCHER_RESULT_PREFIX = getattr(
+    s,
+    "fetcher_result_prefix",
+    "fetcher:result:",
+)
 
 # Logging
-LOG_FORMAT = os.getenv("LOG_FORMAT", "colored")
+LOG_FORMAT = os.getenv(
+    "LOG_FORMAT",
+    "colored",
+)
 
 LOGGING = {
     "version": 1,
@@ -221,7 +367,11 @@ LOGGING = {
     "formatters": {
         "colored": {
             "()": "colorlog.ColoredFormatter",
-            "format": "%(log_color)s%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+            "format": (
+                "%(log_color)s%(asctime)s "
+                "[%(levelname)s] "
+                "%(name)s: %(message)s"
+            ),
             "datefmt": "%Y-%m-%d %H:%M:%S",
             "log_colors": {
                 "DEBUG": "cyan",
@@ -232,7 +382,10 @@ LOGGING = {
             },
         },
         "json": {
-            "()": "pythonjsonlogger.jsonlogger.JsonFormatter",
+            "()": (
+                "pythonjsonlogger.jsonlogger."
+                "JsonFormatter"
+            ),
             "fmt": (
                 "%(asctime)s "
                 "%(levelname)s "
@@ -256,30 +409,45 @@ LOGGING = {
     },
     "filters": {
         "request_id": {
-            "()": "app.core.logging_filters.RequestIdLoggingFilter"
+            "()": (
+                "app.core.logging_filters."
+                "RequestIdLoggingFilter"
+            )
         },
     },
     "handlers": {
         "console": {
             "class": "logging.StreamHandler",
             "stream": "ext://sys.stdout",
-            "formatter": "json" if LOG_FORMAT == "json" else "colored",
+            "formatter": (
+                "json"
+                if LOG_FORMAT == "json"
+                else "colored"
+            ),
             "level": "DEBUG",
-            "filters": ["request_id"],
+            "filters": [
+                "request_id",
+            ],
         },
     },
     "root": {
-        "handlers": ["console"],
+        "handlers": [
+            "console",
+        ],
         "level": "INFO",
     },
     "loggers": {
         "django": {
-            "handlers": ["console"],
+            "handlers": [
+                "console",
+            ],
             "level": "INFO",
             "propagate": False,
         },
         "outbox": {
-            "handlers": ["console"],
+            "handlers": [
+                "console",
+            ],
             "level": "INFO",
             "propagate": False,
         },
