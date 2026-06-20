@@ -1,15 +1,23 @@
+from drf_spectacular.utils import (
+    OpenApiParameter,
+    OpenApiTypes,
+    extend_schema,
+)
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiTypes
 
-from app.api.v1.notifications.filters.history import NotificationDeliveryHistoryFilter
-from app.api.v1.notifications.models import NotificationDelivery
-from app.api.v1.notifications.serializers import NotificationDeliveryHistorySerializer
-
-from app.api.v1.notifications.models import NotificationChannel
+from app.api.pagination import StandardPageNumberPagination
+from app.api.v1.notifications.filters.history import (
+    NotificationDeliveryHistoryFilter,
+)
+from app.api.v1.notifications.models import (
+    NotificationChannel,
+    NotificationDelivery,
+)
 from app.api.v1.notifications.serializers import (
     NotificationChannelSerializer,
+    NotificationDeliveryHistorySerializer,
     TelegramConnectLinkSerializer,
     TelegramOnboardingResponseSerializer,
     TelegramOnboardingSerializer,
@@ -21,8 +29,11 @@ from app.api.v1.notifications.services.telegram_onboarding import (
 
 @extend_schema(tags=["Notifications"])
 class NotificationChannelListCreateView(generics.ListCreateAPIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [
+        permissions.IsAuthenticated,
+    ]
     serializer_class = NotificationChannelSerializer
+    pagination_class = StandardPageNumberPagination
 
     def get_queryset(self):
         return (
@@ -34,7 +45,7 @@ class NotificationChannelListCreateView(generics.ListCreateAPIView):
 
 @extend_schema(tags=["Notifications"])
 class NotificationChannelDetailView(generics.RetrieveUpdateDestroyAPIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated,]
     serializer_class = NotificationChannelSerializer
     http_method_names = [
         "get",
@@ -52,18 +63,23 @@ class NotificationChannelDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 @extend_schema(tags=["Notifications"])
 class TelegramConnectLinkView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated,]
 
     def get(self, request):
-        connect_link = TelegramOnboardingService.build_connect_link(
-            user=request.user,
+        connect_link = (
+            TelegramOnboardingService
+            .build_connect_link(
+                user=request.user,
+            )
         )
 
         serializer = TelegramConnectLinkSerializer(
             {
                 "token": connect_link.token,
                 "url": connect_link.url,
-                "expires_in_seconds": connect_link.expires_in_seconds,
+                "expires_in_seconds": (
+                    connect_link.expires_in_seconds
+                ),
             }
         )
 
@@ -82,7 +98,9 @@ class TelegramConnectLinkView(APIView):
     },
 )
 class TelegramOnboardingView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [
+        permissions.IsAuthenticated,
+    ]
 
     def post(self, request):
         serializer = TelegramOnboardingSerializer(
@@ -91,15 +109,25 @@ class TelegramOnboardingView(APIView):
                 "request": request,
             },
         )
-        serializer.is_valid(raise_exception=True)
+        serializer.is_valid(
+            raise_exception=True,
+        )
 
         channel = serializer.save()
 
-        response_serializer = TelegramOnboardingResponseSerializer(channel)
+        response_serializer = (
+            TelegramOnboardingResponseSerializer(
+                channel
+            )
+        )
 
         response_status = (
             status.HTTP_201_CREATED
-            if getattr(serializer, "created", False)
+            if getattr(
+                serializer,
+                "created",
+                False,
+            )
             else status.HTTP_200_OK
         )
 
@@ -113,9 +141,10 @@ class TelegramOnboardingView(APIView):
     tags=["Notification History"],
     summary="Get notification delivery history",
     description=(
-        "Returns the authenticated user's notification delivery history. "
-        "The endpoint supports filtering by delivery status, channel id, "
-        "and creation date range."
+        "Returns the authenticated user's notification "
+        "delivery history. The endpoint supports filtering "
+        "by delivery status, channel id, and creation date "
+        "range."
     ),
     parameters=[
         OpenApiParameter(
@@ -123,7 +152,10 @@ class TelegramOnboardingView(APIView):
             type=OpenApiTypes.STR,
             location=OpenApiParameter.QUERY,
             required=False,
-            description="Filter by delivery status: pending, sent, failed.",
+            description=(
+                "Filter by delivery status: "
+                "pending, sent, failed."
+            ),
             enum=[
                 NotificationDelivery.Status.PENDING,
                 NotificationDelivery.Status.SENT,
@@ -135,30 +167,41 @@ class TelegramOnboardingView(APIView):
             type=OpenApiTypes.INT,
             location=OpenApiParameter.QUERY,
             required=False,
-            description="Filter by notification channel id.",
+            description=(
+                "Filter by notification channel id."
+            ),
         ),
         OpenApiParameter(
             name="created_from",
             type=OpenApiTypes.DATE,
             location=OpenApiParameter.QUERY,
             required=False,
-            description="Filter deliveries created from this date. Format: YYYY-MM-DD.",
+            description=(
+                "Filter deliveries created from this date. "
+                "Format: YYYY-MM-DD."
+            ),
         ),
         OpenApiParameter(
             name="created_to",
             type=OpenApiTypes.DATE,
             location=OpenApiParameter.QUERY,
             required=False,
-            description="Filter deliveries created up to this date. Format: YYYY-MM-DD.",
+            description=(
+                "Filter deliveries created up to this date. "
+                "Format: YYYY-MM-DD."
+            ),
         ),
     ],
     responses={
-        200: NotificationDeliveryHistorySerializer,
+        200: NotificationDeliveryHistorySerializer(
+            many=True,
+        ),
     },
 )
 class NotificationDeliveryHistoryListView(generics.ListAPIView):
     serializer_class = NotificationDeliveryHistorySerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated,]
+    pagination_class = StandardPageNumberPagination
 
     def get_queryset(self):
         queryset = (
@@ -180,7 +223,7 @@ class NotificationDeliveryHistoryListView(generics.ListAPIView):
 @extend_schema(tags=["Notification History"])
 class NotificationDeliveryHistoryDetailView(generics.RetrieveAPIView):
     serializer_class = NotificationDeliveryHistorySerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated,]
 
     def get_queryset(self):
         return (

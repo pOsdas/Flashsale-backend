@@ -12,6 +12,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from app.api.pagination import StandardPageNumberPagination
 from app.api.v1.monitoring.models import (
     Alert,
     Marketplace,
@@ -115,6 +116,7 @@ class MonitoringTargetListCreateAPIView(
 ):
     serializer_class = MonitoringTargetSerializer
     permission_classes = (IsAuthenticated,)
+    pagination_class = StandardPageNumberPagination
 
     def get_queryset(self):
         queryset = (
@@ -638,6 +640,7 @@ class ProductSnapshotListAPIView(
 ):
     serializer_class = ProductSnapshotSerializer
     permission_classes = (IsAuthenticated,)
+    pagination_class = StandardPageNumberPagination
 
     def get_queryset(self):
         target = get_object_or_404(
@@ -711,6 +714,7 @@ class ProductSnapshotListAPIView(
 class AlertListAPIView(generics.ListAPIView):
     serializer_class = AlertSerializer
     permission_classes = (IsAuthenticated,)
+    pagination_class = StandardPageNumberPagination
 
     def get_queryset(self):
         queryset = (
