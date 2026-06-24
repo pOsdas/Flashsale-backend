@@ -1,6 +1,7 @@
 import logging.config
 import os
 from pathlib import Path
+from dotenv import load_dotenv
 
 import dj_database_url
 
@@ -10,6 +11,17 @@ from app.core.config import get_settings
 
 # Base project dir
 BASE_DIR = Path(__file__).resolve().parent
+
+APP_ENV = os.getenv(
+    "APP_ENV",
+    "local",
+).strip().lower()
+
+if APP_ENV == "local":
+    load_dotenv(
+        dotenv_path=BASE_DIR.parent / ".env.local",
+        override=False,
+    )
 
 s = get_settings()
 
@@ -164,6 +176,7 @@ NOTIF_TELEGRAM_BOT_TOKEN = os.getenv(
     "NOTIF_TELEGRAM_BOT_TOKEN",
     "",
 )
+
 NOTIF_TELEGRAM_BOT_USERNAME = os.getenv(
     "NOTIF_TELEGRAM_BOT_USERNAME",
     "",

@@ -1,0 +1,132 @@
+from types import SimpleNamespace
+from unittest.mock import Mock
+
+from django.test import SimpleTestCase
+
+from app.api.v1.notifications.telegram.router import (
+    MESSAGE_CALLBACK_NOT_AVAILABLE,
+    MESSAGE_CONNECTED_COMMAND_NOT_AVAILABLE,
+    MESSAGE_OPEN_CONNECT_LINK,
+    MESSAGE_PRIVATE_CHAT_ONLY,
+    TelegramUpdateRouter,
+)
+
+
+class TelegramUpdateRouterTests(SimpleTestCase):
+    def setUp(self) -> None:
+        self.client = Mock()
+        self.replies = Mock()
+        self.start_handler = Mock()
+        self.user_context_resolver = Mock()
+        self.router = TelegramUpdateRouter(
+            client=self.client,
+            replies=self.replies,
+            start_handler=self.start_handler,
+            user_context_resolver=self.user_context_resolver,
+        )
+
+    def test_routes_start_command_with_token(self) -> None:
+        self.router.handle_update(
+            update={
+                "update_id": 1,
+                "message": {
+                    "chat": {
+                        "id": 123,
+                        "type": "private",
+                    },
+                    "text": "/start signed-token",
+                },
+            }
+        )
+
+        self.start_handler.handle.assert_called_once_with(
+            chat_id="123",
+            token="signed-token",
+        )
+
+    def test_rejects_group_chat(self) -> None:
+        self.router.handle_update(
+            update={
+                "update_id": 1,
+                "message": {
+                    "chat": {
+                        "id": -100123,
+                        "type": "supergroup",
+                    },
+                    "text": "/start",
+                },
+            }
+        )
+
+        self.replies.send_message.assert_called_once_with(
+            chat_id="-100123",
+            text=MESSAGE_PRIVATE_CHAT_ONLY,
+        )
+        self.start_handler.handle.assert_not_called()
+
+    def test_unconnected_user_receives_connect_message(self) -> None:
+        self.user_context_resolver.resolve.return_value = None
+
+        self.router.handle_update(
+            update={
+                "update_id": 1,
+                "message": {
+                    "chat": {
+                        "id": 123,
+                        "type": "private",
+                    },
+                    "text": "https://www.ozon.ru/product/123",
+                },
+            }
+        )
+
+        self.replies.send_message.assert_called_once_with(
+            chat_id="123",
+            text=MESSAGE_OPEN_CONNECT_LINK,
+        )
+
+    def test_connected_user_receives_current_capabilities(self) -> None:
+        self.user_context_resolver.resolve.return_value = (
+            SimpleNamespace(user=object())
+        )
+
+        self.router.handle_update(
+            update={
+                "update_id": 1,
+                "message": {
+                    "chat": {
+                        "id": 123,
+                        "type": "private",
+                    },
+                    "text": "/products",
+                },
+            }
+        )
+
+        self.replies.send_message.assert_called_once_with(
+            chat_id="123",
+            text=MESSAGE_CONNECTED_COMMAND_NOT_AVAILABLE,
+        )
+
+    def test_callback_query_is_always_answered(self) -> None:
+        self.router.handle_update(
+            update={
+                "update_id": 1,
+                "callback_query": {
+                    "id": "callback-1",
+                    "message": {
+                        "chat": {
+                            "id": 123,
+                            "type": "private",
+                        }
+                    },
+                    "data": "product:add:token",
+                },
+            }
+        )
+
+        self.client.answer_callback_query.assert_called_once_with(
+            callback_query_id="callback-1",
+            text=MESSAGE_CALLBACK_NOT_AVAILABLE,
+            show_alert=False,
+        )
