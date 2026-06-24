@@ -1,9 +1,21 @@
 from django.conf import settings
 from django.core.management.base import BaseCommand
 
+from app.api.v1.monitoring.services.product_preview import (
+    ProductPreviewService,
+)
 from app.api.v1.notifications.telegram.client import TelegramBotClient
+from app.api.v1.notifications.telegram.pending_product import (
+    TelegramPendingProductStore,
+)
 from app.api.v1.notifications.telegram.polling import (
     TelegramPollingRunner,
+)
+from app.api.v1.notifications.telegram.product_callback_handler import (
+    TelegramProductCallbackHandler,
+)
+from app.api.v1.notifications.telegram.product_link_handler import (
+    TelegramProductLinkHandler,
 )
 from app.api.v1.notifications.telegram.replies import (
     TelegramReplyService,
@@ -41,15 +53,63 @@ class Command(BaseCommand):
                 settings.NOTIF_TELEGRAM_REPLY_RATE_LIMIT_WINDOW_SECONDS
             ),
         )
+        pending_store = TelegramPendingProductStore(
+            ttl_seconds=int(
+                getattr(
+                    settings,
+                    "NOTIF_TELEGRAM_PENDING_PRODUCT_TTL_SECONDS",
+                    600,
+                )
+            ),
+            lock_seconds=int(
+                getattr(
+                    settings,
+                    "NOTIF_TELEGRAM_PENDING_PRODUCT_LOCK_SECONDS",
+                    30,
+                )
+            ),
+        )
         start_handler = TelegramStartHandler(
             replies=replies,
             user_context_resolver=user_context_resolver,
+        )
+        product_link_handler = TelegramProductLinkHandler(
+            replies=replies,
+            preview_service=ProductPreviewService(),
+            pending_store=pending_store,
+            preview_rate_limit=int(
+                getattr(
+                    settings,
+                    "NOTIF_TELEGRAM_PREVIEW_RATE_LIMIT_LIMIT",
+                    5,
+                )
+            ),
+            preview_rate_limit_window_seconds=int(
+                getattr(
+                    settings,
+                    "NOTIF_TELEGRAM_PREVIEW_RATE_LIMIT_WINDOW_SECONDS",
+                    60,
+                )
+            ),
+        )
+        product_callback_handler = (
+            TelegramProductCallbackHandler(
+                client=client,
+                pending_store=pending_store,
+                user_context_resolver=(
+                    user_context_resolver
+                ),
+            )
         )
         router = TelegramUpdateRouter(
             client=client,
             replies=replies,
             start_handler=start_handler,
             user_context_resolver=user_context_resolver,
+            product_link_handler=product_link_handler,
+            product_callback_handler=(
+                product_callback_handler
+            ),
         )
         runner = TelegramPollingRunner(
             client=client,

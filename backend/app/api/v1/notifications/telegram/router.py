@@ -1,6 +1,12 @@
 from typing import Any
 
 from app.api.v1.notifications.telegram.client import TelegramBotClient
+from app.api.v1.notifications.telegram.product_callback_handler import (
+    TelegramProductCallbackHandler,
+)
+from app.api.v1.notifications.telegram.product_link_handler import (
+    TelegramProductLinkHandler,
+)
 from app.api.v1.notifications.telegram.replies import (
     TelegramReplyService,
 )
@@ -27,10 +33,15 @@ MESSAGE_OPEN_CONNECT_LINK = (
     "в личном кабинете Flashsale Signals."
 )
 
-MESSAGE_CONNECTED_COMMAND_NOT_AVAILABLE = (
-    "✅ Telegram подключён.\n\n"
-    "Сейчас бот отправляет уведомления об изменениях товаров. "
-    "Команды управления товарами будут добавлены следующим этапом."
+MESSAGE_PRODUCTS_NOT_AVAILABLE = (
+    "Команда /products будет добавлена следующим этапом.\n\n"
+    "Сейчас отправьте ссылку на товар Wildberries или Ozon, "
+    "чтобы добавить его в отслеживание."
+)
+
+MESSAGE_UNKNOWN_COMMAND = (
+    "Неизвестная команда.\n\n"
+    "Отправьте ссылку на товар Wildberries или Ozon."
 )
 
 MESSAGE_CALLBACK_NOT_AVAILABLE = (
@@ -46,11 +57,15 @@ class TelegramUpdateRouter:
         replies: TelegramReplyService,
         start_handler: TelegramStartHandler,
         user_context_resolver: TelegramUserContextResolver,
+        product_link_handler: TelegramProductLinkHandler,
+        product_callback_handler: TelegramProductCallbackHandler,
     ) -> None:
         self.client = client
         self.replies = replies
         self.start_handler = start_handler
         self.user_context_resolver = user_context_resolver
+        self.product_link_handler = product_link_handler
+        self.product_callback_handler = product_callback_handler
 
     def handle_update(
         self,
@@ -111,13 +126,29 @@ class TelegramUpdateRouter:
         )
 
         if user_context is None:
-            message_text = MESSAGE_OPEN_CONNECT_LINK
-        else:
-            message_text = MESSAGE_CONNECTED_COMMAND_NOT_AVAILABLE
+            self.replies.send_message(
+                chat_id=chat_id,
+                text=MESSAGE_OPEN_CONNECT_LINK,
+            )
+            return
 
-        self.replies.send_message(
-            chat_id=chat_id,
-            text=message_text,
+        if command == "/products":
+            self.replies.send_message(
+                chat_id=chat_id,
+                text=MESSAGE_PRODUCTS_NOT_AVAILABLE,
+            )
+            return
+
+        if command is not None:
+            self.replies.send_message(
+                chat_id=chat_id,
+                text=MESSAGE_UNKNOWN_COMMAND,
+            )
+            return
+
+        self.product_link_handler.handle(
+            user_context=user_context,
+            text=text,
         )
 
     def _handle_callback_query(
@@ -127,6 +158,9 @@ class TelegramUpdateRouter:
     ) -> None:
         callback_query_id = str(
             callback_query.get("id") or ""
+        ).strip()
+        callback_data = str(
+            callback_query.get("data") or ""
         ).strip()
         message = callback_query.get("message") or {}
         chat = message.get("chat") or {}
@@ -140,6 +174,14 @@ class TelegramUpdateRouter:
                 callback_query_id=callback_query_id,
                 text=MESSAGE_PRIVATE_CHAT_ONLY,
                 show_alert=True,
+            )
+            return
+
+        if self.product_callback_handler.can_handle(
+            callback_data=callback_data,
+        ):
+            self.product_callback_handler.handle(
+                callback_query=callback_query,
             )
             return
 
