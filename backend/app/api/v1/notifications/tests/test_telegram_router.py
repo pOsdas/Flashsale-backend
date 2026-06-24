@@ -7,7 +7,6 @@ from app.api.v1.notifications.telegram.router import (
     MESSAGE_CALLBACK_NOT_AVAILABLE,
     MESSAGE_OPEN_CONNECT_LINK,
     MESSAGE_PRIVATE_CHAT_ONLY,
-    MESSAGE_PRODUCTS_NOT_AVAILABLE,
     TelegramUpdateRouter,
 )
 
@@ -20,6 +19,7 @@ class TelegramUpdateRouterTests(SimpleTestCase):
         self.user_context_resolver = Mock()
         self.product_link_handler = Mock()
         self.product_callback_handler = Mock()
+        self.products_handler = Mock()
         self.router = TelegramUpdateRouter(
             client=self.client,
             replies=self.replies,
@@ -29,6 +29,7 @@ class TelegramUpdateRouterTests(SimpleTestCase):
             product_callback_handler=(
                 self.product_callback_handler
             ),
+            products_handler=self.products_handler,
         )
 
     def test_routes_start_command_with_token(self) -> None:
@@ -113,10 +114,9 @@ class TelegramUpdateRouterTests(SimpleTestCase):
             text="https://www.ozon.ru/product/123",
         )
 
-    def test_products_command_returns_next_stage_message(self) -> None:
-        self.user_context_resolver.resolve.return_value = (
-            SimpleNamespace(user=object())
-        )
+    def test_products_command_is_routed(self) -> None:
+        user_context = SimpleNamespace(user=object())
+        self.user_context_resolver.resolve.return_value = user_context
 
         self.router.handle_update(
             update={
@@ -131,12 +131,11 @@ class TelegramUpdateRouterTests(SimpleTestCase):
             }
         )
 
-        self.replies.send_message.assert_called_once_with(
-            chat_id="123",
-            text=MESSAGE_PRODUCTS_NOT_AVAILABLE,
+        self.products_handler.handle_command.assert_called_once_with(
+            user_context=user_context,
         )
 
-    def test_product_callback_is_routed(self) -> None:
+    def test_product_preview_callback_is_routed(self) -> None:
         self.product_callback_handler.can_handle.return_value = True
         callback_query = {
             "id": "callback-1",
@@ -160,8 +159,34 @@ class TelegramUpdateRouterTests(SimpleTestCase):
             callback_query=callback_query,
         )
 
+    def test_products_callback_is_routed(self) -> None:
+        self.product_callback_handler.can_handle.return_value = False
+        self.products_handler.can_handle_callback.return_value = True
+        callback_query = {
+            "id": "callback-1",
+            "message": {
+                "chat": {
+                    "id": 123,
+                    "type": "private",
+                }
+            },
+            "data": "products:page:2",
+        }
+
+        self.router.handle_update(
+            update={
+                "update_id": 1,
+                "callback_query": callback_query,
+            }
+        )
+
+        self.products_handler.handle_callback.assert_called_once_with(
+            callback_query=callback_query,
+        )
+
     def test_unknown_callback_query_is_answered(self) -> None:
         self.product_callback_handler.can_handle.return_value = False
+        self.products_handler.can_handle_callback.return_value = False
 
         self.router.handle_update(
             update={

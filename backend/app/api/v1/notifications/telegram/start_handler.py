@@ -23,13 +23,14 @@ MESSAGE_ALREADY_CONNECTED = (
     "✅ Telegram уже подключён к Flashsale Signals.\n\n"
     "Отправьте ссылку на товар Wildberries или Ozon, "
     "чтобы добавить его в отслеживание.\n\n"
-    "Команда /products будет добавлена следующим этапом."
+    "Используйте /products для управления товарами."
 )
 
 MESSAGE_CONNECT_SUCCESS = (
     "✅ Telegram успешно подключён.\n\n"
     "Отправьте ссылку на товар Wildberries или Ozon, "
-    "чтобы добавить его в отслеживание."
+    "чтобы добавить его в отслеживание.\n\n"
+    "Используйте /products для управления товарами."
 )
 
 MESSAGE_CONNECT_ERROR_SUFFIX = (

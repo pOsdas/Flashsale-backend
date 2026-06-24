@@ -7,6 +7,9 @@ from app.api.v1.notifications.telegram.product_callback_handler import (
 from app.api.v1.notifications.telegram.product_link_handler import (
     TelegramProductLinkHandler,
 )
+from app.api.v1.notifications.telegram.products_handler import (
+    TelegramProductsHandler,
+)
 from app.api.v1.notifications.telegram.replies import (
     TelegramReplyService,
 )
@@ -33,15 +36,10 @@ MESSAGE_OPEN_CONNECT_LINK = (
     "в личном кабинете Flashsale Signals."
 )
 
-MESSAGE_PRODUCTS_NOT_AVAILABLE = (
-    "Команда /products будет добавлена следующим этапом.\n\n"
-    "Сейчас отправьте ссылку на товар Wildberries или Ozon, "
-    "чтобы добавить его в отслеживание."
-)
-
 MESSAGE_UNKNOWN_COMMAND = (
     "Неизвестная команда.\n\n"
-    "Отправьте ссылку на товар Wildberries или Ozon."
+    "Отправьте ссылку на товар Wildberries или Ozon "
+    "либо используйте /products."
 )
 
 MESSAGE_CALLBACK_NOT_AVAILABLE = (
@@ -59,6 +57,7 @@ class TelegramUpdateRouter:
         user_context_resolver: TelegramUserContextResolver,
         product_link_handler: TelegramProductLinkHandler,
         product_callback_handler: TelegramProductCallbackHandler,
+        products_handler: TelegramProductsHandler,
     ) -> None:
         self.client = client
         self.replies = replies
@@ -66,6 +65,7 @@ class TelegramUpdateRouter:
         self.user_context_resolver = user_context_resolver
         self.product_link_handler = product_link_handler
         self.product_callback_handler = product_callback_handler
+        self.products_handler = products_handler
 
     def handle_update(
         self,
@@ -133,9 +133,8 @@ class TelegramUpdateRouter:
             return
 
         if command == "/products":
-            self.replies.send_message(
-                chat_id=chat_id,
-                text=MESSAGE_PRODUCTS_NOT_AVAILABLE,
+            self.products_handler.handle_command(
+                user_context=user_context,
             )
             return
 
@@ -181,6 +180,14 @@ class TelegramUpdateRouter:
             callback_data=callback_data,
         ):
             self.product_callback_handler.handle(
+                callback_query=callback_query,
+            )
+            return
+
+        if self.products_handler.can_handle_callback(
+            callback_data=callback_data,
+        ):
+            self.products_handler.handle_callback(
                 callback_query=callback_query,
             )
             return

@@ -17,6 +17,9 @@ from app.api.v1.notifications.telegram.product_callback_handler import (
 from app.api.v1.notifications.telegram.product_link_handler import (
     TelegramProductLinkHandler,
 )
+from app.api.v1.notifications.telegram.products_handler import (
+    TelegramProductsHandler,
+)
 from app.api.v1.notifications.telegram.replies import (
     TelegramReplyService,
 )
@@ -101,6 +104,18 @@ class Command(BaseCommand):
                 ),
             )
         )
+        products_handler = TelegramProductsHandler(
+            client=client,
+            replies=replies,
+            user_context_resolver=user_context_resolver,
+            page_size=int(
+                getattr(
+                    settings,
+                    "NOTIF_TELEGRAM_PRODUCTS_PAGE_SIZE",
+                    3,
+                )
+            ),
+        )
         router = TelegramUpdateRouter(
             client=client,
             replies=replies,
@@ -110,6 +125,7 @@ class Command(BaseCommand):
             product_callback_handler=(
                 product_callback_handler
             ),
+            products_handler=products_handler,
         )
         runner = TelegramPollingRunner(
             client=client,

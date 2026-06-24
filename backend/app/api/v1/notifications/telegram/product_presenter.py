@@ -81,8 +81,7 @@ def build_product_added_text(
         f"{title}\n"
         f"Маркетплейс: {_format_marketplace(target.marketplace)}\n"
         f"Проверка: раз в {target.check_interval_minutes} минут\n\n"
-        "Команда /products позволит управлять товарами "
-        "на следующем этапе."
+        "Используйте /products для управления товарами."
     )
 
 
