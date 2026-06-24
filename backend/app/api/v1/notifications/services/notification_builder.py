@@ -46,11 +46,11 @@ class AlertNotificationBuilder:
 
     @classmethod
     def _get_change_title(cls, alert) -> str:
-        alert_type = getattr(alert, "type", "")
+        alert_type = getattr(alert, "alert_type", "")
 
         titles = {
             "price_changed": "Цена изменилась",
-            "price_decreased": "Цена снизилась",
+            "price_dropped": "Цена снизилась",
             "price_increased": "Цена выросла",
             "became_available": "Товар появился в наличии",
             "became_unavailable": "Товар пропал из наличия",
@@ -87,9 +87,9 @@ class AlertNotificationBuilder:
 
     @classmethod
     def _snapshot_value_by_alert_type(cls, alert, snapshot) -> str:
-        alert_type = getattr(alert, "type", "")
+        alert_type = getattr(alert, "alert_type", "")
 
-        if alert_type in ("price_changed", "price_decreased", "price_increased"):
+        if alert_type in ("price_changed", "price_dropped", "price_increased"):
             value = getattr(snapshot, "price", None)
             return cls._format_price(value)
 
@@ -112,9 +112,9 @@ class AlertNotificationBuilder:
 
     @classmethod
     def _format_value(cls, alert, value) -> str:
-        alert_type = getattr(alert, "type", "")
+        alert_type = getattr(alert, "alert_type", "")
 
-        if alert_type in ("price_changed", "price_decreased", "price_increased"):
+        if alert_type in ("price_changed", "price_dropped", "price_increased"):
             return cls._format_price(value)
 
         if alert_type in ("became_available", "became_unavailable"):
