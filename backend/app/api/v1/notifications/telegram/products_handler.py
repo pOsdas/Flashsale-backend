@@ -118,6 +118,21 @@ class TelegramProductsHandler:
             ),
         )
 
+    def edit_page(
+        self,
+        *,
+        chat_id: str,
+        message_id: int,
+        user_context: TelegramUserContext,
+        page: int,
+    ) -> None:
+        self._edit_page(
+            chat_id=chat_id,
+            message_id=message_id,
+            user_context=user_context,
+            page=page,
+        )
+
     def handle_callback(
         self,
         *,

@@ -19,6 +19,15 @@ from app.api.v1.notifications.telegram.replies import (
 from app.api.v1.notifications.telegram.start_handler import (
     TelegramStartHandler,
 )
+from app.api.v1.notifications.telegram.target_alert_settings_handler import (
+    TelegramTargetAlertSettingsHandler,
+)
+from app.api.v1.notifications.telegram.target_history_handler import (
+    TelegramTargetHistoryHandler,
+)
+from app.api.v1.notifications.telegram.target_interval_handler import (
+    TelegramTargetIntervalHandler,
+)
 from app.api.v1.notifications.telegram.user_context import (
     TelegramUserContextResolver,
 )
@@ -63,6 +72,9 @@ class TelegramUpdateRouter:
         product_link_handler: TelegramProductLinkHandler,
         product_callback_handler: TelegramProductCallbackHandler,
         products_handler: TelegramProductsHandler,
+        target_alert_settings_handler: TelegramTargetAlertSettingsHandler,
+        target_interval_handler: TelegramTargetIntervalHandler,
+        target_history_handler: TelegramTargetHistoryHandler,
     ) -> None:
         self.client = client
         self.replies = replies
@@ -72,6 +84,11 @@ class TelegramUpdateRouter:
         self.product_link_handler = product_link_handler
         self.product_callback_handler = product_callback_handler
         self.products_handler = products_handler
+        self.target_alert_settings_handler = (
+            target_alert_settings_handler
+        )
+        self.target_interval_handler = target_interval_handler
+        self.target_history_handler = target_history_handler
 
     def handle_update(
         self,
@@ -192,6 +209,30 @@ class TelegramUpdateRouter:
             callback_data=callback_data,
         ):
             self.product_callback_handler.handle(
+                callback_query=callback_query,
+            )
+            return
+
+        if self.target_alert_settings_handler.can_handle(
+            callback_data=callback_data,
+        ):
+            self.target_alert_settings_handler.handle(
+                callback_query=callback_query,
+            )
+            return
+
+        if self.target_interval_handler.can_handle(
+            callback_data=callback_data,
+        ):
+            self.target_interval_handler.handle(
+                callback_query=callback_query,
+            )
+            return
+
+        if self.target_history_handler.can_handle(
+            callback_data=callback_data,
+        ):
+            self.target_history_handler.handle(
                 callback_query=callback_query,
             )
             return

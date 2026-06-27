@@ -21,6 +21,9 @@ class TelegramUpdateRouterTests(SimpleTestCase):
         self.product_link_handler = Mock()
         self.product_callback_handler = Mock()
         self.products_handler = Mock()
+        self.target_alert_settings_handler = Mock()
+        self.target_interval_handler = Mock()
+        self.target_history_handler = Mock()
         self.router = TelegramUpdateRouter(
             client=self.client,
             replies=self.replies,
@@ -32,6 +35,11 @@ class TelegramUpdateRouterTests(SimpleTestCase):
                 self.product_callback_handler
             ),
             products_handler=self.products_handler,
+            target_alert_settings_handler=(
+                self.target_alert_settings_handler
+            ),
+            target_interval_handler=self.target_interval_handler,
+            target_history_handler=self.target_history_handler,
         )
 
     def test_routes_start_command_with_token(self) -> None:
@@ -158,16 +166,7 @@ class TelegramUpdateRouterTests(SimpleTestCase):
 
     def test_product_preview_callback_is_routed(self) -> None:
         self.product_callback_handler.can_handle.return_value = True
-        callback_query = {
-            "id": "callback-1",
-            "message": {
-                "chat": {
-                    "id": 123,
-                    "type": "private",
-                }
-            },
-            "data": "product:add:token",
-        }
+        callback_query = self._callback("product:add:token")
 
         self.router.handle_update(
             update={
@@ -180,19 +179,70 @@ class TelegramUpdateRouterTests(SimpleTestCase):
             callback_query=callback_query,
         )
 
+    def test_alert_settings_callback_is_routed(self) -> None:
+        self.product_callback_handler.can_handle.return_value = False
+        self.target_alert_settings_handler.can_handle.return_value = True
+        callback_query = self._callback(
+            "ta:o:00000000-0000-0000-0000-000000000001:1"
+        )
+
+        self.router.handle_update(
+            update={
+                "update_id": 1,
+                "callback_query": callback_query,
+            }
+        )
+
+        self.target_alert_settings_handler.handle.assert_called_once_with(
+            callback_query=callback_query,
+        )
+
+    def test_interval_callback_is_routed(self) -> None:
+        self.product_callback_handler.can_handle.return_value = False
+        self.target_alert_settings_handler.can_handle.return_value = False
+        self.target_interval_handler.can_handle.return_value = True
+        callback_query = self._callback(
+            "ti:o:00000000-0000-0000-0000-000000000001:1"
+        )
+
+        self.router.handle_update(
+            update={
+                "update_id": 1,
+                "callback_query": callback_query,
+            }
+        )
+
+        self.target_interval_handler.handle.assert_called_once_with(
+            callback_query=callback_query,
+        )
+
+    def test_history_callback_is_routed(self) -> None:
+        self.product_callback_handler.can_handle.return_value = False
+        self.target_alert_settings_handler.can_handle.return_value = False
+        self.target_interval_handler.can_handle.return_value = False
+        self.target_history_handler.can_handle.return_value = True
+        callback_query = self._callback(
+            "th:o:00000000-0000-0000-0000-000000000001:1"
+        )
+
+        self.router.handle_update(
+            update={
+                "update_id": 1,
+                "callback_query": callback_query,
+            }
+        )
+
+        self.target_history_handler.handle.assert_called_once_with(
+            callback_query=callback_query,
+        )
+
     def test_products_callback_is_routed(self) -> None:
         self.product_callback_handler.can_handle.return_value = False
+        self.target_alert_settings_handler.can_handle.return_value = False
+        self.target_interval_handler.can_handle.return_value = False
+        self.target_history_handler.can_handle.return_value = False
         self.products_handler.can_handle_callback.return_value = True
-        callback_query = {
-            "id": "callback-1",
-            "message": {
-                "chat": {
-                    "id": 123,
-                    "type": "private",
-                }
-            },
-            "data": "products:page:2",
-        }
+        callback_query = self._callback("products:page:2")
 
         self.router.handle_update(
             update={
@@ -207,21 +257,15 @@ class TelegramUpdateRouterTests(SimpleTestCase):
 
     def test_unknown_callback_query_is_answered(self) -> None:
         self.product_callback_handler.can_handle.return_value = False
+        self.target_alert_settings_handler.can_handle.return_value = False
+        self.target_interval_handler.can_handle.return_value = False
+        self.target_history_handler.can_handle.return_value = False
         self.products_handler.can_handle_callback.return_value = False
 
         self.router.handle_update(
             update={
                 "update_id": 1,
-                "callback_query": {
-                    "id": "callback-1",
-                    "message": {
-                        "chat": {
-                            "id": 123,
-                            "type": "private",
-                        }
-                    },
-                    "data": "unknown",
-                },
+                "callback_query": self._callback("unknown"),
             }
         )
 
@@ -230,3 +274,20 @@ class TelegramUpdateRouterTests(SimpleTestCase):
             text=MESSAGE_CALLBACK_NOT_AVAILABLE,
             show_alert=False,
         )
+
+    @staticmethod
+    def _callback(data: str) -> dict:
+        return {
+            "id": "callback-1",
+            "from": {
+                "id": 123,
+            },
+            "message": {
+                "message_id": 10,
+                "chat": {
+                    "id": 123,
+                    "type": "private",
+                },
+            },
+            "data": data,
+        }
