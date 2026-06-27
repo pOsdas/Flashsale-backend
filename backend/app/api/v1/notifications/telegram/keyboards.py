@@ -7,6 +7,11 @@ from app.api.v1.monitoring.services.alert_rule_service import (
 from app.api.v1.monitoring.services.target_query_service import (
     MonitoringTargetPage,
 )
+from app.api.v1.notifications.telegram.target_alert_rule_options import (
+    ALERT_COOLDOWN_OPTIONS,
+    get_threshold_kind,
+    get_threshold_options,
+)
 from app.api.v1.notifications.telegram.target_alert_settings_presenter import (
     ALERT_TYPE_TO_CALLBACK_CODE,
     ALERT_TYPE_TITLES,
@@ -35,6 +40,9 @@ TARGET_DELETE_CANCEL_CALLBACK_PREFIX = "target:delete:cancel:"
 TARGET_ALERTS_OPEN_CALLBACK_PREFIX = "ta:o:"
 TARGET_ALERTS_SET_CALLBACK_PREFIX = "ta:s:"
 TARGET_ALERTS_BACK_CALLBACK_PREFIX = "ta:b:"
+TARGET_ALERTS_DETAIL_CALLBACK_PREFIX = "ta:d:"
+TARGET_ALERTS_THRESHOLD_CALLBACK_PREFIX = "ta:t:"
+TARGET_ALERTS_COOLDOWN_CALLBACK_PREFIX = "ta:c:"
 
 TARGET_INTERVAL_OPEN_CALLBACK_PREFIX = "ti:o:"
 TARGET_INTERVAL_SET_CALLBACK_PREFIX = "ti:s:"
@@ -206,7 +214,14 @@ def build_target_alert_settings_keyboard(
                         f"{code}:{int(desired_state)}:"
                         f"{target_id}:{page}"
                     ),
-                }
+                },
+                {
+                    "text": "⚙️",
+                    "callback_data": (
+                        f"{TARGET_ALERTS_DETAIL_CALLBACK_PREFIX}"
+                        f"{code}:{target_id}:{page}"
+                    ),
+                },
             ]
         )
 
@@ -216,6 +231,92 @@ def build_target_alert_settings_keyboard(
                 "text": "⬅️ К товарам",
                 "callback_data": _build_target_callback_data(
                     prefix=TARGET_ALERTS_BACK_CALLBACK_PREFIX,
+                    target_id=target_id,
+                    page=page,
+                ),
+            }
+        ]
+    )
+
+    return {
+        "inline_keyboard": rows,
+    }
+
+
+def build_target_alert_rule_detail_keyboard(
+    *,
+    target_id: str,
+    page: int,
+    rule: EffectiveAlertRule,
+) -> dict[str, Any]:
+    code = ALERT_TYPE_TO_CALLBACK_CODE[rule.alert_type]
+    desired_state = not rule.is_enabled
+    state_text = "Выключить" if rule.is_enabled else "Включить"
+    rows: list[list[dict[str, str]]] = [
+        [
+            {
+                "text": (
+                    f"{'✅' if rule.is_enabled else '❌'} "
+                    f"{state_text} правило"
+                ),
+                "callback_data": (
+                    f"{TARGET_ALERTS_SET_CALLBACK_PREFIX}"
+                    f"{code}:{int(desired_state)}:"
+                    f"{target_id}:{page}:d"
+                ),
+            }
+        ]
+    ]
+
+    threshold_kind = get_threshold_kind(alert_type=rule.alert_type)
+    threshold_options = get_threshold_options(alert_type=rule.alert_type)
+
+    if threshold_kind is not None and threshold_options:
+        threshold_buttons: list[dict[str, str]] = []
+        current_threshold = (
+            rule.threshold_percent
+            if threshold_kind == "percent"
+            else rule.threshold_absolute
+        )
+
+        for option in threshold_options:
+            marker = "✅ " if current_threshold == option.value else ""
+            threshold_buttons.append(
+                {
+                    "text": f"{marker}Порог {option.label}",
+                    "callback_data": (
+                        f"{TARGET_ALERTS_THRESHOLD_CALLBACK_PREFIX}"
+                        f"{code}:{option.code}:{target_id}:{page}"
+                    ),
+                }
+            )
+
+        for index in range(0, len(threshold_buttons), 2):
+            rows.append(threshold_buttons[index:index + 2])
+
+    cooldown_buttons: list[dict[str, str]] = []
+
+    for option in ALERT_COOLDOWN_OPTIONS:
+        marker = "✅ " if rule.cooldown_minutes == option.minutes else ""
+        cooldown_buttons.append(
+            {
+                "text": f"{marker}Тишина: {option.label}",
+                "callback_data": (
+                    f"{TARGET_ALERTS_COOLDOWN_CALLBACK_PREFIX}"
+                    f"{code}:{option.minutes}:{target_id}:{page}"
+                ),
+            }
+        )
+
+    for index in range(0, len(cooldown_buttons), 2):
+        rows.append(cooldown_buttons[index:index + 2])
+
+    rows.append(
+        [
+            {
+                "text": "⬅️ К правилам",
+                "callback_data": _build_target_callback_data(
+                    prefix=TARGET_ALERTS_OPEN_CALLBACK_PREFIX,
                     target_id=target_id,
                     page=page,
                 ),
