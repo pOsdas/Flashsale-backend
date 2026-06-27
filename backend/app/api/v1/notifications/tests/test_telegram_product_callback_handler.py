@@ -54,14 +54,14 @@ class TelegramProductCallbackHandlerTests(SimpleTestCase):
     )
     @patch(
         "app.api.v1.notifications.telegram.product_callback_handler."
-        "MonitoringTarget.objects.filter"
+        "find_existing_monitoring_target"
     )
     def test_add_callback_creates_target(
         self,
-        filter_mock,
+        find_existing_mock,
         create_target_mock,
     ) -> None:
-        filter_mock.return_value.exists.return_value = False
+        find_existing_mock.return_value = None
         create_target_mock.return_value = SimpleNamespace(
             title="Товар",
             external_id="123",
@@ -71,18 +71,7 @@ class TelegramProductCallbackHandlerTests(SimpleTestCase):
         )
 
         self.handler.handle(
-            callback_query={
-                "id": "callback-1",
-                "from": {"id": 123},
-                "data": "product:add:token",
-                "message": {
-                    "message_id": 50,
-                    "chat": {
-                        "id": 123,
-                        "type": "private",
-                    },
-                },
-            }
+            callback_query=self._callback("product:add:token")
         )
 
         create_target_mock.assert_called_once()
@@ -91,23 +80,60 @@ class TelegramProductCallbackHandlerTests(SimpleTestCase):
         )
         self.client.edit_message_text.assert_called_once()
 
+    @patch(
+        "app.api.v1.notifications.telegram.product_callback_handler."
+        "create_monitoring_target"
+    )
+    @patch(
+        "app.api.v1.notifications.telegram.product_callback_handler."
+        "find_existing_monitoring_target"
+    )
+    def test_duplicate_callback_does_not_create_target(
+        self,
+        find_existing_mock,
+        create_target_mock,
+    ) -> None:
+        find_existing_mock.return_value = SimpleNamespace(
+            id="target-id",
+            title="Товар",
+            external_id="123",
+            url=self.pending_product.url,
+            marketplace="wb",
+            check_interval_minutes=60,
+        )
+
+        self.handler.handle(
+            callback_query=self._callback("product:add:token")
+        )
+
+        create_target_mock.assert_not_called()
+        self.pending_store.delete.assert_called_once_with(
+            token="token"
+        )
+        edit_call = self.client.edit_message_text.call_args.kwargs
+        self.assertIn("уже отслеживается", edit_call["text"])
+
     def test_cancel_callback_removes_pending_product(self) -> None:
         self.handler.handle(
-            callback_query={
-                "id": "callback-1",
-                "from": {"id": 123},
-                "data": "product:cancel:token",
-                "message": {
-                    "message_id": 50,
-                    "chat": {
-                        "id": 123,
-                        "type": "private",
-                    },
-                },
-            }
+            callback_query=self._callback("product:cancel:token")
         )
 
         self.pending_store.delete.assert_called_once_with(
             token="token"
         )
         self.client.edit_message_text.assert_called_once()
+
+    @staticmethod
+    def _callback(data: str) -> dict:
+        return {
+            "id": "callback-1",
+            "from": {"id": 123},
+            "data": data,
+            "message": {
+                "message_id": 50,
+                "chat": {
+                    "id": 123,
+                    "type": "private",
+                },
+            },
+        }

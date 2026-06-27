@@ -7,6 +7,9 @@ from app.api.v1.monitoring.services.alert_rule_service import (
 from app.api.v1.monitoring.services.target_query_service import (
     MonitoringTargetPage,
 )
+from app.api.v1.notifications.services.channel_settings_service import (
+    TelegramChannelSettings,
+)
 from app.api.v1.notifications.telegram.target_alert_rule_options import (
     ALERT_COOLDOWN_OPTIONS,
     get_threshold_kind,
@@ -51,6 +54,11 @@ TARGET_INTERVAL_BACK_CALLBACK_PREFIX = "ti:b:"
 TARGET_HISTORY_OPEN_CALLBACK_PREFIX = "th:o:"
 TARGET_HISTORY_BACK_CALLBACK_PREFIX = "th:b:"
 
+NOTIFICATIONS_OPEN_CALLBACK_DATA = "ng:o"
+NOTIFICATIONS_ACTIVE_CALLBACK_PREFIX = "ng:a:"
+NOTIFICATIONS_TYPE_CALLBACK_PREFIX = "ng:t:"
+NOTIFICATIONS_HISTORY_CALLBACK_DATA = "ng:h"
+
 
 def build_product_preview_keyboard(
     *,
@@ -74,6 +82,112 @@ def build_product_preview_keyboard(
                     ),
                 }
             ],
+        ]
+    }
+
+
+def build_existing_product_keyboard(
+    *,
+    target_id: str,
+) -> dict[str, Any]:
+    return {
+        "inline_keyboard": [
+            [
+                {
+                    "text": "📦 Открыть мои товары",
+                    "callback_data": (
+                        f"{PRODUCTS_PAGE_CALLBACK_PREFIX}1"
+                    ),
+                }
+            ],
+            [
+                {
+                    "text": "🔄 Проверить сейчас",
+                    "callback_data": _build_target_callback_data(
+                        prefix=TARGET_CHECK_CALLBACK_PREFIX,
+                        target_id=target_id,
+                        page=1,
+                    ),
+                }
+            ],
+        ]
+    }
+
+
+def build_notification_settings_keyboard(
+    *,
+    settings: TelegramChannelSettings,
+) -> dict[str, Any]:
+    rows: list[list[dict[str, str]]] = [
+        [
+            {
+                "text": (
+                    "🔕 Приостановить все"
+                    if settings.is_active
+                    else "🔔 Возобновить все"
+                ),
+                "callback_data": (
+                    f"{NOTIFICATIONS_ACTIVE_CALLBACK_PREFIX}"
+                    f"{int(not settings.is_active)}"
+                ),
+            }
+        ]
+    ]
+
+    for alert_type in settings.supported_alert_types:
+        code = ALERT_TYPE_TO_CALLBACK_CODE.get(alert_type)
+
+        if code is None:
+            continue
+
+        marker = (
+            "✅"
+            if settings.allows_alert_type(alert_type)
+            else "❌"
+        )
+        title = ALERT_TYPE_TITLES.get(
+            alert_type,
+            alert_type,
+        )
+        rows.append(
+            [
+                {
+                    "text": f"{marker} {title}",
+                    "callback_data": (
+                        f"{NOTIFICATIONS_TYPE_CALLBACK_PREFIX}"
+                        f"{code}"
+                    ),
+                }
+            ]
+        )
+
+    rows.append(
+        [
+            {
+                "text": "📨 История доставок",
+                "callback_data": (
+                    NOTIFICATIONS_HISTORY_CALLBACK_DATA
+                ),
+            }
+        ]
+    )
+
+    return {
+        "inline_keyboard": rows,
+    }
+
+
+def build_notification_delivery_history_keyboard() -> dict[str, Any]:
+    return {
+        "inline_keyboard": [
+            [
+                {
+                    "text": "⬅️ К настройкам",
+                    "callback_data": (
+                        NOTIFICATIONS_OPEN_CALLBACK_DATA
+                    ),
+                }
+            ]
         ]
     }
 

@@ -7,7 +7,11 @@ from app.api.v1.monitoring.services.product_preview import (
     ProductPreviewError,
     ProductPreviewService,
 )
+from app.api.v1.monitoring.services.target_duplicate_service import (
+    find_existing_monitoring_target,
+)
 from app.api.v1.notifications.telegram.keyboards import (
+    build_existing_product_keyboard,
     build_product_preview_keyboard,
 )
 from app.api.v1.notifications.telegram.pending_product import (
@@ -15,6 +19,7 @@ from app.api.v1.notifications.telegram.pending_product import (
     TelegramPendingProductStore,
 )
 from app.api.v1.notifications.telegram.product_presenter import (
+    build_product_already_tracked_text,
     build_product_preview_text,
 )
 from app.api.v1.notifications.telegram.replies import TelegramReplyService
@@ -62,6 +67,20 @@ class TelegramProductLinkHandler:
             )
             return
 
+        existing_target = find_existing_monitoring_target(
+            user=user_context.user,
+            marketplace=resolved_url.marketplace,
+            external_id="",
+            url=resolved_url.url,
+        )
+
+        if existing_target is not None:
+            self._send_existing_target(
+                user_context=user_context,
+                target=existing_target,
+            )
+            return
+
         if not self._check_preview_rate_limit(
             user_context=user_context,
         ):
@@ -76,6 +95,20 @@ class TelegramProductLinkHandler:
             self.replies.send_message(
                 chat_id=user_context.telegram_chat_id,
                 text=f"⚠️ {exc}",
+            )
+            return
+
+        existing_target = find_existing_monitoring_target(
+            user=user_context.user,
+            marketplace=resolved_url.marketplace,
+            external_id=preview.external_id,
+            url=resolved_url.url,
+        )
+
+        if existing_target is not None:
+            self._send_existing_target(
+                user_context=user_context,
+                target=existing_target,
             )
             return
 
@@ -129,6 +162,22 @@ class TelegramProductLinkHandler:
             self.pending_store.delete(
                 token=pending_product.token,
             )
+
+    def _send_existing_target(
+        self,
+        *,
+        user_context: TelegramUserContext,
+        target,
+    ) -> None:
+        self.replies.send_message(
+            chat_id=user_context.telegram_chat_id,
+            text=build_product_already_tracked_text(
+                target=target,
+            ),
+            reply_markup=build_existing_product_keyboard(
+                target_id=str(target.id),
+            ),
+        )
 
     def _check_preview_rate_limit(
         self,

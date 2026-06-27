@@ -28,7 +28,24 @@ class TelegramProductLinkHandlerTests(SimpleTestCase):
             user=SimpleNamespace(pk=7),
             telegram_chat_id="123",
         )
+        self.preview = ProductPreviewData(
+            external_id="123",
+            title="Товар",
+            seller_name="Продавец",
+            brand="Бренд",
+            price=1000,
+            old_price=1200,
+            currency="RUB",
+            is_available=True,
+            rating=4.8,
+            reviews_count=15,
+            raw_data={},
+        )
 
+    @patch(
+        "app.api.v1.notifications.telegram.product_link_handler."
+        "find_existing_monitoring_target"
+    )
     @patch(
         "app.api.v1.notifications.telegram.product_link_handler."
         "check_rate_limit"
@@ -36,25 +53,13 @@ class TelegramProductLinkHandlerTests(SimpleTestCase):
     def test_sends_preview_with_inline_keyboard(
         self,
         check_rate_limit_mock,
+        find_existing_mock,
     ) -> None:
         check_rate_limit_mock.return_value = SimpleNamespace(
             allowed=True,
         )
-        self.preview_service.preview_product.return_value = (
-            ProductPreviewData(
-                external_id="123",
-                title="Товар",
-                seller_name="Продавец",
-                brand="Бренд",
-                price=1000,
-                old_price=1200,
-                currency="RUB",
-                is_available=True,
-                rating=4.8,
-                reviews_count=15,
-                raw_data={},
-            )
-        )
+        find_existing_mock.return_value = None
+        self.preview_service.preview_product.return_value = self.preview
         self.pending_store.create.return_value = (
             PendingTelegramProduct(
                 token="token",
@@ -102,6 +107,50 @@ class TelegramProductLinkHandlerTests(SimpleTestCase):
                 "callback_data"
             ],
             "product:add:token",
+        )
+
+    @patch(
+        "app.api.v1.notifications.telegram.product_link_handler."
+        "find_existing_monitoring_target"
+    )
+    @patch(
+        "app.api.v1.notifications.telegram.product_link_handler."
+        "check_rate_limit"
+    )
+    def test_existing_target_skips_pending_confirmation(
+        self,
+        check_rate_limit_mock,
+        find_existing_mock,
+    ) -> None:
+        check_rate_limit_mock.return_value = SimpleNamespace(
+            allowed=True,
+        )
+        self.preview_service.preview_product.return_value = self.preview
+        find_existing_mock.return_value = SimpleNamespace(
+            id="target-id",
+            title="Товар",
+            external_id="123",
+            url="https://example.com/product",
+            marketplace="wb",
+            check_interval_minutes=60,
+        )
+
+        self.handler.handle(
+            user_context=self.user_context,
+            text=(
+                "https://www.wildberries.ru/"
+                "catalog/123/detail.aspx"
+            ),
+        )
+
+        self.pending_store.create.assert_not_called()
+        send_call = self.replies.send_message.call_args.kwargs
+        self.assertIn("уже отслеживается", send_call["text"])
+        self.assertEqual(
+            send_call["reply_markup"]["inline_keyboard"][0][0][
+                "callback_data"
+            ],
+            "products:page:1",
         )
 
     def test_rejects_message_without_supported_url(self) -> None:

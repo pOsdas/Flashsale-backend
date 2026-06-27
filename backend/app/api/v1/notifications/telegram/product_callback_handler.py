@@ -1,8 +1,8 @@
 from typing import Any
 
-from app.api.v1.monitoring.models import (
-    MonitoringTarget,
-    MonitoringTargetRole,
+from app.api.v1.monitoring.models import MonitoringTargetRole
+from app.api.v1.monitoring.services.target_duplicate_service import (
+    find_existing_monitoring_target,
 )
 from app.api.v1.monitoring.services.target_service import (
     MonitoringTargetServiceError,
@@ -13,6 +13,7 @@ from app.api.v1.notifications.telegram.keyboards import (
     PRODUCT_ADD_CALLBACK_PREFIX,
     PRODUCT_CANCEL_CALLBACK_PREFIX,
     build_empty_inline_keyboard,
+    build_existing_product_keyboard,
     build_product_preview_keyboard,
 )
 from app.api.v1.notifications.telegram.pending_product import (
@@ -21,6 +22,7 @@ from app.api.v1.notifications.telegram.pending_product import (
 )
 from app.api.v1.notifications.telegram.product_presenter import (
     build_product_added_text,
+    build_product_already_tracked_text,
     build_product_cancelled_text,
     build_product_retry_text,
 )
@@ -187,13 +189,26 @@ class TelegramProductCallbackHandler:
         )
 
         try:
-            already_existed = (
-                MonitoringTarget.objects.filter(
-                    user=user_context.user,
-                    marketplace=pending_product.marketplace,
-                    external_id=pending_product.external_id,
-                ).exists()
+            existing_target = find_existing_monitoring_target(
+                user=user_context.user,
+                marketplace=pending_product.marketplace,
+                external_id=pending_product.external_id,
+                url=pending_product.url,
             )
+
+            if existing_target is not None:
+                self.pending_store.delete(token=token)
+                self.client.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    text=build_product_already_tracked_text(
+                        target=existing_target,
+                    ),
+                    reply_markup=build_existing_product_keyboard(
+                        target_id=str(existing_target.id),
+                    ),
+                )
+                return
 
             target = create_monitoring_target(
                 user=user_context.user,
@@ -256,7 +271,7 @@ class TelegramProductCallbackHandler:
             message_id=message_id,
             text=build_product_added_text(
                 target=target,
-                already_existed=already_existed,
+                already_existed=False,
             ),
             reply_markup=build_empty_inline_keyboard(),
         )

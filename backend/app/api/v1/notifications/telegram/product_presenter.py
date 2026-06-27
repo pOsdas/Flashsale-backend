@@ -85,6 +85,22 @@ def build_product_added_text(
     )
 
 
+
+def build_product_already_tracked_text(
+    *,
+    target: MonitoringTarget,
+) -> str:
+    title = target.title or target.external_id or target.url
+
+    return (
+        "ℹ️ Этот товар уже отслеживается.\n\n"
+        f"{title}\n"
+        f"Маркетплейс: {_format_marketplace(target.marketplace)}\n"
+        f"Проверка: раз в {target.check_interval_minutes} минут\n\n"
+        "Новый товар и дополнительная проверка не создавались."
+    )
+
+
 def build_product_cancelled_text(
     *,
     pending_product: PendingTelegramProduct,

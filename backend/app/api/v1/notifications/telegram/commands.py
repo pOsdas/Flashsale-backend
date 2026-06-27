@@ -11,6 +11,10 @@ TELEGRAM_BOT_COMMANDS: Final[tuple[dict[str, str], ...]] = (
         "description": "Отслеживаемые товары",
     },
     {
+        "command": "notifications",
+        "description": "Настройки и история уведомлений",
+    },
+    {
         "command": "help",
         "description": "Список команд",
     },
@@ -19,6 +23,7 @@ TELEGRAM_BOT_COMMANDS: Final[tuple[dict[str, str], ...]] = (
 COMMANDS_LIST_TEXT: Final[str] = (
     "/start — главное меню\n"
     "/products — отслеживаемые товары\n"
+    "/notifications — настройки и история уведомлений\n"
     "/help — список команд"
 )
 

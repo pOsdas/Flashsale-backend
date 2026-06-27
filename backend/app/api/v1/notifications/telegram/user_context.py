@@ -28,7 +28,6 @@ class TelegramUserContextResolver:
             .filter(
                 type=NotificationChannel.ChannelType.TELEGRAM,
                 telegram_chat_id=normalized_chat_id,
-                is_active=True,
                 user__is_active=True,
             )
             .order_by("-updated_at")

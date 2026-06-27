@@ -21,6 +21,7 @@ class TelegramUpdateRouterTests(SimpleTestCase):
         self.product_link_handler = Mock()
         self.product_callback_handler = Mock()
         self.products_handler = Mock()
+        self.notifications_handler = Mock()
         self.target_alert_settings_handler = Mock()
         self.target_interval_handler = Mock()
         self.target_history_handler = Mock()
@@ -35,12 +36,19 @@ class TelegramUpdateRouterTests(SimpleTestCase):
                 self.product_callback_handler
             ),
             products_handler=self.products_handler,
+            notifications_handler=self.notifications_handler,
             target_alert_settings_handler=(
                 self.target_alert_settings_handler
             ),
             target_interval_handler=self.target_interval_handler,
             target_history_handler=self.target_history_handler,
         )
+        self.product_callback_handler.can_handle.return_value = False
+        self.notifications_handler.can_handle.return_value = False
+        self.target_alert_settings_handler.can_handle.return_value = False
+        self.target_interval_handler.can_handle.return_value = False
+        self.target_history_handler.can_handle.return_value = False
+        self.products_handler.can_handle_callback.return_value = False
 
     def test_routes_start_command_with_token(self) -> None:
         self.router.handle_update(
@@ -164,6 +172,27 @@ class TelegramUpdateRouterTests(SimpleTestCase):
             user_context=user_context,
         )
 
+    def test_notifications_command_is_routed(self) -> None:
+        user_context = SimpleNamespace(user=object())
+        self.user_context_resolver.resolve.return_value = user_context
+
+        self.router.handle_update(
+            update={
+                "update_id": 1,
+                "message": {
+                    "chat": {
+                        "id": 123,
+                        "type": "private",
+                    },
+                    "text": "/notifications",
+                },
+            }
+        )
+
+        self.notifications_handler.handle_command.assert_called_once_with(
+            user_context=user_context,
+        )
+
     def test_product_preview_callback_is_routed(self) -> None:
         self.product_callback_handler.can_handle.return_value = True
         callback_query = self._callback("product:add:token")
@@ -176,6 +205,21 @@ class TelegramUpdateRouterTests(SimpleTestCase):
         )
 
         self.product_callback_handler.handle.assert_called_once_with(
+            callback_query=callback_query,
+        )
+
+    def test_notifications_callback_is_routed(self) -> None:
+        self.notifications_handler.can_handle.return_value = True
+        callback_query = self._callback("ng:h")
+
+        self.router.handle_update(
+            update={
+                "update_id": 1,
+                "callback_query": callback_query,
+            }
+        )
+
+        self.notifications_handler.handle.assert_called_once_with(
             callback_query=callback_query,
         )
 

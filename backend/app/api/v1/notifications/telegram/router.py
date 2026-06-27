@@ -4,6 +4,9 @@ from app.api.v1.notifications.telegram.client import TelegramBotClient
 from app.api.v1.notifications.telegram.help_handler import (
     TelegramHelpHandler,
 )
+from app.api.v1.notifications.telegram.notifications_handler import (
+    TelegramNotificationsHandler,
+)
 from app.api.v1.notifications.telegram.product_callback_handler import (
     TelegramProductCallbackHandler,
 )
@@ -72,6 +75,7 @@ class TelegramUpdateRouter:
         product_link_handler: TelegramProductLinkHandler,
         product_callback_handler: TelegramProductCallbackHandler,
         products_handler: TelegramProductsHandler,
+        notifications_handler: TelegramNotificationsHandler,
         target_alert_settings_handler: TelegramTargetAlertSettingsHandler,
         target_interval_handler: TelegramTargetIntervalHandler,
         target_history_handler: TelegramTargetHistoryHandler,
@@ -84,6 +88,7 @@ class TelegramUpdateRouter:
         self.product_link_handler = product_link_handler
         self.product_callback_handler = product_callback_handler
         self.products_handler = products_handler
+        self.notifications_handler = notifications_handler
         self.target_alert_settings_handler = (
             target_alert_settings_handler
         )
@@ -167,6 +172,12 @@ class TelegramUpdateRouter:
             )
             return
 
+        if command == "/notifications":
+            self.notifications_handler.handle_command(
+                user_context=user_context,
+            )
+            return
+
         if command is not None:
             self.replies.send_message(
                 chat_id=chat_id,
@@ -209,6 +220,14 @@ class TelegramUpdateRouter:
             callback_data=callback_data,
         ):
             self.product_callback_handler.handle(
+                callback_query=callback_query,
+            )
+            return
+
+        if self.notifications_handler.can_handle(
+            callback_data=callback_data,
+        ):
+            self.notifications_handler.handle(
                 callback_query=callback_query,
             )
             return

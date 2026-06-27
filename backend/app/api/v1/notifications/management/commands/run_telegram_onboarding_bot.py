@@ -11,6 +11,9 @@ from app.api.v1.notifications.telegram.commands import (
 from app.api.v1.notifications.telegram.help_handler import (
     TelegramHelpHandler,
 )
+from app.api.v1.notifications.telegram.notifications_handler import (
+    TelegramNotificationsHandler,
+)
 from app.api.v1.notifications.telegram.pending_product import (
     TelegramPendingProductStore,
 )
@@ -162,6 +165,18 @@ class Command(BaseCommand):
                 )
             ),
         )
+        notifications_handler = TelegramNotificationsHandler(
+            client=client,
+            replies=replies,
+            user_context_resolver=user_context_resolver,
+            delivery_history_limit=int(
+                getattr(
+                    settings,
+                    "NOTIF_TELEGRAM_DELIVERY_HISTORY_LIMIT",
+                    10,
+                )
+            ),
+        )
         router = TelegramUpdateRouter(
             client=client,
             replies=replies,
@@ -173,6 +188,7 @@ class Command(BaseCommand):
                 product_callback_handler
             ),
             products_handler=products_handler,
+            notifications_handler=notifications_handler,
             target_alert_settings_handler=(
                 target_alert_settings_handler
             ),
