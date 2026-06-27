@@ -4,6 +4,9 @@ import httpx
 from django.test import SimpleTestCase
 
 from app.api.v1.notifications.telegram.client import TelegramBotClient
+from app.api.v1.notifications.telegram.commands import (
+    TELEGRAM_BOT_COMMANDS,
+)
 
 
 class TelegramBotClientTests(SimpleTestCase):
@@ -45,6 +48,45 @@ class TelegramBotClientTests(SimpleTestCase):
                 "message",
                 "callback_query",
             ],
+        )
+
+        http_client.close()
+
+    def test_set_my_commands_registers_command_menu(self) -> None:
+        captured_path = ""
+        captured_payload: dict | None = None
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            nonlocal captured_path, captured_payload
+            captured_path = request.url.path
+            captured_payload = json.loads(request.content)
+            return httpx.Response(
+                200,
+                json={
+                    "ok": True,
+                    "result": True,
+                },
+            )
+
+        http_client = httpx.Client(
+            base_url="https://api.telegram.org/bottest-token",
+            transport=httpx.MockTransport(handler),
+        )
+        client = TelegramBotClient(
+            token="test-token",
+            client=http_client,
+        )
+
+        result = client.set_my_commands(
+            commands=TELEGRAM_BOT_COMMANDS,
+        )
+
+        self.assertTrue(result)
+        self.assertEqual(captured_path, "/bottest-token/setMyCommands")
+        self.assertIsNotNone(captured_payload)
+        self.assertEqual(
+            captured_payload["commands"],
+            list(TELEGRAM_BOT_COMMANDS),
         )
 
         http_client.close()

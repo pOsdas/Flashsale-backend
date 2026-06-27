@@ -1,6 +1,9 @@
 from typing import Any
 
 from app.api.v1.notifications.telegram.client import TelegramBotClient
+from app.api.v1.notifications.telegram.help_handler import (
+    TelegramHelpHandler,
+)
 from app.api.v1.notifications.telegram.product_callback_handler import (
     TelegramProductCallbackHandler,
 )
@@ -38,8 +41,9 @@ MESSAGE_OPEN_CONNECT_LINK = (
 
 MESSAGE_UNKNOWN_COMMAND = (
     "Неизвестная команда.\n\n"
-    "Отправьте ссылку на товар Wildberries или Ozon "
-    "либо используйте /products."
+    "Используйте /help, чтобы посмотреть "
+    "список команд, либо отправьте ссылку "
+    "на товар Wildberries или Ozon."
 )
 
 MESSAGE_CALLBACK_NOT_AVAILABLE = (
@@ -54,6 +58,7 @@ class TelegramUpdateRouter:
         client: TelegramBotClient,
         replies: TelegramReplyService,
         start_handler: TelegramStartHandler,
+        help_handler: TelegramHelpHandler,
         user_context_resolver: TelegramUserContextResolver,
         product_link_handler: TelegramProductLinkHandler,
         product_callback_handler: TelegramProductCallbackHandler,
@@ -62,6 +67,7 @@ class TelegramUpdateRouter:
         self.client = client
         self.replies = replies
         self.start_handler = start_handler
+        self.help_handler = help_handler
         self.user_context_resolver = user_context_resolver
         self.product_link_handler = product_link_handler
         self.product_callback_handler = product_callback_handler
@@ -118,6 +124,12 @@ class TelegramUpdateRouter:
             self.start_handler.handle(
                 chat_id=chat_id,
                 token=argument,
+            )
+            return
+
+        if command == "/help":
+            self.help_handler.handle(
+                chat_id=chat_id,
             )
             return
 

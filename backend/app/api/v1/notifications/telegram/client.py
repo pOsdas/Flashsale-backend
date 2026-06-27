@@ -81,6 +81,57 @@ class TelegramBotClient:
             if isinstance(update, dict)
         ]
 
+    def set_my_commands(
+        self,
+        *,
+        commands: tuple[dict[str, str], ...],
+    ) -> bool:
+        normalized_commands: list[dict[str, str]] = []
+
+        for command_data in commands:
+            command = str(
+                command_data.get("command") or ""
+            ).strip()
+            description = str(
+                command_data.get("description") or ""
+            ).strip()
+
+            if not command:
+                raise TelegramApiError(
+                    "Telegram bot command is empty"
+                )
+
+            if not description:
+                raise TelegramApiError(
+                    "Telegram bot command description is empty"
+                )
+
+            normalized_commands.append(
+                {
+                    "command": command,
+                    "description": description,
+                }
+            )
+
+        if not normalized_commands:
+            raise TelegramApiError(
+                "Telegram bot commands are empty"
+            )
+
+        result = self._post(
+            path="/setMyCommands",
+            payload={
+                "commands": normalized_commands,
+            },
+        )
+
+        if not isinstance(result, bool):
+            raise TelegramApiError(
+                "Telegram setMyCommands result must be boolean"
+            )
+
+        return result
+
     def send_message(
         self,
         *,

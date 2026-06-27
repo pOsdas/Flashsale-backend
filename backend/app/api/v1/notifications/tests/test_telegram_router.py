@@ -16,6 +16,7 @@ class TelegramUpdateRouterTests(SimpleTestCase):
         self.client = Mock()
         self.replies = Mock()
         self.start_handler = Mock()
+        self.help_handler = Mock()
         self.user_context_resolver = Mock()
         self.product_link_handler = Mock()
         self.product_callback_handler = Mock()
@@ -24,6 +25,7 @@ class TelegramUpdateRouterTests(SimpleTestCase):
             client=self.client,
             replies=self.replies,
             start_handler=self.start_handler,
+            help_handler=self.help_handler,
             user_context_resolver=self.user_context_resolver,
             product_link_handler=self.product_link_handler,
             product_callback_handler=(
@@ -50,6 +52,25 @@ class TelegramUpdateRouterTests(SimpleTestCase):
             chat_id="123",
             token="signed-token",
         )
+
+    def test_help_command_is_available_without_connection(self) -> None:
+        self.router.handle_update(
+            update={
+                "update_id": 1,
+                "message": {
+                    "chat": {
+                        "id": 123,
+                        "type": "private",
+                    },
+                    "text": "/help",
+                },
+            }
+        )
+
+        self.help_handler.handle.assert_called_once_with(
+            chat_id="123",
+        )
+        self.user_context_resolver.resolve.assert_not_called()
 
     def test_rejects_group_chat(self) -> None:
         self.router.handle_update(

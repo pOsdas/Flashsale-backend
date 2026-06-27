@@ -2,6 +2,9 @@ from app.api.v1.notifications.services.telegram_onboarding import (
     TelegramOnboardingError,
     TelegramOnboardingService,
 )
+from app.api.v1.notifications.telegram.commands import (
+    COMMANDS_LIST_TEXT,
+)
 from app.api.v1.notifications.telegram.replies import (
     TelegramReplyService,
 )
@@ -15,27 +18,31 @@ logger = get_logger(__name__)
 
 
 MESSAGE_START_WITHOUT_TOKEN = (
-    "Сначала откройте персональную ссылку подключения "
-    "в личном кабинете Flashsale Signals."
+    "Сначала откройте персональную ссылку "
+    "подключения в личном кабинете "
+    "Flashsale Signals.\n\n"
+    "Список доступных команд можно "
+    "посмотреть через /help."
 )
 
 MESSAGE_ALREADY_CONNECTED = (
     "✅ Telegram уже подключён к Flashsale Signals.\n\n"
     "Отправьте ссылку на товар Wildberries или Ozon, "
     "чтобы добавить его в отслеживание.\n\n"
-    "Используйте /products для управления товарами."
+    f"{COMMANDS_LIST_TEXT}"
 )
 
 MESSAGE_CONNECT_SUCCESS = (
     "✅ Telegram успешно подключён.\n\n"
     "Отправьте ссылку на товар Wildberries или Ozon, "
     "чтобы добавить его в отслеживание.\n\n"
-    "Используйте /products для управления товарами."
+    f"{COMMANDS_LIST_TEXT}"
 )
 
 MESSAGE_CONNECT_ERROR_SUFFIX = (
-    "Создайте новую ссылку подключения в личном кабинете "
-    "Flashsale Signals и попробуйте ещё раз."
+    "Создайте новую ссылку подключения "
+    "в личном кабинете Flashsale Signals "
+    "и попробуйте ещё раз."
 )
 
 

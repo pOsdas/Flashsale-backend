@@ -5,6 +5,12 @@ from app.api.v1.monitoring.services.product_preview import (
     ProductPreviewService,
 )
 from app.api.v1.notifications.telegram.client import TelegramBotClient
+from app.api.v1.notifications.telegram.commands import (
+    TELEGRAM_BOT_COMMANDS,
+)
+from app.api.v1.notifications.telegram.help_handler import (
+    TelegramHelpHandler,
+)
 from app.api.v1.notifications.telegram.pending_product import (
     TelegramPendingProductStore,
 )
@@ -46,6 +52,10 @@ class Command(BaseCommand):
         client = TelegramBotClient(
             token=bot_token,
         )
+        client.set_my_commands(
+            commands=TELEGRAM_BOT_COMMANDS,
+        )
+
         user_context_resolver = TelegramUserContextResolver()
         replies = TelegramReplyService(
             client=client,
@@ -75,6 +85,9 @@ class Command(BaseCommand):
         start_handler = TelegramStartHandler(
             replies=replies,
             user_context_resolver=user_context_resolver,
+        )
+        help_handler = TelegramHelpHandler(
+            replies=replies,
         )
         product_link_handler = TelegramProductLinkHandler(
             replies=replies,
@@ -120,6 +133,7 @@ class Command(BaseCommand):
             client=client,
             replies=replies,
             start_handler=start_handler,
+            help_handler=help_handler,
             user_context_resolver=user_context_resolver,
             product_link_handler=product_link_handler,
             product_callback_handler=(
