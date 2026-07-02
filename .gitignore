@@ -8,3 +8,7 @@
 /go_fetcher/tools/diagnostics/
 /go_fetcher/tools/playwright/user_data/
 /go_fetcher/tools/playwright/edge_profiles/
+
+.idea/
+**/.idea/
+*.iml
