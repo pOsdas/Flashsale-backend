@@ -2,6 +2,7 @@ package ozon
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"go_fetcher/internal/cookies"
 	"go_fetcher/internal/models"
@@ -16,23 +17,29 @@ const (
 
 	ozonPageAPIURL = "https://www.ozon.ru/api/entrypoint-api.bx/page/json/v2"
 	ozonUserAgent  = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36 Edg/125.0.0.0"
+
+	defaultOzonHTTPParserTimeout     = 12 * time.Second
+	defaultOzonBrowserFetcherTimeout = 35 * time.Second
 )
 
 type Parser struct {
-	client         *http.Client
-	browserClient  *BrowserClient
-	logger         *slog.Logger
-	cookie         string
-	cookieProvider cookies.Provider
-	requestDelay   time.Duration
-	maxRetries     int
-	retryBaseDelay time.Duration
+	client                *http.Client
+	browserClient         *BrowserClient
+	logger                *slog.Logger
+	cookie                string
+	cookieProvider        cookies.Provider
+	requestDelay          time.Duration
+	maxRetries            int
+	retryBaseDelay        time.Duration
+	httpParserTimeout     time.Duration
+	browserFetcherTimeout time.Duration
 }
 
 type ParserConfig struct {
 	Cookie                string
 	CookieProvider        cookies.Provider
 	Timeout               time.Duration
+	HTTPParserTimeout     time.Duration
 	RequestDelay          time.Duration
 	MaxRetries            int
 	RetryBaseDelay        time.Duration
@@ -50,6 +57,10 @@ func NewParser(cfg ParserConfig, logger *slog.Logger) *Parser {
 		cfg.Timeout = 15 * time.Second
 	}
 
+	if cfg.HTTPParserTimeout <= 0 {
+		cfg.HTTPParserTimeout = defaultOzonHTTPParserTimeout
+	}
+
 	if cfg.RequestDelay < 0 {
 		cfg.RequestDelay = 0
 	}
@@ -62,23 +73,32 @@ func NewParser(cfg ParserConfig, logger *slog.Logger) *Parser {
 		cfg.RetryBaseDelay = 1 * time.Second
 	}
 
+	if cfg.BrowserFetcherTimeout <= 0 {
+		cfg.BrowserFetcherTimeout = defaultOzonBrowserFetcherTimeout
+	}
+
 	return &Parser{
 		client: &http.Client{
-			Timeout:   cfg.Timeout,
+			Timeout:   cfg.HTTPParserTimeout,
 			Transport: newOzonHTTPTransport(),
 		},
-		browserClient:  NewBrowserClient(cfg.BrowserFetcherEnabled, cfg.BrowserFetcherURL, cfg.BrowserFetcherTimeout, logger),
-		logger:         logger,
-		cookie:         cfg.Cookie,
-		cookieProvider: cfg.CookieProvider,
-		requestDelay:   cfg.RequestDelay,
-		maxRetries:     cfg.MaxRetries,
-		retryBaseDelay: cfg.RetryBaseDelay,
+		browserClient:         NewBrowserClient(cfg.BrowserFetcherEnabled, cfg.BrowserFetcherURL, cfg.BrowserFetcherTimeout, logger),
+		logger:                logger,
+		cookie:                cfg.Cookie,
+		cookieProvider:        cfg.CookieProvider,
+		requestDelay:          cfg.RequestDelay,
+		maxRetries:            cfg.MaxRetries,
+		retryBaseDelay:        cfg.RetryBaseDelay,
+		httpParserTimeout:     cfg.HTTPParserTimeout,
+		browserFetcherTimeout: cfg.BrowserFetcherTimeout,
 	}
 }
 
 func (p *Parser) ParseProduct(ctx context.Context, productInput string) ([]models.Product, error) {
-	products, err := p.parseProductHTTP(ctx, productInput)
+	httpCtx, cancelHTTP := p.newHTTPParserContext(ctx)
+	products, err := p.parseProductHTTP(httpCtx, productInput)
+	cancelHTTP()
+
 	if err == nil && isValidOzonProductList(products) {
 		return products, nil
 	}
@@ -87,11 +107,19 @@ func (p *Parser) ParseProduct(ctx context.Context, productInput string) ([]model
 		return products, err
 	}
 
-	p.logBrowserFallbackStart("product", productInput, 1, ozonBrowserProductPath, err, products)
+	if parentErr := ctx.Err(); parentErr != nil {
+		p.logBrowserFallbackSkipped(ctx, "product", productInput, 1, ozonBrowserProductPath, err, products, parentErr)
+		return products, fallbackSkippedError("parse Ozon product", err, parentErr)
+	}
 
-	product, browserErr := p.browserClient.ParseProduct(ctx, productInput)
+	p.logBrowserFallbackStart(ctx, "product", productInput, 1, ozonBrowserProductPath, err, products)
+
+	browserCtx, cancelBrowser := p.newBrowserFallbackContext(ctx)
+	defer cancelBrowser()
+
+	product, browserErr := p.browserClient.ParseProduct(browserCtx, productInput)
 	if browserErr != nil {
-		p.logBrowserFallbackFailure("product", productInput, ozonBrowserProductPath, browserErr)
+		p.logBrowserFallbackFailure(ctx, "product", productInput, ozonBrowserProductPath, browserErr)
 
 		if err != nil {
 			return nil, fmt.Errorf("parse Ozon product with HTTP failed: %w; browser fallback failed: %w", err, browserErr)
@@ -195,11 +223,14 @@ func (p *Parser) SearchProducts(ctx context.Context, query string, limit int) ([
 		return nil, fmt.Errorf("limit must be greater than zero")
 	}
 
-	products, err := p.fetchCatalogProducts(ctx, CatalogRequest{
+	httpCtx, cancelHTTP := p.newHTTPParserContext(ctx)
+	products, err := p.fetchCatalogProducts(httpCtx, CatalogRequest{
 		Mode:  "search",
 		Input: query,
 		Limit: limit,
 	})
+	cancelHTTP()
+
 	if err == nil && isValidOzonProductList(products) {
 		return products, nil
 	}
@@ -208,11 +239,19 @@ func (p *Parser) SearchProducts(ctx context.Context, query string, limit int) ([
 		return products, err
 	}
 
-	p.logBrowserFallbackStart("search", query, limit, ozonBrowserSearchPath, err, products)
+	if parentErr := ctx.Err(); parentErr != nil {
+		p.logBrowserFallbackSkipped(ctx, "search", query, limit, ozonBrowserSearchPath, err, products, parentErr)
+		return products, fallbackSkippedError("search Ozon products", err, parentErr)
+	}
 
-	browserProducts, browserErr := p.browserClient.SearchProducts(ctx, query, limit)
+	p.logBrowserFallbackStart(ctx, "search", query, limit, ozonBrowserSearchPath, err, products)
+
+	browserCtx, cancelBrowser := p.newBrowserFallbackContext(ctx)
+	defer cancelBrowser()
+
+	browserProducts, browserErr := p.browserClient.SearchProducts(browserCtx, query, limit)
 	if browserErr != nil {
-		p.logBrowserFallbackFailure("search", query, ozonBrowserSearchPath, browserErr)
+		p.logBrowserFallbackFailure(ctx, "search", query, ozonBrowserSearchPath, browserErr)
 
 		if err != nil {
 			return nil, fmt.Errorf("search Ozon products with HTTP failed: %w; browser fallback failed: %w", err, browserErr)
@@ -235,11 +274,14 @@ func (p *Parser) CategoryProducts(ctx context.Context, categoryInput string, lim
 		return nil, fmt.Errorf("limit must be greater than zero")
 	}
 
-	products, err := p.fetchCatalogProducts(ctx, CatalogRequest{
+	httpCtx, cancelHTTP := p.newHTTPParserContext(ctx)
+	products, err := p.fetchCatalogProducts(httpCtx, CatalogRequest{
 		Mode:  "category",
 		Input: categoryInput,
 		Limit: limit,
 	})
+	cancelHTTP()
+
 	if err == nil && isValidOzonProductList(products) {
 		return products, nil
 	}
@@ -248,11 +290,19 @@ func (p *Parser) CategoryProducts(ctx context.Context, categoryInput string, lim
 		return products, err
 	}
 
-	p.logBrowserFallbackStart("category", categoryInput, limit, ozonBrowserCategoryPath, err, products)
+	if parentErr := ctx.Err(); parentErr != nil {
+		p.logBrowserFallbackSkipped(ctx, "category", categoryInput, limit, ozonBrowserCategoryPath, err, products, parentErr)
+		return products, fallbackSkippedError("parse Ozon category", err, parentErr)
+	}
 
-	browserProducts, browserErr := p.browserClient.CategoryProducts(ctx, categoryInput, limit)
+	p.logBrowserFallbackStart(ctx, "category", categoryInput, limit, ozonBrowserCategoryPath, err, products)
+
+	browserCtx, cancelBrowser := p.newBrowserFallbackContext(ctx)
+	defer cancelBrowser()
+
+	browserProducts, browserErr := p.browserClient.CategoryProducts(browserCtx, categoryInput, limit)
 	if browserErr != nil {
-		p.logBrowserFallbackFailure("category", categoryInput, ozonBrowserCategoryPath, browserErr)
+		p.logBrowserFallbackFailure(ctx, "category", categoryInput, ozonBrowserCategoryPath, browserErr)
 
 		if err != nil {
 			return nil, fmt.Errorf("parse Ozon category with HTTP failed: %w; browser fallback failed: %w", err, browserErr)
@@ -264,7 +314,15 @@ func (p *Parser) CategoryProducts(ctx context.Context, categoryInput string, lim
 	return browserProducts, nil
 }
 
-func (p *Parser) logBrowserFallbackStart(mode string, input string, limit int, endpointPath string, err error, products []models.Product) {
+func (p *Parser) newHTTPParserContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(ctx, p.httpParserTimeout)
+}
+
+func (p *Parser) newBrowserFallbackContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(ctx, p.browserFetcherTimeout)
+}
+
+func (p *Parser) logBrowserFallbackStart(ctx context.Context, mode string, input string, limit int, endpointPath string, err error, products []models.Product) {
 	attrs := []slog.Attr{
 		slog.String("mode", mode),
 		slog.String("input", input),
@@ -272,34 +330,178 @@ func (p *Parser) logBrowserFallbackStart(mode string, input string, limit int, e
 		slog.String("endpoint", p.browserFallbackEndpoint(endpointPath)),
 		slog.Int("products_count", len(products)),
 		slog.Int("invalid_products_count", countInvalidOzonProducts(products)),
+		slog.String("fallback_action", "started"),
+		slog.Duration("http_parser_timeout", p.httpParserTimeout),
+		slog.Duration("browser_fallback_timeout", p.browserFetcherTimeout),
 	}
+
+	attrs = append(attrs, contextDiagnosticAttrs(ctx, "parent")...)
 
 	if err != nil {
 		attrs = append(
 			attrs,
-			slog.String("reason", "go_parser_error"),
+			slog.String("reason", classifyFallbackReason(ctx, err, products)),
+			slog.String("fallback_reason", classifyFallbackReason(ctx, err, products)),
 			slog.String("go_parser_error", err.Error()),
 		)
 	} else {
-		attrs = append(attrs, slog.String("reason", "invalid_or_empty_products"))
+		attrs = append(
+			attrs,
+			slog.String("reason", "invalid_or_empty_products"),
+			slog.String("fallback_reason", "invalid_or_empty_products"),
+		)
 	}
 
 	p.logger.LogAttrs(
-		context.Background(),
+		ctx,
 		slog.LevelWarn,
 		"ozon browser fallback started",
 		attrs...,
 	)
 }
 
-func (p *Parser) logBrowserFallbackFailure(mode string, input string, endpointPath string, err error) {
-	p.logger.Error(
-		"ozon browser fallback failed",
+func (p *Parser) logBrowserFallbackSkipped(ctx context.Context, mode string, input string, limit int, endpointPath string, parserErr error, products []models.Product, parentErr error) {
+	reason := classifyParentContextReason(parentErr)
+	attrs := []slog.Attr{
+		slog.String("mode", mode),
+		slog.String("input", input),
+		slog.Int("limit", limit),
+		slog.String("endpoint", p.browserFallbackEndpoint(endpointPath)),
+		slog.Int("products_count", len(products)),
+		slog.Int("invalid_products_count", countInvalidOzonProducts(products)),
+		slog.String("fallback_action", "skipped"),
+		slog.String("fallback_reason", reason),
+		slog.Duration("http_parser_timeout", p.httpParserTimeout),
+		slog.Duration("browser_fallback_timeout", p.browserFetcherTimeout),
+	}
+
+	attrs = append(attrs, contextDiagnosticAttrs(ctx, "parent")...)
+
+	if parserErr != nil {
+		attrs = append(attrs, slog.String("go_parser_error", parserErr.Error()))
+	}
+
+	p.logger.LogAttrs(
+		ctx,
+		slog.LevelWarn,
+		"ozon browser fallback skipped",
+		attrs...,
+	)
+}
+
+func (p *Parser) logBrowserFallbackFailure(ctx context.Context, mode string, input string, endpointPath string, err error) {
+	attrs := []slog.Attr{
 		slog.String("mode", mode),
 		slog.String("input", input),
 		slog.String("endpoint", p.browserFallbackEndpoint(endpointPath)),
 		slog.String("error", err.Error()),
+		slog.String("fallback_action", "failed"),
+		slog.String("fallback_reason", classifyBrowserFallbackFailure(err)),
+		slog.Duration("http_parser_timeout", p.httpParserTimeout),
+		slog.Duration("browser_fallback_timeout", p.browserFetcherTimeout),
+	}
+
+	attrs = append(attrs, contextDiagnosticAttrs(ctx, "parent")...)
+
+	p.logger.LogAttrs(
+		ctx,
+		slog.LevelError,
+		"ozon browser fallback failed",
+		attrs...,
 	)
+}
+
+func contextDiagnosticAttrs(ctx context.Context, prefix string) []slog.Attr {
+	attrs := []slog.Attr{}
+
+	if err := ctx.Err(); err != nil {
+		attrs = append(attrs, slog.String(prefix+"_context_error", err.Error()))
+	}
+
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		return attrs
+	}
+
+	attrs = append(
+		attrs,
+		slog.Time(prefix+"_deadline", deadline),
+		slog.Duration(prefix+"_time_remaining", time.Until(deadline)),
+	)
+
+	return attrs
+}
+
+func classifyParentContextReason(err error) string {
+	switch {
+	case errors.Is(err, context.Canceled):
+		return "parent_context_canceled"
+	case errors.Is(err, context.DeadlineExceeded):
+		return "parent_deadline_exceeded"
+	default:
+		return "parent_context_done"
+	}
+}
+
+func classifyFallbackReason(parentCtx context.Context, err error, products []models.Product) string {
+	if err == nil {
+		if !isValidOzonProductList(products) {
+			return "invalid_or_empty_products"
+		}
+
+		return "unknown"
+	}
+
+	if parentCtx.Err() == nil && errors.Is(err, context.DeadlineExceeded) {
+		return "http_parser_local_timeout"
+	}
+
+	if errors.Is(err, context.Canceled) {
+		return "context_canceled"
+	}
+
+	var httpErr *ozonHTTPError
+	if errors.As(err, &httpErr) {
+		switch httpErr.StatusCode {
+		case http.StatusForbidden:
+			return "http_status_403"
+		case http.StatusTooManyRequests:
+			return "http_status_429"
+		default:
+			return fmt.Sprintf("http_status_%d", httpErr.StatusCode)
+		}
+	}
+
+	errorText := strings.ToLower(err.Error())
+	switch {
+	case strings.Contains(errorText, "antibot"):
+		return "antibot"
+	case strings.Contains(errorText, "decode"):
+		return "parse_error"
+	case strings.Contains(errorText, "timeout"):
+		return "network_timeout"
+	default:
+		return "go_parser_error"
+	}
+}
+
+func classifyBrowserFallbackFailure(err error) string {
+	switch {
+	case errors.Is(err, context.Canceled):
+		return "context_canceled"
+	case errors.Is(err, context.DeadlineExceeded):
+		return "browser_fallback_local_timeout"
+	default:
+		return "browser_fallback_error"
+	}
+}
+
+func fallbackSkippedError(operation string, parserErr error, parentErr error) error {
+	if parserErr != nil {
+		return fmt.Errorf("%s with HTTP failed: %w; browser fallback skipped because parent context is done: %w", operation, parserErr, parentErr)
+	}
+
+	return fmt.Errorf("%s returned invalid or empty products; browser fallback skipped because parent context is done: %w", operation, parentErr)
 }
 
 func (p *Parser) browserFallbackEndpoint(endpointPath string) string {

@@ -85,7 +85,7 @@ func (s *Server) Run(ctx context.Context) error {
 		Handler:           mux,
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       20 * time.Second,
-		WriteTimeout:      30 * time.Second,
+		WriteTimeout:      75 * time.Second,
 		IdleTimeout:       60 * time.Second,
 	}
 

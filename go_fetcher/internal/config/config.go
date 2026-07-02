@@ -17,9 +17,10 @@ type Config struct {
 	WBMaxRetries     int
 	WBRetryBaseDelay time.Duration
 
-	OzonRequestDelay   time.Duration
-	OzonMaxRetries     int
-	OzonRetryBaseDelay time.Duration
+	OzonRequestDelay             time.Duration
+	OzonMaxRetries               int
+	OzonRetryBaseDelay           time.Duration
+	OzonHTTPParserTimeoutSeconds int
 
 	OzonBrowserFetcherURL            string
 	OzonBrowserFetcherEnabled        bool
@@ -37,13 +38,14 @@ func Load() (*Config, error) {
 		WBMaxRetries:     getEnvInt("WB_MAX_RETRIES", 3),
 		WBRetryBaseDelay: getEnvDurationMS("WB_RETRY_BASE_DELAY_MS", 1*time.Second),
 
-		OzonRequestDelay:   getEnvDurationMS("OZON_REQUEST_DELAY_MS", 700*time.Millisecond),
-		OzonMaxRetries:     getEnvInt("OZON_MAX_RETRIES", 3),
-		OzonRetryBaseDelay: getEnvDurationMS("OZON_RETRY_BASE_DELAY_MS", 1*time.Second),
+		OzonRequestDelay:             getEnvDurationMS("OZON_REQUEST_DELAY_MS", 700*time.Millisecond),
+		OzonMaxRetries:               getEnvInt("OZON_MAX_RETRIES", 3),
+		OzonRetryBaseDelay:           getEnvDurationMS("OZON_RETRY_BASE_DELAY_MS", 1*time.Second),
+		OzonHTTPParserTimeoutSeconds: getEnvInt("OZON_HTTP_PARSER_TIMEOUT_SECONDS", 12),
 
 		OzonBrowserFetcherURL:            os.Getenv("OZON_BROWSER_FETCHER_URL"),
 		OzonBrowserFetcherEnabled:        getEnvBool("OZON_BROWSER_FETCHER_ENABLED", false),
-		OzonBrowserFetcherTimeoutSeconds: getEnvInt("OZON_BROWSER_FETCHER_TIMEOUT_SECONDS", 90),
+		OzonBrowserFetcherTimeoutSeconds: getEnvInt("OZON_BROWSER_FETCHER_TIMEOUT_SECONDS", 35),
 	}
 
 	if cfg.DjangoURL == "" {
@@ -60,6 +62,10 @@ func Load() (*Config, error) {
 
 	if cfg.OzonBrowserFetcherTimeoutSeconds <= 0 {
 		return nil, fmt.Errorf("OZON_BROWSER_FETCHER_TIMEOUT_SECONDS must be greater than zero")
+	}
+
+	if cfg.OzonHTTPParserTimeoutSeconds <= 0 {
+		return nil, fmt.Errorf("OZON_HTTP_PARSER_TIMEOUT_SECONDS must be greater than zero")
 	}
 
 	return cfg, nil

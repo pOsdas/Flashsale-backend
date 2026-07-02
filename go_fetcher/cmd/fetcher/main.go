@@ -152,6 +152,7 @@ func runHTTPServer(
 		ozon.ParserConfig{
 			CookieProvider:        ozonCookieProvider,
 			Timeout:               cfg.Timeout,
+			HTTPParserTimeout:     time.Duration(cfg.OzonHTTPParserTimeoutSeconds) * time.Second,
 			RequestDelay:          cfg.OzonRequestDelay,
 			MaxRetries:            cfg.OzonMaxRetries,
 			RetryBaseDelay:        cfg.OzonRetryBaseDelay,
@@ -404,6 +405,7 @@ func runOzonCommand(
 		ozon.ParserConfig{
 			CookieProvider:        ozonCookieProvider,
 			Timeout:               cfg.Timeout,
+			HTTPParserTimeout:     time.Duration(cfg.OzonHTTPParserTimeoutSeconds) * time.Second,
 			RequestDelay:          cfg.OzonRequestDelay,
 			MaxRetries:            cfg.OzonMaxRetries,
 			RetryBaseDelay:        cfg.OzonRetryBaseDelay,

@@ -38,7 +38,7 @@ func NewBrowserClient(enabled bool, rawURL string, timeout time.Duration, logger
 	}
 
 	if timeout <= 0 {
-		timeout = 90 * time.Second
+		timeout = defaultOzonBrowserFetcherTimeout
 	}
 
 	if logger == nil {
