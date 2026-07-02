@@ -167,7 +167,7 @@ GO_FETCHER_API_KEY = os.getenv(
 GO_FETCHER_TIMEOUT_SECONDS = int(
     os.getenv(
         "GO_FETCHER_TIMEOUT_SECONDS",
-        "20",
+        "60",
     )
 )
 

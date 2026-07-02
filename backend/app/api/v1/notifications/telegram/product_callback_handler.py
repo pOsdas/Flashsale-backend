@@ -215,6 +215,7 @@ class TelegramProductCallbackHandler:
                 validated_data={
                     "marketplace": pending_product.marketplace,
                     "url": pending_product.url,
+                    "external_id": pending_product.external_id,
                     "role": MonitoringTargetRole.COMPETITOR,
                     "check_interval_minutes": 60,
                 },

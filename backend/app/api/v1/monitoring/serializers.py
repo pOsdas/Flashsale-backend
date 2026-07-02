@@ -20,6 +20,16 @@ from app.api.v1.monitoring.services.alert_rule_constants import (
 
 
 class MonitoringTargetSerializer(serializers.ModelSerializer):
+    external_id = serializers.CharField(
+        required=False,
+        allow_blank=False,
+        max_length=255,
+        help_text=(
+            "Optional product identifier returned by the preview endpoint. "
+            "When provided, it is used only to reuse the preview cache while "
+            "creating the initial snapshot."
+        ),
+    )
     latest_price = serializers.SerializerMethodField()
     latest_rating = serializers.SerializerMethodField()
     latest_reviews_count = serializers.SerializerMethodField()
@@ -54,7 +64,6 @@ class MonitoringTargetSerializer(serializers.ModelSerializer):
         read_only_fields = (
             "id",
             "status",
-            "external_id",
             "title",
             "seller_name",
             "brand",
@@ -98,6 +107,16 @@ class MonitoringTargetSerializer(serializers.ModelSerializer):
             )
 
         return value
+
+    def validate_external_id(self, value: str) -> str:
+        normalized_value = value.strip()
+
+        if not normalized_value:
+            raise serializers.ValidationError(
+                "External ID must not be blank."
+            )
+
+        return normalized_value
 
     def validate_check_interval_minutes(
         self,

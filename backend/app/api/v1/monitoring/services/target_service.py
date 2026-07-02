@@ -17,6 +17,10 @@ from app.api.v1.monitoring.services.fetcher_client import (
     MonitoringFetcherError,
     build_monitoring_fetcher_client,
 )
+from app.api.v1.monitoring.services.product_cache import (
+    ProductCacheResult,
+    ProductCacheService,
+)
 from app.api.v1.monitoring.services.scanner import MonitoringScanner
 from app.api.v1.monitoring.services.snapshot_service import (
     create_product_snapshot,
@@ -81,11 +85,17 @@ def create_monitoring_target(
         "check_interval_minutes",
         60,
     )
+    external_id = str(
+        validated_data.get("external_id") or ""
+    ).strip()
+    requested_url = str(
+        validated_data["url"]
+    ).strip()
 
     resolved_target = resolve_monitoring_target(
         user=user,
         marketplace=validated_data["marketplace"],
-        url=validated_data["url"],
+        url=requested_url,
         role=role,
         check_interval_minutes=check_interval_minutes,
     )
@@ -93,6 +103,76 @@ def create_monitoring_target(
     target = resolved_target.target
     created = resolved_target.created
 
+    cache_result = ProductCacheService().get_cached_product_by_identity(
+        marketplace=target.marketplace,
+        url=requested_url,
+        external_id=external_id or target.external_id,
+        fallback_interval_minutes=target.check_interval_minutes,
+        allow_stale=True,
+    )
+
+    if cache_result is not None:
+        _create_initial_snapshot_from_cache(
+            target=target,
+            cache_result=cache_result,
+        )
+    else:
+        _create_initial_snapshot_from_fetcher(
+            target=target,
+        )
+
+    target.refresh_from_db()
+
+    logger.info(
+        "monitoring target resolved",
+        extra={
+            "service": "monitoring",
+            "target_id": str(target.id),
+            "user_id": str(user.id),
+            "marketplace": target.marketplace,
+            "target_created": created,
+            "initial_snapshot_source": (
+                cache_result.source
+                if cache_result is not None
+                else "parser_fallback"
+            ),
+        },
+    )
+
+    return target
+
+
+def _create_initial_snapshot_from_cache(
+    *,
+    target: MonitoringTarget,
+    cache_result: ProductCacheResult,
+) -> ProductSnapshot:
+    product = cache_result.product
+
+    return create_product_snapshot(
+        target=target,
+        parse_status=SnapshotParseStatus.SUCCESS,
+        source=cache_result.source,
+        price=product.price,
+        old_price=product.old_price,
+        currency=product.currency,
+        is_available=product.is_available,
+        rating=product.rating,
+        reviews_count=product.reviews_count,
+        title=product.title,
+        seller_name=product.seller_name,
+        brand=product.brand,
+        external_id=product.external_id,
+        raw_data=cache_result.build_snapshot_raw_data(),
+        error_message="",
+        checked_at=cache_result.parsed_at,
+    )
+
+
+def _create_initial_snapshot_from_fetcher(
+    *,
+    target: MonitoringTarget,
+) -> ProductSnapshot:
     fetcher_client = build_monitoring_fetcher_client()
 
     try:
@@ -100,7 +180,7 @@ def create_monitoring_target(
             target=target,
         )
 
-        create_product_snapshot(
+        return create_product_snapshot(
             target=target,
             parse_status=SnapshotParseStatus.SUCCESS,
             price=fetched_product.price,
@@ -118,7 +198,7 @@ def create_monitoring_target(
         )
 
     except MonitoringFetcherError as exc:
-        create_product_snapshot(
+        return create_product_snapshot(
             target=target,
             parse_status=SnapshotParseStatus.PARSE_ERROR,
             raw_data={
@@ -127,21 +207,6 @@ def create_monitoring_target(
             },
             error_message=str(exc),
         )
-
-    target.refresh_from_db()
-
-    logger.info(
-        "monitoring target resolved",
-        extra={
-            "service": "monitoring",
-            "target_id": str(target.id),
-            "user_id": str(user.id),
-            "marketplace": target.marketplace,
-            "target_created": created,
-        },
-    )
-
-    return target
 
 
 def get_monitoring_target_for_user(

@@ -1,9 +1,11 @@
 import hashlib
+import re
 import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any, Callable
+from urllib.parse import unquote, urlsplit
 
 from django.db import transaction
 from django.db.models import Min
@@ -186,6 +188,76 @@ class ProductCacheService:
                 "Product cache refresh is already in progress and cached data is not ready yet."
             ) from exc
 
+    def get_cached_product_by_identity(
+            self,
+            *,
+            marketplace: str,
+            url: str,
+            external_id: str = "",
+            fallback_interval_minutes: int | None = None,
+            allow_stale: bool = False,
+    ) -> ProductCacheResult | None:
+        """
+        Return cached product data without contacting the parser.
+
+        Telegram preview already refreshes ProductCacheEntry. During
+        confirmation this method reuses the same cache row to build the
+        initial snapshot instead of executing a second marketplace request.
+        """
+
+        normalized_external_id = external_id.strip()
+        cache_entry = self._get_cache_entry(
+            marketplace=marketplace,
+            external_id=normalized_external_id,
+            url=url,
+        )
+
+        if cache_entry is None:
+            return None
+
+        if (
+            normalized_external_id
+            and not self._cache_entry_matches_requested_url(
+                cache_entry=cache_entry,
+                requested_url=url,
+            )
+        ):
+            logger.warning(
+                "monitoring product cache identity mismatch",
+                extra={
+                    "service": "monitoring_product_cache",
+                    "marketplace": marketplace,
+                    "external_id": normalized_external_id,
+                    "requested_url": url,
+                    "cached_url": str(getattr(cache_entry, "url", "") or ""),
+                },
+            )
+            return None
+
+        effective_cache_minutes = self.calculate_effective_cache_minutes(
+            marketplace=marketplace,
+            external_id=(
+                normalized_external_id
+                or cache_entry.external_id
+            ),
+            fallback_interval_minutes=fallback_interval_minutes,
+        )
+
+        fresh_result = self._build_fresh_cache_result_if_possible(
+            cache_entry=cache_entry,
+            effective_cache_minutes=effective_cache_minutes,
+        )
+        if fresh_result is not None:
+            return fresh_result
+
+        if not allow_stale:
+            return None
+
+        return self._build_stale_cache_result_if_possible(
+            cache_entry=cache_entry,
+            effective_cache_minutes=effective_cache_minutes,
+        )
+
     def calculate_effective_cache_minutes(
             self,
             *,
@@ -348,6 +420,76 @@ class ProductCacheService:
             )
 
         return None
+
+    def _cache_entry_matches_requested_url(
+            self,
+            *,
+            cache_entry: ProductCacheEntry,
+            requested_url: str,
+    ) -> bool:
+        normalized_requested_url = self._normalize_product_url(
+            requested_url
+        )
+        cached_url = str(
+            getattr(cache_entry, "url", "") or ""
+        )
+        normalized_cached_url = self._normalize_product_url(
+            cached_url
+        )
+
+        if (
+            normalized_requested_url
+            and normalized_cached_url
+            and normalized_requested_url == normalized_cached_url
+        ):
+            return True
+
+        external_id = str(
+            getattr(cache_entry, "external_id", "") or ""
+        ).strip()
+        if not external_id:
+            return False
+
+        requested_path = unquote(
+            urlsplit(requested_url.strip()).path
+        )
+        external_id_pattern = (
+            rf"(?<![A-Za-z0-9])"
+            rf"{re.escape(external_id)}"
+            rf"(?![A-Za-z0-9])"
+        )
+
+        return (
+            re.search(
+                external_id_pattern,
+                requested_path,
+            )
+            is not None
+        )
+
+    def _normalize_product_url(
+            self,
+            url: str,
+    ) -> str:
+        normalized_url = url.strip()
+        if not normalized_url:
+            return ""
+
+        parsed_url = urlsplit(normalized_url)
+        normalized_host = (
+            parsed_url.netloc
+            .lower()
+            .removeprefix("www.")
+        )
+        normalized_path = (
+            unquote(parsed_url.path)
+            .rstrip("/")
+        )
+
+        if normalized_host:
+            return f"{normalized_host}{normalized_path}"
+
+        return normalized_path or normalized_url
 
     def _build_fresh_cache_result_if_possible(
             self,

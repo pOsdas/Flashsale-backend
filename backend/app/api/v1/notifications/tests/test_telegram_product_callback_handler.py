@@ -74,7 +74,16 @@ class TelegramProductCallbackHandlerTests(SimpleTestCase):
             callback_query=self._callback("product:add:token")
         )
 
-        create_target_mock.assert_called_once()
+        create_target_mock.assert_called_once_with(
+            user=self.user,
+            validated_data={
+                "marketplace": "wb",
+                "url": self.pending_product.url,
+                "external_id": "123",
+                "role": "competitor",
+                "check_interval_minutes": 60,
+            },
+        )
         self.pending_store.delete.assert_called_once_with(
             token="token"
         )
