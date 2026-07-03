@@ -10,6 +10,9 @@ from app.api.v1.monitoring.services.product_preview import (
 from app.api.v1.monitoring.services.target_duplicate_service import (
     find_existing_monitoring_target,
 )
+from app.api.v1.notifications.telegram.action_rate_limiter import (
+    TelegramActionRateLimiter,
+)
 from app.api.v1.notifications.telegram.keyboards import (
     build_existing_product_keyboard,
     build_product_preview_keyboard,
@@ -39,12 +42,14 @@ class TelegramProductLinkHandler:
         replies: TelegramReplyService,
         preview_service: ProductPreviewService,
         pending_store: TelegramPendingProductStore,
+        action_rate_limiter: TelegramActionRateLimiter | None = None,
         preview_rate_limit: int = 5,
         preview_rate_limit_window_seconds: int = 60,
     ) -> None:
         self.replies = replies
         self.preview_service = preview_service
         self.pending_store = pending_store
+        self.action_rate_limiter = action_rate_limiter
         self.preview_rate_limit = preview_rate_limit
         self.preview_rate_limit_window_seconds = (
             preview_rate_limit_window_seconds
@@ -184,16 +189,21 @@ class TelegramProductLinkHandler:
         *,
         user_context: TelegramUserContext,
     ) -> bool:
-        result = check_rate_limit(
-            key=(
-                "telegram_bot:preview:"
-                f"{user_context.user.pk}"
-            ),
-            limit=self.preview_rate_limit,
-            window_seconds=(
-                self.preview_rate_limit_window_seconds
-            ),
-        )
+        if self.action_rate_limiter is not None:
+            result = self.action_rate_limiter.check_preview(
+                user_id=user_context.user.pk,
+            )
+        else:
+            result = check_rate_limit(
+                key=(
+                    "telegram_bot:preview:"
+                    f"{user_context.user.pk}"
+                ),
+                limit=self.preview_rate_limit,
+                window_seconds=(
+                    self.preview_rate_limit_window_seconds
+                ),
+            )
 
         if result.allowed:
             return True

@@ -16,6 +16,9 @@ from app.api.v1.monitoring.services.target_service import (
     pause_monitoring_target,
     resume_monitoring_target,
 )
+from app.api.v1.notifications.telegram.action_rate_limiter import (
+    TelegramActionRateLimiter,
+)
 from app.api.v1.notifications.telegram.client import TelegramBotClient
 from app.api.v1.notifications.telegram.keyboards import (
     PRODUCTS_PAGE_CALLBACK_PREFIX,
@@ -62,6 +65,10 @@ MESSAGE_TARGET_NOT_FOUND = (
 MESSAGE_CHECK_BUSY = (
     "Товар уже обновляется. Попробуйте ещё раз через несколько секунд."
 )
+MESSAGE_CHECK_RATE_LIMITED = (
+    "Слишком много ручных проверок. "
+    "Повторите через {retry_after_seconds} секунд."
+)
 MESSAGE_SETTINGS_NOT_AVAILABLE = (
     "Настройки уведомлений для товара добавим следующим этапом."
 )
@@ -74,11 +81,13 @@ class TelegramProductsHandler:
         client: TelegramBotClient,
         replies: TelegramReplyService,
         user_context_resolver: TelegramUserContextResolver,
+        action_rate_limiter: TelegramActionRateLimiter | None = None,
         page_size: int = DEFAULT_TELEGRAM_PRODUCTS_PAGE_SIZE,
     ) -> None:
         self.client = client
         self.replies = replies
         self.user_context_resolver = user_context_resolver
+        self.action_rate_limiter = action_rate_limiter
         self.page_size = page_size
 
     def can_handle_callback(
@@ -293,6 +302,26 @@ class TelegramProductsHandler:
         target_id: UUID,
         page: int,
     ) -> None:
+        if self.action_rate_limiter is not None:
+            rate_limit_result = (
+                self.action_rate_limiter.check_check_now(
+                    user_id=user_context.user.pk,
+                )
+            )
+            if not rate_limit_result.allowed:
+                retry_after_seconds = max(
+                    rate_limit_result.retry_after_seconds,
+                    1,
+                )
+                self.client.answer_callback_query(
+                    callback_query_id=callback_query_id,
+                    text=MESSAGE_CHECK_RATE_LIMITED.format(
+                        retry_after_seconds=retry_after_seconds,
+                    ),
+                    show_alert=True,
+                )
+                return
+
         self.client.answer_callback_query(
             callback_query_id=callback_query_id,
             text="Проверяю товар...",

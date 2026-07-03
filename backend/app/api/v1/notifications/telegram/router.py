@@ -1,5 +1,8 @@
 from typing import Any
 
+from app.api.v1.notifications.telegram.action_rate_limiter import (
+    TelegramActionRateLimiter,
+)
 from app.api.v1.notifications.telegram.client import TelegramBotClient
 from app.api.v1.notifications.telegram.help_handler import (
     TelegramHelpHandler,
@@ -62,6 +65,11 @@ MESSAGE_CALLBACK_NOT_AVAILABLE = (
     "Это действие пока недоступно."
 )
 
+MESSAGE_CALLBACK_RATE_LIMITED = (
+    "Слишком много нажатий. "
+    "Повторите через {retry_after_seconds} секунд."
+)
+
 
 class TelegramUpdateRouter:
     def __init__(
@@ -79,6 +87,7 @@ class TelegramUpdateRouter:
         target_alert_settings_handler: TelegramTargetAlertSettingsHandler,
         target_interval_handler: TelegramTargetIntervalHandler,
         target_history_handler: TelegramTargetHistoryHandler,
+        action_rate_limiter: TelegramActionRateLimiter | None = None,
     ) -> None:
         self.client = client
         self.replies = replies
@@ -94,6 +103,7 @@ class TelegramUpdateRouter:
         )
         self.target_interval_handler = target_interval_handler
         self.target_history_handler = target_history_handler
+        self.action_rate_limiter = action_rate_limiter
 
     def handle_update(
         self,
@@ -203,7 +213,10 @@ class TelegramUpdateRouter:
         ).strip()
         message = callback_query.get("message") or {}
         chat = message.get("chat") or {}
+        chat_id = str(chat.get("id") or "").strip()
         chat_type = str(chat.get("type") or "").strip()
+        from_user = callback_query.get("from") or {}
+        from_user_id = str(from_user.get("id") or "").strip()
 
         if not callback_query_id:
             return
@@ -215,6 +228,28 @@ class TelegramUpdateRouter:
                 show_alert=True,
             )
             return
+
+        if self.action_rate_limiter is not None:
+            rate_limit_result = (
+                self.action_rate_limiter.check_callback(
+                    telegram_user_id=(
+                        from_user_id or chat_id
+                    ),
+                )
+            )
+            if not rate_limit_result.allowed:
+                retry_after_seconds = max(
+                    rate_limit_result.retry_after_seconds,
+                    1,
+                )
+                self.client.answer_callback_query(
+                    callback_query_id=callback_query_id,
+                    text=MESSAGE_CALLBACK_RATE_LIMITED.format(
+                        retry_after_seconds=retry_after_seconds,
+                    ),
+                    show_alert=True,
+                )
+                return
 
         if self.product_callback_handler.can_handle(
             callback_data=callback_data,
