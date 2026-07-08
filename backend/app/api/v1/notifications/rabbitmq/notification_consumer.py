@@ -8,8 +8,14 @@ from django.conf import settings
 
 from app.api.v1.common.outbox_handlers import get_outbox_handlers
 from app.api.v1.notifications.notification_metrics import (
+    NOTIFICATION_CONSUMER_HEARTBEAT_TIMESTAMP_SECONDS,
+    NOTIFICATION_CONSUMER_LAST_FAILED_TIMESTAMP_SECONDS,
+    NOTIFICATION_CONSUMER_LAST_PROCESSED_TIMESTAMP_SECONDS,
+    NOTIFICATION_CONSUMER_MESSAGES_IN_PROGRESS,
+    NOTIFICATION_CONSUMER_RUNNING,
     NOTIFICATION_MESSAGE_PROCESSING_DURATION_SECONDS,
     NOTIFICATION_MESSAGES_TOTAL,
+    refresh_notification_delivery_state_metrics,
 )
 from app.core.logging import get_logger
 
@@ -18,6 +24,9 @@ logger = get_logger(__name__)
 
 
 class NotificationRabbitMQConsumer:
+    HEARTBEAT_INTERVAL_SECONDS = 15
+    DELIVERY_METRICS_REFRESH_INTERVAL_SECONDS = 60
+
     def __init__(self) -> None:
         self.rabbitmq_url = settings.RABBITMQ_URL
         self.exchange_name = getattr(
@@ -59,32 +68,42 @@ class NotificationRabbitMQConsumer:
 
     def start(self) -> None:
         self._register_signal_handlers()
-        self._connect()
-        self._declare_topology()
-
-        assert self.channel is not None
-
-        self.channel.basic_qos(prefetch_count=self.prefetch_count)
-        self.channel.basic_consume(
-            queue=self.queue_name,
-            on_message_callback=self._on_message,
-            auto_ack=False,
-        )
-
-        logger.info(
-            "Notification RabbitMQ consumer started",
-            extra={
-                "service": "notification_consumer",
-                "queue": self.queue_name,
-                "exchange": self.exchange_name,
-                "routing_keys": self.routing_keys,
-                "prefetch_count": self.prefetch_count,
-            },
-        )
 
         try:
+            self._connect()
+            self._declare_topology()
+
+            assert self.channel is not None
+
+            self.channel.basic_qos(
+                prefetch_count=self.prefetch_count,
+            )
+            self.channel.basic_consume(
+                queue=self.queue_name,
+                on_message_callback=self._on_message,
+                auto_ack=False,
+            )
+
+            NOTIFICATION_CONSUMER_RUNNING.set(1)
+
+            self._schedule_heartbeat()
+            self._schedule_delivery_metrics_refresh()
+
+            logger.info(
+                "Notification RabbitMQ consumer started",
+                extra={
+                    "service": "notification_consumer",
+                    "queue": self.queue_name,
+                    "exchange": self.exchange_name,
+                    "routing_keys": self.routing_keys,
+                    "prefetch_count": self.prefetch_count,
+                },
+            )
+
             self.channel.start_consuming()
+
         finally:
+            NOTIFICATION_CONSUMER_RUNNING.set(0)
             self.close()
 
     def _register_signal_handlers(self) -> None:
@@ -104,6 +123,38 @@ class NotificationRabbitMQConsumer:
 
         if self.channel and self.channel.is_open:
             self.channel.stop_consuming()
+
+    def _schedule_heartbeat(self) -> None:
+        if (
+                self.should_stop
+                or self.connection is None
+                or self.connection.is_closed
+        ):
+            return
+
+        NOTIFICATION_CONSUMER_HEARTBEAT_TIMESTAMP_SECONDS.set(
+            time.time()
+        )
+
+        self.connection.call_later(
+            self.HEARTBEAT_INTERVAL_SECONDS,
+            self._schedule_heartbeat,
+        )
+
+    def _schedule_delivery_metrics_refresh(self) -> None:
+        if (
+                self.should_stop
+                or self.connection is None
+                or self.connection.is_closed
+        ):
+            return
+
+        refresh_notification_delivery_state_metrics()
+
+        self.connection.call_later(
+            self.DELIVERY_METRICS_REFRESH_INTERVAL_SECONDS,
+            self._schedule_delivery_metrics_refresh,
+        )
 
     def _connect(self) -> None:
         parameters = pika.URLParameters(self.rabbitmq_url)
@@ -161,6 +212,8 @@ class NotificationRabbitMQConsumer:
         started_at = time.monotonic()
         topic = method.routing_key or "unknown"
 
+        NOTIFICATION_CONSUMER_MESSAGES_IN_PROGRESS.inc()
+
         try:
             message = self._decode_message(body=body)
             event_topic = message["topic"]
@@ -178,6 +231,10 @@ class NotificationRabbitMQConsumer:
                 topic=topic,
                 status="failed",
             ).inc()
+
+            NOTIFICATION_CONSUMER_LAST_FAILED_TIMESTAMP_SECONDS.set(
+                time.time()
+            )
 
             logger.exception(
                 "Notification RabbitMQ message processing failed",
@@ -197,14 +254,21 @@ class NotificationRabbitMQConsumer:
 
         finally:
             duration = time.monotonic() - started_at
+
             NOTIFICATION_MESSAGE_PROCESSING_DURATION_SECONDS.labels(
                 topic=topic,
             ).observe(duration)
+
+            NOTIFICATION_CONSUMER_MESSAGES_IN_PROGRESS.dec()
 
         NOTIFICATION_MESSAGES_TOTAL.labels(
             topic=topic,
             status="processed",
         ).inc()
+
+        NOTIFICATION_CONSUMER_LAST_PROCESSED_TIMESTAMP_SECONDS.set(
+            time.time()
+        )
 
         channel.basic_ack(
             delivery_tag=method.delivery_tag,

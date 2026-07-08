@@ -2,7 +2,10 @@ from django.db import transaction
 from django.utils import timezone
 
 from app.api.v1.notifications.models import NotificationChannel, NotificationDelivery
-from app.api.v1.notifications.notification_metrics import NOTIFICATION_DELIVERIES_TOTAL
+from app.api.v1.notifications.notification_metrics import (
+    NOTIFICATION_DELIVERIES_TOTAL,
+    refresh_notification_delivery_state_metrics,
+)
 from app.api.v1.notifications.services.notification_builder import AlertNotificationBuilder
 from app.api.v1.notifications.services.telegram_delivery import (
     TelegramDeliveryAdapter,
@@ -93,6 +96,8 @@ class NotificationService:
                 message_text=message_text,
             )
 
+        refresh_notification_delivery_state_metrics()
+
         try:
             self.telegram_adapter.send_message(
                 chat_id=channel.telegram_chat_id,
@@ -122,6 +127,8 @@ class NotificationService:
                 ]
             )
 
+            refresh_notification_delivery_state_metrics()
+
             NOTIFICATION_DELIVERIES_TOTAL.labels(
                 channel=NotificationChannel.ChannelType.TELEGRAM,
                 status=NotificationDelivery.Status.FAILED,
@@ -138,6 +145,8 @@ class NotificationService:
                 "updated_at",
             ]
         )
+
+        refresh_notification_delivery_state_metrics()
 
         NOTIFICATION_DELIVERIES_TOTAL.labels(
             channel=NotificationChannel.ChannelType.TELEGRAM,
