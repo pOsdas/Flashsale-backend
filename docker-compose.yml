@@ -145,6 +145,8 @@ services:
       - ./backend/.env.docker
     command: >
       sh -c "python manage.py run_monitoring_scanner"
+    expose:
+      - "8012"
     depends_on:
       postgres:
         condition: service_healthy

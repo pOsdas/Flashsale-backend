@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from datetime import timedelta
+import time
 
 from django.db import transaction
 from django.utils import timezone
@@ -16,6 +17,20 @@ from app.api.v1.monitoring.services.product_cache import (
 )
 from app.api.v1.monitoring.services.snapshot_service import (
     create_product_snapshot,
+)
+from app.api.v1.monitoring.metrics import (
+    MONITORING_ALERTS_CREATED_TOTAL,
+    MONITORING_CACHE_RESULTS_TOTAL,
+    MONITORING_SCANNER_DUE_TARGETS,
+    MONITORING_SCANNER_ITERATION_DURATION_SECONDS,
+    MONITORING_SCANNER_ITERATIONS_TOTAL,
+    MONITORING_SCANNER_LAST_PROCESSED_TARGETS,
+    MONITORING_SCANNER_LAST_SUCCESS_TIMESTAMP_SECONDS,
+    MONITORING_SCANNER_OLDEST_OVERDUE_AGE_SECONDS,
+    MONITORING_SCANNER_OVERDUE_TARGETS,
+    MONITORING_SNAPSHOTS_CREATED_TOTAL,
+    MONITORING_TARGET_PROCESSING_DURATION_SECONDS,
+    MONITORING_TARGET_PROCESSING_TOTAL,
 )
 from app.core.logging import get_logger
 
@@ -45,34 +60,122 @@ class MonitoringTargetProcessResult:
 
 class MonitoringScanner:
     def __init__(
-        self,
-        batch_size: int = 50,
-        product_cache_service: ProductCacheService | None = None,
+            self,
+            batch_size: int = 50,
+            overdue_after_seconds: int = 300,
+            product_cache_service: ProductCacheService | None = None,
     ) -> None:
         self.batch_size = batch_size
+        self.overdue_after_seconds = overdue_after_seconds
         self.product_cache_service = (
-            product_cache_service or ProductCacheService()
+                product_cache_service or ProductCacheService()
         )
 
     def run_once(self) -> int:
-        targets = self._get_due_targets()
+        started_at = time.monotonic()
 
-        processed_count = 0
+        try:
+            self._update_schedule_metrics()
 
-        for target in targets:
-            self._process_target(target=target)
-            processed_count += 1
+            targets = self._get_due_targets()
+            processed_count = 0
 
-        if processed_count:
-            logger.info(
-                "monitoring scanner iteration finished",
+            for target in targets:
+                self._process_target(target=target)
+                processed_count += 1
+
+            MONITORING_SCANNER_LAST_PROCESSED_TARGETS.set(
+                processed_count
+            )
+            MONITORING_SCANNER_LAST_SUCCESS_TIMESTAMP_SECONDS.set(
+                timezone.now().timestamp()
+            )
+            MONITORING_SCANNER_ITERATIONS_TOTAL.labels(
+                status="success",
+            ).inc()
+
+            if processed_count:
+                logger.info(
+                    "monitoring scanner iteration finished",
+                    extra={
+                        "service": "monitoring_scanner",
+                        "processed_count": processed_count,
+                    },
+                )
+
+            return processed_count
+
+        except Exception:
+            MONITORING_SCANNER_ITERATIONS_TOTAL.labels(
+                status="error",
+            ).inc()
+
+            logger.exception(
+                "monitoring scanner iteration failed",
                 extra={
                     "service": "monitoring_scanner",
-                    "processed_count": processed_count,
                 },
             )
 
-        return processed_count
+            raise
+
+        finally:
+            duration = time.monotonic() - started_at
+            MONITORING_SCANNER_ITERATION_DURATION_SECONDS.observe(
+                duration
+            )
+
+    def _update_schedule_metrics(self) -> None:
+        now = timezone.now()
+        overdue_before = now - timedelta(
+            seconds=self.overdue_after_seconds,
+        )
+
+        base_queryset = MonitoringTarget.objects.filter(
+            is_active=True,
+            status=MonitoringTargetStatus.ACTIVE,
+        )
+
+        due_targets_count = base_queryset.filter(
+            next_check_at__lte=now,
+        ).count()
+
+        overdue_queryset = base_queryset.filter(
+            next_check_at__lte=overdue_before,
+        )
+
+        overdue_targets_count = overdue_queryset.count()
+
+        MONITORING_SCANNER_DUE_TARGETS.set(
+            due_targets_count
+        )
+        MONITORING_SCANNER_OVERDUE_TARGETS.set(
+            overdue_targets_count
+        )
+
+        oldest_overdue_target = (
+            overdue_queryset
+            .order_by("next_check_at")
+            .only("next_check_at")
+            .first()
+        )
+
+        if oldest_overdue_target is None:
+            MONITORING_SCANNER_OLDEST_OVERDUE_AGE_SECONDS.set(
+                0
+            )
+            return
+
+        oldest_overdue_age_seconds = max(
+            0.0,
+            (
+                    now - oldest_overdue_target.next_check_at
+            ).total_seconds(),
+        )
+
+        MONITORING_SCANNER_OLDEST_OVERDUE_AGE_SECONDS.set(
+            oldest_overdue_age_seconds
+        )
 
     def _get_due_targets(self) -> list[MonitoringTarget]:
         now = timezone.now()
@@ -132,6 +235,10 @@ class MonitoringScanner:
             Do not change the target schedule. This mode is used by manual
             check-now requests.
         """
+        started_at = time.monotonic()
+
+        marketplace_label = str(target.marketplace)
+        trigger_label = trigger or "unknown"
 
         logger.info(
             "monitoring target processing started",
@@ -178,6 +285,30 @@ class MonitoringScanner:
 
             alerts_count = snapshot.alerts.count()
 
+            MONITORING_TARGET_PROCESSING_TOTAL.labels(
+                marketplace=marketplace_label,
+                trigger=trigger_label,
+                result="success",
+            ).inc()
+
+            MONITORING_SNAPSHOTS_CREATED_TOTAL.labels(
+                marketplace=marketplace_label,
+                parse_status=SnapshotParseStatus.SUCCESS,
+                trigger=trigger_label,
+            ).inc()
+
+            MONITORING_ALERTS_CREATED_TOTAL.labels(
+                marketplace=marketplace_label,
+                trigger=trigger_label,
+            ).inc(alerts_count)
+
+            MONITORING_CACHE_RESULTS_TOTAL.labels(
+                marketplace=marketplace_label,
+                source=str(cache_result.source),
+                is_stale=str(cache_result.is_stale).lower(),
+                trigger=trigger_label,
+            ).inc()
+
             logger.info(
                 "monitoring target processed successfully",
                 extra={
@@ -208,6 +339,13 @@ class MonitoringScanner:
             )
 
         except ProductCacheBusyError as exc:
+
+            MONITORING_TARGET_PROCESSING_TOTAL.labels(
+                marketplace=marketplace_label,
+                trigger=trigger_label,
+                result="busy",
+            ).inc()
+
             logger.warning(
                 "monitoring target processing postponed because product cache refresh is busy",
                 extra={
@@ -250,11 +388,31 @@ class MonitoringScanner:
                 error=str(exc),
             )
 
+            MONITORING_TARGET_PROCESSING_TOTAL.labels(
+                marketplace=marketplace_label,
+                trigger=trigger_label,
+                result="error",
+            ).inc()
+
+            MONITORING_SNAPSHOTS_CREATED_TOTAL.labels(
+                marketplace=marketplace_label,
+                parse_status=SnapshotParseStatus.PARSE_ERROR,
+                trigger=trigger_label,
+            ).inc()
+
             return MonitoringTargetProcessResult(
                 success=False,
                 snapshot=snapshot,
                 error=str(exc),
             )
+
+        finally:
+            duration = time.monotonic() - started_at
+
+            MONITORING_TARGET_PROCESSING_DURATION_SECONDS.labels(
+                marketplace=marketplace_label,
+                trigger=trigger_label,
+            ).observe(duration)
 
     def _restore_target_after_success(
         self,

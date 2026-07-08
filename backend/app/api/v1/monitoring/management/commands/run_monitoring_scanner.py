@@ -2,6 +2,8 @@ import os
 import signal
 import time
 
+from prometheus_client import start_http_server
+from prometheus_client import start_http_server
 from django.core.management.base import BaseCommand
 
 from app.api.v1.monitoring.services.scanner import MonitoringScanner
@@ -55,7 +57,26 @@ class Command(BaseCommand):
             )
         )
 
-        scanner = MonitoringScanner(batch_size=batch_size)
+        metrics_port = int(
+            os.environ.get(
+                "MONITORING_SCANNER_METRICS_PORT",
+                "8012",
+            )
+        )
+
+        overdue_after_seconds = int(
+            os.environ.get(
+                "MONITORING_SCANNER_OVERDUE_AFTER_SECONDS",
+                "300",
+            )
+        )
+
+        start_http_server(metrics_port)
+
+        scanner = MonitoringScanner(
+            batch_size=batch_size,
+            overdue_after_seconds=overdue_after_seconds,
+        )
 
         self.stdout.write(
             self.style.SUCCESS(
@@ -71,6 +92,8 @@ class Command(BaseCommand):
                 "once": once,
                 "batch_size": batch_size,
                 "sleep_seconds": sleep_seconds,
+                "metrics_port": metrics_port,
+                "overdue_after_seconds": overdue_after_seconds,
             },
         )
 

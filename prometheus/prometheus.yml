@@ -23,6 +23,12 @@ scrape_configs:
       - targets:
           - "outbox_worker:9100"
 
+  # Monitoring scanner
+  - job_name: "monitoring_scanner"
+    static_configs:
+      - targets:
+          - "monitoring_scanner:8012"
+
   # Notification RabbitMQ consumer
   - job_name: "notification_consumer"
     static_configs:
