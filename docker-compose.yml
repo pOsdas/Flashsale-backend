@@ -36,6 +36,16 @@ services:
       sh -c "rabbitmq-plugins enable --offline rabbitmq_management rabbitmq_prometheus &&
              rabbitmq-server"
 
+  redis_exporter:
+    image: oliver006/redis_exporter:v1.86.0
+    container_name: flashsale_redis_exporter
+    environment:
+      REDIS_ADDR: redis://redis:6379
+    depends_on:
+      redis:
+        condition: service_started
+    restart: unless-stopped
+
   go_fetcher:
     build:
       context: ./go_fetcher
@@ -185,11 +195,37 @@ services:
         condition: service_started
     restart: unless-stopped
 
+  cadvisor:
+    image: ghcr.io/google/cadvisor:v0.60.3
+    container_name: flashsale_cadvisor
+    privileged: true
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+    restart: unless-stopped
+
+  blackbox_exporter:
+    image: quay.io/prometheus/blackbox-exporter:v0.28.0
+    container_name: flashsale_blackbox_exporter
+    command:
+      - --config.file=/config/blackbox.yml
+    volumes:
+      - ./blackbox/blackbox.yml:/config/blackbox.yml:ro
+    restart: unless-stopped
+
   prometheus:
     image: prom/prometheus:v3.0.1
     container_name: flashsale_prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=15d
+      - --web.enable-lifecycle
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - flashsale_prometheus_data:/prometheus
     ports:
       - "127.0.0.1:9090:9090"
     depends_on:
@@ -197,6 +233,7 @@ services:
         condition: service_started
       notification_consumer:
         condition: service_started
+    restart: unless-stopped
 
   loki:
     image: grafana/loki:3.3.2
@@ -253,3 +290,4 @@ volumes:
   flashsale_postgres_data:
   flashsale_grafana_data:
   flashsale_loki_data:
+  flashsale_prometheus_data:
