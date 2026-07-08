@@ -1,29 +1,129 @@
 global:
-  scrape_interval: 5s
+  scrape_interval: 15s
+  scrape_timeout: 10s
+  evaluation_interval: 15s
 
 scrape_configs:
-  - job_name: "outbox_worker"
+  # Prometheus
+  - job_name: "prometheus"
     static_configs:
       - targets:
-          - "outbox_worker:9100"
+          - "prometheus:9090"
 
+  # Django backend
   - job_name: "backend"
     metrics_path: /api/v1/prometheus/metrics
     static_configs:
       - targets:
           - "backend:8000"
 
+  # Outbox worker
+  - job_name: "outbox_worker"
+    static_configs:
+      - targets:
+          - "outbox_worker:9100"
+
+  # Notification RabbitMQ consumer
+  - job_name: "notification_consumer"
+    static_configs:
+      - targets:
+          - "notification_consumer:8011"
+
+  # PostgreSQL
   - job_name: "postgres"
     static_configs:
       - targets:
           - "postgres_exporter:9187"
 
+  # Redis
+  - job_name: "redis"
+    static_configs:
+      - targets:
+          - "redis_exporter:9121"
+
+  # RabbitMQ
   - job_name: "rabbitmq"
     static_configs:
       - targets:
           - "rabbitmq:15692"
 
-  - job_name: "notification_consumer"
+  # Docker containers
+  - job_name: "cadvisor"
     static_configs:
       - targets:
-          - "notification_consumer:8011"
+          - "cadvisor:8080"
+
+  # Blackbox Exporter internal metrics
+  - job_name: "blackbox_exporter"
+    static_configs:
+      - targets:
+          - "blackbox_exporter:9115"
+
+  # Loki internal metrics
+  - job_name: "loki"
+    static_configs:
+      - targets:
+          - "loki:3100"
+
+  # Promtail internal metrics
+  - job_name: "promtail"
+    static_configs:
+      - targets:
+          - "promtail:9080"
+
+  # Grafana internal metrics
+  - job_name: "grafana"
+    static_configs:
+      - targets:
+          - "grafana:3000"
+
+  # Реальные HTTP-проверки сервисов
+  - job_name: "blackbox_http"
+    metrics_path: /probe
+    params:
+      module:
+        - http_2xx
+    static_configs:
+      - targets:
+          - "http://backend:8000/api/v1/prometheus/metrics"
+          - "http://go_fetcher:8090/api/v1/parser/health/"
+          - "http://ozon_browser_fetcher:8095/api/v1/health"
+          - "http://outbox_worker:9100/metrics"
+          - "http://notification_consumer:8011/metrics"
+          - "http://prometheus:9090/-/ready"
+          - "http://loki:3100/ready"
+          - "http://grafana:3000/api/health"
+    relabel_configs:
+      - source_labels:
+          - __address__
+        target_label: __param_target
+
+      - source_labels:
+          - __param_target
+        target_label: instance
+
+      - target_label: __address__
+        replacement: blackbox_exporter:9115
+
+  # TCP-проверки инфраструктуры
+  - job_name: "blackbox_tcp"
+    metrics_path: /probe
+    params:
+      module:
+        - tcp_connect
+    static_configs:
+      - targets:
+          - "postgres:5432"
+          - "redis:6379"
+          - "rabbitmq:5672"
+    relabel_configs:
+      - source_labels:
+          - __address__
+        target_label: __param_target
+
+      - source_labels:
+          - __param_target
+        target_label: instance
+
+      - target_label: __address__
+        replacement: blackbox_exporter:9115
