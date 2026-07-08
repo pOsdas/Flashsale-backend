@@ -182,7 +182,7 @@
       "datasource": { "type": "loki", "uid": "loki" },
       "targets": [
         {
-          "expr": "{service=\"backend\"} |= \"http request completed\"",
+          "expr": "{compose_service=\"backend\"} |= \"http request completed\"",
           "refId": "A"
         }
       ],
@@ -205,7 +205,7 @@
       "datasource": { "type": "loki", "uid": "loki" },
       "targets": [
         {
-          "expr": "{service=\"outbox_worker\"}",
+          "expr": "{compose_service=\"outbox_worker\"}",
           "refId": "A"
         }
       ],

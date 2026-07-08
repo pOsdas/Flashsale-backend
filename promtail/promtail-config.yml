@@ -15,15 +15,18 @@ scrape_configs:
         refresh_interval: 5s
 
     relabel_configs:
-      - source_labels: ['__meta_docker_container_name']
-        regex: '/(.*)'
-        target_label: 'container'
+      - source_labels:
+          - __meta_docker_container_name
+        regex: "/(.*)"
+        target_label: container
 
-      - source_labels: ['__meta_docker_container_log_stream']
-        target_label: 'stream'
+      - source_labels:
+          - __meta_docker_container_log_stream
+        target_label: stream
 
-      - source_labels: ['__meta_docker_container_label_com_docker_compose_service']
-        target_label: 'service'
+      - source_labels:
+          - __meta_docker_container_label_com_docker_compose_service
+        target_label: compose_service
 
     pipeline_stages:
       - docker: {}
@@ -32,7 +35,7 @@ scrape_configs:
           expressions:
             level: levelname
             logger: name
-            service: service
+            app_service: service
             request_id: request_id
             topic: topic
             status_code: status_code
@@ -41,6 +44,6 @@ scrape_configs:
       - labels:
           level:
           logger:
-          service:
+          app_service:
           topic:
           status_code:

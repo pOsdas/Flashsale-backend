@@ -169,11 +169,11 @@ services:
       - "127.0.0.1:8011:8011"
     restart: unless-stopped
 
-  telegram_onboarding_bot:
+  telegram_bot:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: flashsale_telegram_onboarding_bot
+    container_name: flashsale_telegram_bot
     env_file:
       - ./backend/.env.docker
     command: >

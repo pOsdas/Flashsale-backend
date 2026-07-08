@@ -65,7 +65,7 @@ groups:
               from: 300
               to: 0
             model:
-              expr: outbox_events_pending
+              expr: outbox_pending_events
               refId: A
               instant: true
               range: false

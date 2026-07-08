@@ -79,7 +79,7 @@
       "datasource": { "type": "prometheus", "uid": "Prometheus" },
       "targets": [
         {
-          "expr": "outbox_pending_events + outbox_failed_events + outbox_processing_events",
+          "expr": "outbox_total_events",
           "refId": "A"
         }
       ],
@@ -111,7 +111,7 @@
       "datasource": { "type": "prometheus", "uid": "Prometheus" },
       "targets": [
         {
-          "expr": "outbox_events_processed_total",
+          "expr": "outbox_processed_events",
           "refId": "A"
         }
       ],
