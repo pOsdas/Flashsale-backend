@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 type ProductFetcher func(ctx context.Context, req FetchProductRequest) (*ProductDTO, error)
@@ -79,10 +81,11 @@ func (s *Server) Run(ctx context.Context) error {
 	mux.HandleFunc("/api/v1/fetch/product/", s.handleFetchProduct)
 	mux.HandleFunc("/api/v1/parser/health", s.handleParserHealth)
 	mux.HandleFunc("/api/v1/parser/health/", s.handleParserHealth)
+	mux.Handle("/metrics", promhttp.Handler())
 
 	httpServer := &http.Server{
 		Addr:              s.addr,
-		Handler:           mux,
+		Handler:           observeHTTPRequests(mux),
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       20 * time.Second,
 		WriteTimeout:      75 * time.Second,
@@ -212,7 +215,16 @@ func (s *Server) checkMarketplaceParser(
 	marketplace string,
 	query string,
 	parser ProductSearchParser,
-) ParserHealthItem {
+) (result ParserHealthItem) {
+	startedAt := time.Now()
+
+	defer func() {
+		observeParserHealthResult(
+			marketplace,
+			startedAt,
+			result,
+		)
+	}()
 	if parser == nil {
 		return ParserHealthItem{
 			Status: "error",
@@ -222,8 +234,6 @@ func (s *Server) checkMarketplaceParser(
 			},
 		}
 	}
-
-	startedAt := time.Now()
 
 	searchProducts, searchErr := parser.SearchProducts(ctx, query, 5)
 	if searchErr != nil {

@@ -6,9 +6,26 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
+
+	"go_fetcher/internal/observability"
 )
 
 func (s *Server) handleFetchProduct(w http.ResponseWriter, r *http.Request) {
+	startedAt := time.Now()
+	marketplace := "unknown"
+	result := "unknown"
+	errorType := "none"
+
+	defer func() {
+		observeProductFetch(
+			marketplace,
+			result,
+			errorType,
+			startedAt,
+		)
+	}()
+
 	s.logger.Info(
 		"GO_FETCHER_HTTP_REQUEST_RECEIVED",
 		slog.String("method", r.Method),
@@ -19,6 +36,8 @@ func (s *Server) handleFetchProduct(w http.ResponseWriter, r *http.Request) {
 	)
 
 	if r.Method != http.MethodPost {
+		result = "method_not_allowed"
+		errorType = "validation_error"
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
@@ -26,6 +45,8 @@ func (s *Server) handleFetchProduct(w http.ResponseWriter, r *http.Request) {
 	if s.apiKey != "" {
 		requestAPIKey := r.Header.Get("X-Fetcher-Api-Key")
 		if requestAPIKey != s.apiKey {
+			result = "unauthorized"
+			errorType = "validation_error"
 			writeError(w, http.StatusUnauthorized, "invalid fetcher api key")
 			return
 		}
@@ -33,6 +54,8 @@ func (s *Server) handleFetchProduct(w http.ResponseWriter, r *http.Request) {
 
 	contentType := r.Header.Get("Content-Type")
 	if !strings.HasPrefix(contentType, "application/json") {
+		result = "unsupported_media_type"
+		errorType = "validation_error"
 		writeError(w, http.StatusUnsupportedMediaType, "content type must be application/json")
 		return
 	}
@@ -43,15 +66,20 @@ func (s *Server) handleFetchProduct(w http.ResponseWriter, r *http.Request) {
 	decoder.DisallowUnknownFields()
 
 	if err := decoder.Decode(&req); err != nil {
+		result = "invalid_json"
+		errorType = "validation_error"
 		writeError(w, http.StatusBadRequest, "invalid json request body")
 		return
 	}
 
 	req.Marketplace = strings.ToLower(strings.TrimSpace(req.Marketplace))
+	marketplace = observability.NormalizeMarketplace(req.Marketplace)
 	req.URL = strings.TrimSpace(req.URL)
 	req.ExternalID = strings.TrimSpace(req.ExternalID)
 
 	if err := validateFetchProductRequest(req); err != nil {
+		result = "validation_error"
+		errorType = "validation_error"
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -64,6 +92,8 @@ func (s *Server) handleFetchProduct(w http.ResponseWriter, r *http.Request) {
 	switch req.Marketplace {
 	case "wb":
 		if s.wbFetcher == nil {
+			result = "not_configured"
+			errorType = "parser_error"
 			writeError(w, http.StatusInternalServerError, "wb fetcher is not configured")
 			return
 		}
@@ -72,6 +102,8 @@ func (s *Server) handleFetchProduct(w http.ResponseWriter, r *http.Request) {
 
 	case "ozon":
 		if s.ozonFetcher == nil {
+			result = "not_configured"
+			errorType = "parser_error"
 			writeError(w, http.StatusInternalServerError, "ozon fetcher is not configured")
 			return
 		}
@@ -79,11 +111,17 @@ func (s *Server) handleFetchProduct(w http.ResponseWriter, r *http.Request) {
 		product, err = s.ozonFetcher(r.Context(), req)
 
 	default:
+		result = "validation_error"
+		errorType = "validation_error"
 		writeError(w, http.StatusBadRequest, "unsupported marketplace")
 		return
 	}
 
 	if err != nil {
+		classifiedError := classifyParserError(err)
+		result = "fetch_error"
+		errorType = classifiedError.ErrorType
+
 		s.logger.Error(
 			"failed to fetch product",
 			"marketplace", req.Marketplace,
@@ -96,6 +134,8 @@ func (s *Server) handleFetchProduct(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if product == nil {
+		result = "not_found"
+		errorType = "product_not_found"
 		writeError(w, http.StatusBadGateway, "product was not found")
 		return
 	}
@@ -103,6 +143,16 @@ func (s *Server) handleFetchProduct(w http.ResponseWriter, r *http.Request) {
 	if req.ExternalID != "" {
 		product.ExternalID = req.ExternalID
 	}
+
+	result = "success"
+	errorType = "none"
+
+	observability.ProductsReturnedTotal.WithLabelValues(
+		marketplace,
+	).Inc()
+	observability.LastSuccessfulProductFetchTimestampSeconds.WithLabelValues(
+		marketplace,
+	).SetToCurrentTime()
 
 	writeJSON(w, http.StatusOK, FetchProductResponse{
 		Status:  "success",

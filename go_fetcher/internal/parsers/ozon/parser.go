@@ -95,9 +95,17 @@ func NewParser(cfg ParserConfig, logger *slog.Logger) *Parser {
 }
 
 func (p *Parser) ParseProduct(ctx context.Context, productInput string) ([]models.Product, error) {
+	httpStartedAt := time.Now()
 	httpCtx, cancelHTTP := p.newHTTPParserContext(ctx)
 	products, err := p.parseProductHTTP(httpCtx, productInput)
 	cancelHTTP()
+	p.observeHTTPParserResult(
+		ctx,
+		"product",
+		httpStartedAt,
+		err,
+		products,
+	)
 
 	if err == nil && isValidOzonProductList(products) {
 		return products, nil
@@ -108,10 +116,17 @@ func (p *Parser) ParseProduct(ctx context.Context, productInput string) ([]model
 	}
 
 	if parentErr := ctx.Err(); parentErr != nil {
+		skipReason := classifyParentContextReason(parentErr)
+		p.observeBrowserFallbackSkipped("product", skipReason)
 		p.logBrowserFallbackSkipped(ctx, "product", productInput, 1, ozonBrowserProductPath, err, products, parentErr)
 		return products, fallbackSkippedError("parse Ozon product", err, parentErr)
 	}
 
+	fallbackReason := classifyFallbackReason(ctx, err, products)
+	fallbackStartedAt := p.observeBrowserFallbackStarted(
+		"product",
+		fallbackReason,
+	)
 	p.logBrowserFallbackStart(ctx, "product", productInput, 1, ozonBrowserProductPath, err, products)
 
 	browserCtx, cancelBrowser := p.newBrowserFallbackContext(ctx)
@@ -119,6 +134,13 @@ func (p *Parser) ParseProduct(ctx context.Context, productInput string) ([]model
 
 	product, browserErr := p.browserClient.ParseProduct(browserCtx, productInput)
 	if browserErr != nil {
+		failureReason := classifyBrowserFallbackFailure(browserErr)
+		p.observeBrowserFallbackFinished(
+			"product",
+			"failed",
+			failureReason,
+			fallbackStartedAt,
+		)
 		p.logBrowserFallbackFailure(ctx, "product", productInput, ozonBrowserProductPath, browserErr)
 
 		if err != nil {
@@ -127,6 +149,13 @@ func (p *Parser) ParseProduct(ctx context.Context, productInput string) ([]model
 
 		return products, fmt.Errorf("parse Ozon product with browser fallback: %w", browserErr)
 	}
+
+	p.observeBrowserFallbackFinished(
+		"product",
+		"success",
+		fallbackReason,
+		fallbackStartedAt,
+	)
 
 	return []models.Product{product}, nil
 }
@@ -223,6 +252,7 @@ func (p *Parser) SearchProducts(ctx context.Context, query string, limit int) ([
 		return nil, fmt.Errorf("limit must be greater than zero")
 	}
 
+	httpStartedAt := time.Now()
 	httpCtx, cancelHTTP := p.newHTTPParserContext(ctx)
 	products, err := p.fetchCatalogProducts(httpCtx, CatalogRequest{
 		Mode:  "search",
@@ -230,6 +260,13 @@ func (p *Parser) SearchProducts(ctx context.Context, query string, limit int) ([
 		Limit: limit,
 	})
 	cancelHTTP()
+	p.observeHTTPParserResult(
+		ctx,
+		"search",
+		httpStartedAt,
+		err,
+		products,
+	)
 
 	if err == nil && isValidOzonProductList(products) {
 		return products, nil
@@ -240,10 +277,17 @@ func (p *Parser) SearchProducts(ctx context.Context, query string, limit int) ([
 	}
 
 	if parentErr := ctx.Err(); parentErr != nil {
+		skipReason := classifyParentContextReason(parentErr)
+		p.observeBrowserFallbackSkipped("search", skipReason)
 		p.logBrowserFallbackSkipped(ctx, "search", query, limit, ozonBrowserSearchPath, err, products, parentErr)
 		return products, fallbackSkippedError("search Ozon products", err, parentErr)
 	}
 
+	fallbackReason := classifyFallbackReason(ctx, err, products)
+	fallbackStartedAt := p.observeBrowserFallbackStarted(
+		"search",
+		fallbackReason,
+	)
 	p.logBrowserFallbackStart(ctx, "search", query, limit, ozonBrowserSearchPath, err, products)
 
 	browserCtx, cancelBrowser := p.newBrowserFallbackContext(ctx)
@@ -251,6 +295,13 @@ func (p *Parser) SearchProducts(ctx context.Context, query string, limit int) ([
 
 	browserProducts, browserErr := p.browserClient.SearchProducts(browserCtx, query, limit)
 	if browserErr != nil {
+		failureReason := classifyBrowserFallbackFailure(browserErr)
+		p.observeBrowserFallbackFinished(
+			"search",
+			"failed",
+			failureReason,
+			fallbackStartedAt,
+		)
 		p.logBrowserFallbackFailure(ctx, "search", query, ozonBrowserSearchPath, browserErr)
 
 		if err != nil {
@@ -259,6 +310,13 @@ func (p *Parser) SearchProducts(ctx context.Context, query string, limit int) ([
 
 		return products, fmt.Errorf("search Ozon products with browser fallback: %w", browserErr)
 	}
+
+	p.observeBrowserFallbackFinished(
+		"search",
+		"success",
+		fallbackReason,
+		fallbackStartedAt,
+	)
 
 	return browserProducts, nil
 }
@@ -274,6 +332,7 @@ func (p *Parser) CategoryProducts(ctx context.Context, categoryInput string, lim
 		return nil, fmt.Errorf("limit must be greater than zero")
 	}
 
+	httpStartedAt := time.Now()
 	httpCtx, cancelHTTP := p.newHTTPParserContext(ctx)
 	products, err := p.fetchCatalogProducts(httpCtx, CatalogRequest{
 		Mode:  "category",
@@ -281,6 +340,13 @@ func (p *Parser) CategoryProducts(ctx context.Context, categoryInput string, lim
 		Limit: limit,
 	})
 	cancelHTTP()
+	p.observeHTTPParserResult(
+		ctx,
+		"category",
+		httpStartedAt,
+		err,
+		products,
+	)
 
 	if err == nil && isValidOzonProductList(products) {
 		return products, nil
@@ -291,10 +357,17 @@ func (p *Parser) CategoryProducts(ctx context.Context, categoryInput string, lim
 	}
 
 	if parentErr := ctx.Err(); parentErr != nil {
+		skipReason := classifyParentContextReason(parentErr)
+		p.observeBrowserFallbackSkipped("category", skipReason)
 		p.logBrowserFallbackSkipped(ctx, "category", categoryInput, limit, ozonBrowserCategoryPath, err, products, parentErr)
 		return products, fallbackSkippedError("parse Ozon category", err, parentErr)
 	}
 
+	fallbackReason := classifyFallbackReason(ctx, err, products)
+	fallbackStartedAt := p.observeBrowserFallbackStarted(
+		"category",
+		fallbackReason,
+	)
 	p.logBrowserFallbackStart(ctx, "category", categoryInput, limit, ozonBrowserCategoryPath, err, products)
 
 	browserCtx, cancelBrowser := p.newBrowserFallbackContext(ctx)
@@ -302,6 +375,13 @@ func (p *Parser) CategoryProducts(ctx context.Context, categoryInput string, lim
 
 	browserProducts, browserErr := p.browserClient.CategoryProducts(browserCtx, categoryInput, limit)
 	if browserErr != nil {
+		failureReason := classifyBrowserFallbackFailure(browserErr)
+		p.observeBrowserFallbackFinished(
+			"category",
+			"failed",
+			failureReason,
+			fallbackStartedAt,
+		)
 		p.logBrowserFallbackFailure(ctx, "category", categoryInput, ozonBrowserCategoryPath, browserErr)
 
 		if err != nil {
@@ -310,6 +390,13 @@ func (p *Parser) CategoryProducts(ctx context.Context, categoryInput string, lim
 
 		return products, fmt.Errorf("parse Ozon category with browser fallback: %w", browserErr)
 	}
+
+	p.observeBrowserFallbackFinished(
+		"category",
+		"success",
+		fallbackReason,
+		fallbackStartedAt,
+	)
 
 	return browserProducts, nil
 }
