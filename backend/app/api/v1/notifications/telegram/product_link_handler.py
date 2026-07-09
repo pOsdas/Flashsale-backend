@@ -26,6 +26,10 @@ from app.api.v1.notifications.telegram.product_presenter import (
     build_product_preview_text,
 )
 from app.api.v1.notifications.telegram.replies import TelegramReplyService
+from app.api.v1.notifications.telegram.telegram_metrics import (
+    TELEGRAM_PREVIEWS_TOTAL,
+    normalize_marketplace_label,
+)
 from app.api.v1.notifications.telegram.user_context import (
     TelegramUserContext,
 )
@@ -66,11 +70,19 @@ class TelegramProductLinkHandler:
                 text=text,
             )
         except MarketplaceUrlError as exc:
+            TELEGRAM_PREVIEWS_TOTAL.labels(
+                marketplace="unknown",
+                result="invalid_url",
+            ).inc()
             self.replies.send_message(
                 chat_id=user_context.telegram_chat_id,
                 text=str(exc),
             )
             return
+
+        marketplace_label = normalize_marketplace_label(
+            resolved_url.marketplace
+        )
 
         existing_target = find_existing_monitoring_target(
             user=user_context.user,
@@ -80,6 +92,10 @@ class TelegramProductLinkHandler:
         )
 
         if existing_target is not None:
+            TELEGRAM_PREVIEWS_TOTAL.labels(
+                marketplace=marketplace_label,
+                result="duplicate",
+            ).inc()
             self._send_existing_target(
                 user_context=user_context,
                 target=existing_target,
@@ -88,6 +104,7 @@ class TelegramProductLinkHandler:
 
         if not self._check_preview_rate_limit(
             user_context=user_context,
+            marketplace=marketplace_label,
         ):
             return
 
@@ -97,6 +114,10 @@ class TelegramProductLinkHandler:
                 url=resolved_url.url,
             )
         except ProductPreviewError as exc:
+            TELEGRAM_PREVIEWS_TOTAL.labels(
+                marketplace=marketplace_label,
+                result="error",
+            ).inc()
             self.replies.send_message(
                 chat_id=user_context.telegram_chat_id,
                 text=f"⚠️ {exc}",
@@ -111,6 +132,10 @@ class TelegramProductLinkHandler:
         )
 
         if existing_target is not None:
+            TELEGRAM_PREVIEWS_TOTAL.labels(
+                marketplace=marketplace_label,
+                result="duplicate",
+            ).inc()
             self._send_existing_target(
                 user_context=user_context,
                 target=existing_target,
@@ -137,6 +162,10 @@ class TelegramProductLinkHandler:
                 reviews_count=preview.reviews_count,
             )
         except PendingProductStoreError as exc:
+            TELEGRAM_PREVIEWS_TOTAL.labels(
+                marketplace=marketplace_label,
+                result="pending_store_error",
+            ).inc()
             logger.exception(
                 "Failed to store Telegram pending product",
                 extra={
@@ -163,6 +192,15 @@ class TelegramProductLinkHandler:
             ),
         )
 
+        TELEGRAM_PREVIEWS_TOTAL.labels(
+            marketplace=marketplace_label,
+            result=(
+                "success"
+                if sent
+                else "reply_failed"
+            ),
+        ).inc()
+
         if not sent:
             self.pending_store.delete(
                 token=pending_product.token,
@@ -188,6 +226,7 @@ class TelegramProductLinkHandler:
         self,
         *,
         user_context: TelegramUserContext,
+        marketplace: str,
     ) -> bool:
         if self.action_rate_limiter is not None:
             result = self.action_rate_limiter.check_preview(
@@ -207,6 +246,11 @@ class TelegramProductLinkHandler:
 
         if result.allowed:
             return True
+
+        TELEGRAM_PREVIEWS_TOTAL.labels(
+            marketplace=marketplace,
+            result="rate_limited",
+        ).inc()
 
         retry_after_seconds = max(
             int(result.retry_after_seconds),

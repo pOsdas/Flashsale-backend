@@ -1,6 +1,9 @@
 from dataclasses import dataclass
 
 from app.api.v1.common.rate_limit import check_rate_limit
+from app.api.v1.notifications.telegram.telegram_metrics import (
+    TELEGRAM_RATE_LIMIT_DECISIONS_TOTAL,
+)
 from app.core.logging import get_logger
 
 
@@ -113,6 +116,11 @@ class TelegramActionRateLimiter:
         normalized_identity = str(identity).strip()
 
         if not normalized_identity:
+            TELEGRAM_RATE_LIMIT_DECISIONS_TOTAL.labels(
+                scope=scope,
+                result="allowed",
+            ).inc()
+
             return TelegramActionRateLimitDecision(
                 allowed=True,
                 retry_after_seconds=0,
@@ -130,6 +138,11 @@ class TelegramActionRateLimiter:
                 window_seconds=window_seconds,
             )
         except Exception as exc:
+            TELEGRAM_RATE_LIMIT_DECISIONS_TOTAL.labels(
+                scope=scope,
+                result="error_fail_open",
+            ).inc()
+
             logger.exception(
                 "Telegram action rate limit check failed open",
                 extra={
@@ -157,6 +170,15 @@ class TelegramActionRateLimiter:
             limit=int(result.limit),
             window_seconds=window_seconds,
         )
+
+        TELEGRAM_RATE_LIMIT_DECISIONS_TOTAL.labels(
+            scope=scope,
+            result=(
+                "allowed"
+                if decision.allowed
+                else "blocked"
+            ),
+        ).inc()
 
         if not decision.allowed:
             logger.warning(

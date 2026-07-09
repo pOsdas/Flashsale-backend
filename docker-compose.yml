@@ -190,6 +190,8 @@ services:
       - ./backend/.env.docker
     command: >
       sh -c "python manage.py run_telegram_onboarding_bot"
+    expose:
+      - "8013"
     depends_on:
       postgres:
         condition: service_healthy

@@ -26,6 +26,10 @@ from app.api.v1.notifications.telegram.product_presenter import (
     build_product_cancelled_text,
     build_product_retry_text,
 )
+from app.api.v1.notifications.telegram.telegram_metrics import (
+    TELEGRAM_TARGET_CREATIONS_TOTAL,
+    normalize_marketplace_label,
+)
 from app.api.v1.notifications.telegram.user_context import (
     TelegramUserContext,
     TelegramUserContextResolver,
@@ -93,6 +97,10 @@ class TelegramProductCallbackHandler:
             return
 
         if not chat_id or not isinstance(message_id, int):
+            TELEGRAM_TARGET_CREATIONS_TOTAL.labels(
+                marketplace="unknown",
+                result="expired",
+            ).inc()
             self.client.answer_callback_query(
                 callback_query_id=callback_query_id,
                 text=MESSAGE_CALLBACK_EXPIRED,
@@ -101,6 +109,10 @@ class TelegramProductCallbackHandler:
             return
 
         if from_user_id and from_user_id != chat_id:
+            TELEGRAM_TARGET_CREATIONS_TOTAL.labels(
+                marketplace="unknown",
+                result="forbidden",
+            ).inc()
             self.client.answer_callback_query(
                 callback_query_id=callback_query_id,
                 text=MESSAGE_CALLBACK_FORBIDDEN,
@@ -113,6 +125,10 @@ class TelegramProductCallbackHandler:
         )
 
         if user_context is None:
+            TELEGRAM_TARGET_CREATIONS_TOTAL.labels(
+                marketplace="unknown",
+                result="connect_required",
+            ).inc()
             self.client.answer_callback_query(
                 callback_query_id=callback_query_id,
                 text=MESSAGE_CONNECT_REQUIRED,
@@ -128,6 +144,10 @@ class TelegramProductCallbackHandler:
         )
 
         if pending_product is None:
+            TELEGRAM_TARGET_CREATIONS_TOTAL.labels(
+                marketplace="unknown",
+                result="expired",
+            ).inc()
             self.client.answer_callback_query(
                 callback_query_id=callback_query_id,
                 text=MESSAGE_CALLBACK_EXPIRED,
@@ -135,10 +155,18 @@ class TelegramProductCallbackHandler:
             )
             return
 
+        marketplace_label = normalize_marketplace_label(
+            pending_product.marketplace
+        )
+
         if not self._belongs_to_user(
             pending_product=pending_product,
             user_context=user_context,
         ):
+            TELEGRAM_TARGET_CREATIONS_TOTAL.labels(
+                marketplace=marketplace_label,
+                result="forbidden",
+            ).inc()
             self.client.answer_callback_query(
                 callback_query_id=callback_query_id,
                 text=MESSAGE_CALLBACK_FORBIDDEN,
@@ -173,8 +201,15 @@ class TelegramProductCallbackHandler:
         pending_product: PendingTelegramProduct,
     ) -> None:
         token = pending_product.token
+        marketplace_label = normalize_marketplace_label(
+            pending_product.marketplace
+        )
 
         if not self.pending_store.acquire_lock(token=token):
+            TELEGRAM_TARGET_CREATIONS_TOTAL.labels(
+                marketplace=marketplace_label,
+                result="busy",
+            ).inc()
             self.client.answer_callback_query(
                 callback_query_id=callback_query_id,
                 text=MESSAGE_CALLBACK_BUSY,
@@ -197,6 +232,10 @@ class TelegramProductCallbackHandler:
             )
 
             if existing_target is not None:
+                TELEGRAM_TARGET_CREATIONS_TOTAL.labels(
+                    marketplace=marketplace_label,
+                    result="duplicate",
+                ).inc()
                 self.pending_store.delete(token=token)
                 self.client.edit_message_text(
                     chat_id=chat_id,
@@ -222,6 +261,10 @@ class TelegramProductCallbackHandler:
             )
 
         except MonitoringTargetServiceError as exc:
+            TELEGRAM_TARGET_CREATIONS_TOTAL.labels(
+                marketplace=marketplace_label,
+                result="service_error",
+            ).inc()
             logger.warning(
                 "Telegram monitoring target creation failed",
                 extra={
@@ -242,6 +285,10 @@ class TelegramProductCallbackHandler:
             return
 
         except Exception as exc:
+            TELEGRAM_TARGET_CREATIONS_TOTAL.labels(
+                marketplace=marketplace_label,
+                result="error",
+            ).inc()
             logger.exception(
                 "Unexpected Telegram monitoring target creation error",
                 extra={
@@ -266,6 +313,10 @@ class TelegramProductCallbackHandler:
         finally:
             self.pending_store.release_lock(token=token)
 
+        TELEGRAM_TARGET_CREATIONS_TOTAL.labels(
+            marketplace=marketplace_label,
+            result="created",
+        ).inc()
         self.pending_store.delete(token=token)
         self.client.edit_message_text(
             chat_id=chat_id,
@@ -285,6 +336,12 @@ class TelegramProductCallbackHandler:
         message_id: int,
         pending_product: PendingTelegramProduct,
     ) -> None:
+        TELEGRAM_TARGET_CREATIONS_TOTAL.labels(
+            marketplace=normalize_marketplace_label(
+                pending_product.marketplace
+            ),
+            result="cancelled",
+        ).inc()
         self.pending_store.delete(
             token=pending_product.token,
         )

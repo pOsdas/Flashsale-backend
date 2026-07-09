@@ -40,6 +40,9 @@ from app.api.v1.notifications.telegram.products_presenter import (
 from app.api.v1.notifications.telegram.replies import (
     TelegramReplyService,
 )
+from app.api.v1.notifications.telegram.telegram_metrics import (
+    TELEGRAM_TARGET_ACTIONS_TOTAL,
+)
 from app.api.v1.notifications.telegram.user_context import (
     TelegramUserContext,
     TelegramUserContextResolver,
@@ -309,6 +312,11 @@ class TelegramProductsHandler:
                 )
             )
             if not rate_limit_result.allowed:
+                TELEGRAM_TARGET_ACTIONS_TOTAL.labels(
+                    action="check",
+                    result="rate_limited",
+                ).inc()
+
                 retry_after_seconds = max(
                     rate_limit_result.retry_after_seconds,
                     1,
@@ -333,12 +341,22 @@ class TelegramProductsHandler:
                 target_id=target_id,
             )
         except MonitoringTargetCheckBusyError:
+            TELEGRAM_TARGET_ACTIONS_TOTAL.labels(
+                action="check",
+                result="busy",
+            ).inc()
+
             self.client.send_message(
                 chat_id=chat_id,
                 text=MESSAGE_CHECK_BUSY,
             )
             return
         except MonitoringTargetNotFoundError:
+            TELEGRAM_TARGET_ACTIONS_TOTAL.labels(
+                action="check",
+                result="not_found",
+            ).inc()
+
             self.client.send_message(
                 chat_id=chat_id,
                 text=MESSAGE_TARGET_NOT_FOUND,
@@ -351,6 +369,11 @@ class TelegramProductsHandler:
             )
             return
         except MonitoringTargetCheckError as exc:
+            TELEGRAM_TARGET_ACTIONS_TOTAL.labels(
+                action="check",
+                result="error",
+            ).inc()
+
             logger.warning(
                 "Telegram target manual check failed",
                 extra={
@@ -369,6 +392,11 @@ class TelegramProductsHandler:
             )
             return
         except Exception as exc:
+            TELEGRAM_TARGET_ACTIONS_TOTAL.labels(
+                action="check",
+                result="unexpected_error",
+            ).inc()
+
             logger.exception(
                 "Unexpected Telegram target manual check error",
                 extra={
@@ -383,6 +411,11 @@ class TelegramProductsHandler:
                 text="⚠️ Внутренняя ошибка при проверке товара.",
             )
             return
+
+        TELEGRAM_TARGET_ACTIONS_TOTAL.labels(
+            action="check",
+            result="success",
+        ).inc()
 
         self._edit_page(
             chat_id=chat_id,
@@ -422,10 +455,20 @@ class TelegramProductsHandler:
                 target_id=target_id,
             )
         except MonitoringTargetNotFoundError:
+            TELEGRAM_TARGET_ACTIONS_TOTAL.labels(
+                action="pause",
+                result="not_found",
+            ).inc()
+
             self.client.send_message(
                 chat_id=chat_id,
                 text=MESSAGE_TARGET_NOT_FOUND,
             )
+        else:
+            TELEGRAM_TARGET_ACTIONS_TOTAL.labels(
+                action="pause",
+                result="success",
+            ).inc()
 
         self._edit_page(
             chat_id=chat_id,
@@ -455,10 +498,20 @@ class TelegramProductsHandler:
                 target_id=target_id,
             )
         except MonitoringTargetNotFoundError:
+            TELEGRAM_TARGET_ACTIONS_TOTAL.labels(
+                action="resume",
+                result="not_found",
+            ).inc()
+
             self.client.send_message(
                 chat_id=chat_id,
                 text=MESSAGE_TARGET_NOT_FOUND,
             )
+        else:
+            TELEGRAM_TARGET_ACTIONS_TOTAL.labels(
+                action="resume",
+                result="success",
+            ).inc()
 
         self._edit_page(
             chat_id=chat_id,
@@ -534,11 +587,21 @@ class TelegramProductsHandler:
                 target_id=target_id,
             )
         except MonitoringTargetNotFoundError:
+            TELEGRAM_TARGET_ACTIONS_TOTAL.labels(
+                action="delete",
+                result="not_found",
+            ).inc()
+
             self.client.send_message(
                 chat_id=chat_id,
                 text=MESSAGE_TARGET_NOT_FOUND,
             )
         else:
+            TELEGRAM_TARGET_ACTIONS_TOTAL.labels(
+                action="delete",
+                result="success",
+            ).inc()
+
             self.client.send_message(
                 chat_id=chat_id,
                 text="✅ Товар удалён из отслеживания.",

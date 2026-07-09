@@ -29,6 +29,12 @@ scrape_configs:
       - targets:
           - "monitoring_scanner:8012"
 
+  # Telegram bot
+  - job_name: "telegram_bot"
+    static_configs:
+      - targets:
+          - "telegram_bot:8013"
+
   # Notification RabbitMQ consumer
   - job_name: "notification_consumer"
     static_configs:

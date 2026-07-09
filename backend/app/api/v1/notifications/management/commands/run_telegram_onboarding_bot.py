@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.core.management.base import BaseCommand
+from prometheus_client import start_http_server
 
 from app.api.v1.monitoring.services.product_preview import (
     ProductPreviewService,
@@ -57,12 +58,21 @@ class Command(BaseCommand):
     help = "Run Telegram bot polling"
 
     def handle(self, *args, **options) -> None:
+        metrics_port = int(
+            getattr(
+                settings,
+                "NOTIF_TELEGRAM_METRICS_PORT",
+                8013,
+            )
+        )
         bot_token = settings.NOTIF_TELEGRAM_BOT_TOKEN
 
         if not bot_token:
             raise RuntimeError(
                 "NOTIF_TELEGRAM_BOT_TOKEN is empty"
             )
+
+        start_http_server(metrics_port)
 
         client = TelegramBotClient(
             token=bot_token,

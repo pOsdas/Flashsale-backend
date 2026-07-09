@@ -34,6 +34,10 @@ from app.api.v1.notifications.telegram.target_history_handler import (
 from app.api.v1.notifications.telegram.target_interval_handler import (
     TelegramTargetIntervalHandler,
 )
+from app.api.v1.notifications.telegram.telegram_metrics import (
+    TELEGRAM_CALLBACKS_TOTAL,
+    TELEGRAM_COMMANDS_TOTAL,
+)
 from app.api.v1.notifications.telegram.user_context import (
     TelegramUserContextResolver,
 )
@@ -152,6 +156,13 @@ class TelegramUpdateRouter:
 
         command, argument = self._parse_command(text=text)
 
+        if command is not None:
+            TELEGRAM_COMMANDS_TOTAL.labels(
+                command=self._normalize_command_metric(
+                    command=command,
+                ),
+            ).inc()
+
         if command == "/start":
             self.start_handler.handle(
                 chat_id=chat_id,
@@ -254,6 +265,9 @@ class TelegramUpdateRouter:
         if self.product_callback_handler.can_handle(
             callback_data=callback_data,
         ):
+            TELEGRAM_CALLBACKS_TOTAL.labels(
+                handler="product_confirmation",
+            ).inc()
             self.product_callback_handler.handle(
                 callback_query=callback_query,
             )
@@ -262,6 +276,9 @@ class TelegramUpdateRouter:
         if self.notifications_handler.can_handle(
             callback_data=callback_data,
         ):
+            TELEGRAM_CALLBACKS_TOTAL.labels(
+                handler="notifications",
+            ).inc()
             self.notifications_handler.handle(
                 callback_query=callback_query,
             )
@@ -270,6 +287,9 @@ class TelegramUpdateRouter:
         if self.target_alert_settings_handler.can_handle(
             callback_data=callback_data,
         ):
+            TELEGRAM_CALLBACKS_TOTAL.labels(
+                handler="target_alert_settings",
+            ).inc()
             self.target_alert_settings_handler.handle(
                 callback_query=callback_query,
             )
@@ -278,6 +298,9 @@ class TelegramUpdateRouter:
         if self.target_interval_handler.can_handle(
             callback_data=callback_data,
         ):
+            TELEGRAM_CALLBACKS_TOTAL.labels(
+                handler="target_interval",
+            ).inc()
             self.target_interval_handler.handle(
                 callback_query=callback_query,
             )
@@ -286,6 +309,9 @@ class TelegramUpdateRouter:
         if self.target_history_handler.can_handle(
             callback_data=callback_data,
         ):
+            TELEGRAM_CALLBACKS_TOTAL.labels(
+                handler="target_history",
+            ).inc()
             self.target_history_handler.handle(
                 callback_query=callback_query,
             )
@@ -294,11 +320,17 @@ class TelegramUpdateRouter:
         if self.products_handler.can_handle_callback(
             callback_data=callback_data,
         ):
+            TELEGRAM_CALLBACKS_TOTAL.labels(
+                handler="products",
+            ).inc()
             self.products_handler.handle_callback(
                 callback_query=callback_query,
             )
             return
 
+        TELEGRAM_CALLBACKS_TOTAL.labels(
+            handler="unknown",
+        ).inc()
         self.client.answer_callback_query(
             callback_query_id=callback_query_id,
             text=MESSAGE_CALLBACK_NOT_AVAILABLE,
@@ -318,3 +350,17 @@ class TelegramUpdateRouter:
         argument = parts[1].strip() if len(parts) == 2 else None
 
         return command, argument
+
+    @staticmethod
+    def _normalize_command_metric(
+        *,
+        command: str,
+    ) -> str:
+        known_commands = {
+            "/start": "start",
+            "/help": "help",
+            "/products": "products",
+            "/notifications": "notifications",
+        }
+
+        return known_commands.get(command, "unknown")
