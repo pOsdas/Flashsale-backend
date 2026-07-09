@@ -12,6 +12,17 @@ from django.db.models import Min
 from django.utils import timezone
 
 from app.api.v1.common.locks import RedisLock, RedisLockAlreadyAcquiredError
+from app.api.v1.monitoring.cache_metrics import (
+    MONITORING_PRODUCT_CACHE_ENTRY_AGE_SECONDS,
+    MONITORING_PRODUCT_CACHE_LOCK_EVENTS_TOTAL,
+    MONITORING_PRODUCT_CACHE_LOOKUPS_TOTAL,
+    MONITORING_PRODUCT_CACHE_REFRESH_DURATION_SECONDS,
+    MONITORING_PRODUCT_CACHE_REFRESHES_IN_PROGRESS,
+    MONITORING_PRODUCT_CACHE_REFRESHES_TOTAL,
+    MONITORING_PRODUCT_CACHE_REQUESTS_TOTAL,
+    MONITORING_PRODUCT_CACHE_WAIT_DURATION_SECONDS,
+)
+from app.api.v1.monitoring.metric_utils import normalize_marketplace_label
 from app.api.v1.monitoring.models import (
     MonitoringTarget,
     MonitoringTargetStatus,
@@ -113,11 +124,18 @@ class ProductCacheService:
             fetch_product_callback: Callable[[], FetchedProductData] | None = None,
     ) -> ProductCacheResult:
         normalized_external_id = external_id.strip()
+        marketplace_label = normalize_marketplace_label(marketplace)
 
         cache_entry = self._get_cache_entry(
             marketplace=marketplace,
             external_id=normalized_external_id,
             url=url,
+        )
+
+        self._record_lookup(
+            marketplace_label=marketplace_label,
+            operation="get_or_refresh",
+            cache_entry=cache_entry,
         )
 
         effective_cache_minutes = self.calculate_effective_cache_minutes(
@@ -132,6 +150,15 @@ class ProductCacheService:
                 effective_cache_minutes=effective_cache_minutes,
             )
             if fresh_result is not None:
+                self._record_request_result(
+                    marketplace_label=marketplace_label,
+                    operation="get_or_refresh",
+                    result="fresh_hit",
+                )
+                self._observe_cache_result(
+                    marketplace_label=marketplace_label,
+                    cache_result=fresh_result,
+                )
                 return fresh_result
 
         lock_key = self._build_lock_key(
@@ -140,11 +167,20 @@ class ProductCacheService:
             url=url,
         )
 
+        lock_acquired = False
+
         try:
             with RedisLock(
                     key=lock_key,
                     ttl=self.lock_ttl_seconds,
             ):
+                lock_acquired = True
+
+                MONITORING_PRODUCT_CACHE_LOCK_EVENTS_TOTAL.labels(
+                    marketplace=marketplace_label,
+                    result="acquired",
+                ).inc()
+
                 return self._refresh_product_under_lock(
                     marketplace=marketplace,
                     url=url,
@@ -159,6 +195,11 @@ class ProductCacheService:
                 )
 
         except RedisLockAlreadyAcquiredError as exc:
+            MONITORING_PRODUCT_CACHE_LOCK_EVENTS_TOTAL.labels(
+                marketplace=marketplace_label,
+                result="busy",
+            ).inc()
+
             stale_result = self._build_stale_cache_result_if_possible(
                 cache_entry=cache_entry,
                 effective_cache_minutes=effective_cache_minutes,
@@ -173,20 +214,92 @@ class ProductCacheService:
                         "lock_key": lock_key,
                     },
                 )
+
+                MONITORING_PRODUCT_CACHE_LOCK_EVENTS_TOTAL.labels(
+                    marketplace=marketplace_label,
+                    result="stale_served",
+                ).inc()
+                self._record_request_result(
+                    marketplace_label=marketplace_label,
+                    operation="get_or_refresh",
+                    result="stale_hit",
+                )
+                self._observe_cache_result(
+                    marketplace_label=marketplace_label,
+                    cache_result=stale_result,
+                )
                 return stale_result
 
+            wait_started_at = time.monotonic()
             waited_result = self._wait_for_cache_after_busy_lock(
                 marketplace=marketplace,
                 external_id=normalized_external_id,
                 url=url,
                 fallback_interval_minutes=fallback_interval_minutes,
             )
+            wait_duration = time.monotonic() - wait_started_at
+
             if waited_result is not None:
+                wait_result = (
+                    "stale"
+                    if waited_result.is_stale
+                    else "fresh"
+                )
+                request_result = (
+                    "wait_stale_hit"
+                    if waited_result.is_stale
+                    else "wait_fresh_hit"
+                )
+
+                MONITORING_PRODUCT_CACHE_WAIT_DURATION_SECONDS.labels(
+                    marketplace=marketplace_label,
+                    result=wait_result,
+                ).observe(wait_duration)
+                MONITORING_PRODUCT_CACHE_LOCK_EVENTS_TOTAL.labels(
+                    marketplace=marketplace_label,
+                    result=f"wait_{wait_result}",
+                ).inc()
+                self._record_request_result(
+                    marketplace_label=marketplace_label,
+                    operation="get_or_refresh",
+                    result=request_result,
+                )
+                self._observe_cache_result(
+                    marketplace_label=marketplace_label,
+                    cache_result=waited_result,
+                )
                 return waited_result
+
+            MONITORING_PRODUCT_CACHE_WAIT_DURATION_SECONDS.labels(
+                marketplace=marketplace_label,
+                result="timeout",
+            ).observe(wait_duration)
+            MONITORING_PRODUCT_CACHE_LOCK_EVENTS_TOTAL.labels(
+                marketplace=marketplace_label,
+                result="wait_timeout",
+            ).inc()
+            self._record_request_result(
+                marketplace_label=marketplace_label,
+                operation="get_or_refresh",
+                result="busy",
+            )
 
             raise ProductCacheBusyError(
                 "Product cache refresh is already in progress and cached data is not ready yet."
             ) from exc
+
+        except Exception:
+            if not lock_acquired:
+                MONITORING_PRODUCT_CACHE_LOCK_EVENTS_TOTAL.labels(
+                    marketplace=marketplace_label,
+                    result="error",
+                ).inc()
+                self._record_request_result(
+                    marketplace_label=marketplace_label,
+                    operation="get_or_refresh",
+                    result="lock_error",
+                )
+            raise
 
     def get_cached_product_by_identity(
             self,
@@ -206,13 +319,25 @@ class ProductCacheService:
         """
 
         normalized_external_id = external_id.strip()
+        marketplace_label = normalize_marketplace_label(marketplace)
         cache_entry = self._get_cache_entry(
             marketplace=marketplace,
             external_id=normalized_external_id,
             url=url,
         )
 
+        self._record_lookup(
+            marketplace_label=marketplace_label,
+            operation="get_cached",
+            cache_entry=cache_entry,
+        )
+
         if cache_entry is None:
+            self._record_request_result(
+                marketplace_label=marketplace_label,
+                operation="get_cached",
+                result="miss",
+            )
             return None
 
         if (
@@ -232,6 +357,11 @@ class ProductCacheService:
                     "cached_url": str(getattr(cache_entry, "url", "") or ""),
                 },
             )
+            self._record_request_result(
+                marketplace_label=marketplace_label,
+                operation="get_cached",
+                result="identity_mismatch",
+            )
             return None
 
         effective_cache_minutes = self.calculate_effective_cache_minutes(
@@ -248,15 +378,48 @@ class ProductCacheService:
             effective_cache_minutes=effective_cache_minutes,
         )
         if fresh_result is not None:
+            self._record_request_result(
+                marketplace_label=marketplace_label,
+                operation="get_cached",
+                result="fresh_hit",
+            )
+            self._observe_cache_result(
+                marketplace_label=marketplace_label,
+                cache_result=fresh_result,
+            )
             return fresh_result
 
         if not allow_stale:
+            self._record_request_result(
+                marketplace_label=marketplace_label,
+                operation="get_cached",
+                result="expired",
+            )
             return None
 
-        return self._build_stale_cache_result_if_possible(
+        stale_result = self._build_stale_cache_result_if_possible(
             cache_entry=cache_entry,
             effective_cache_minutes=effective_cache_minutes,
         )
+
+        if stale_result is not None:
+            self._record_request_result(
+                marketplace_label=marketplace_label,
+                operation="get_cached",
+                result="stale_hit",
+            )
+            self._observe_cache_result(
+                marketplace_label=marketplace_label,
+                cache_result=stale_result,
+            )
+            return stale_result
+
+        self._record_request_result(
+            marketplace_label=marketplace_label,
+            operation="get_cached",
+            result="miss",
+        )
+        return None
 
     def calculate_effective_cache_minutes(
             self,
@@ -298,6 +461,7 @@ class ProductCacheService:
             log_identity: str,
             fetch_product_callback: Callable[[], FetchedProductData] | None,
     ) -> ProductCacheResult:
+        marketplace_label = normalize_marketplace_label(marketplace)
         cache_entry = self._get_cache_entry(
             marketplace=marketplace,
             external_id=external_id,
@@ -316,7 +480,23 @@ class ProductCacheService:
                 effective_cache_minutes=effective_cache_minutes,
             )
             if fresh_result is not None:
+                self._record_request_result(
+                    marketplace_label=marketplace_label,
+                    operation="get_or_refresh",
+                    result="fresh_hit_after_lock",
+                )
+                self._observe_cache_result(
+                    marketplace_label=marketplace_label,
+                    cache_result=fresh_result,
+                )
                 return fresh_result
+
+        refresh_started_at = time.monotonic()
+        refresh_result = "error"
+
+        MONITORING_PRODUCT_CACHE_REFRESHES_IN_PROGRESS.labels(
+            marketplace=marketplace_label,
+        ).inc()
 
         try:
             if fetch_product_callback is not None:
@@ -332,59 +512,96 @@ class ProductCacheService:
                     log_identity=log_identity,
                 )
 
+            parsed_at = timezone.now()
+            effective_cache_minutes = (
+                self.calculate_effective_cache_minutes(
+                    marketplace=marketplace,
+                    external_id=fetched_product.external_id,
+                    fallback_interval_minutes=fallback_interval_minutes,
+                )
+            )
+            expires_at = parsed_at + timedelta(
+                minutes=effective_cache_minutes
+            )
+
+            with transaction.atomic():
+                cache_entry, _ = ProductCacheEntry.objects.update_or_create(
+                    marketplace=marketplace,
+                    external_id=fetched_product.external_id,
+                    defaults={
+                        "url": url,
+                        "title": fetched_product.title,
+                        "seller_name": fetched_product.seller_name,
+                        "brand": fetched_product.brand,
+                        "data": self._serialize_product_data(
+                            product=fetched_product
+                        ),
+                        "parsed_at": parsed_at,
+                        "expires_at": expires_at,
+                        "effective_cache_minutes": (
+                            effective_cache_minutes
+                        ),
+                        "last_success_at": parsed_at,
+                        "last_error": "",
+                    },
+                )
+
+            logger.info(
+                "monitoring product cache refreshed from parser",
+                extra={
+                    "service": "monitoring_product_cache",
+                    "marketplace": marketplace,
+                    "external_id": fetched_product.external_id,
+                    "cache_entry_id": str(cache_entry.id),
+                    "effective_cache_minutes": (
+                        effective_cache_minutes
+                    ),
+                    "log_identity": log_identity,
+                },
+            )
+
+            refresh_result = "success"
+            self._record_request_result(
+                marketplace_label=marketplace_label,
+                operation="get_or_refresh",
+                result="refreshed",
+            )
+
+            return ProductCacheResult(
+                product=fetched_product,
+                source=SnapshotSource.PARSER,
+                is_stale=False,
+                parsed_at=parsed_at,
+                expires_at=expires_at,
+                effective_cache_minutes=effective_cache_minutes,
+            )
+
         except Exception as exc:
             self._mark_cache_refresh_failed(
                 cache_entry=cache_entry,
                 error=str(exc),
             )
+            self._record_request_result(
+                marketplace_label=marketplace_label,
+                operation="get_or_refresh",
+                result="refresh_error",
+            )
             raise
 
-        parsed_at = timezone.now()
-        effective_cache_minutes = self.calculate_effective_cache_minutes(
-            marketplace=marketplace,
-            external_id=fetched_product.external_id,
-            fallback_interval_minutes=fallback_interval_minutes,
-        )
-        expires_at = parsed_at + timedelta(minutes=effective_cache_minutes)
-
-        with transaction.atomic():
-            cache_entry, _ = ProductCacheEntry.objects.update_or_create(
-                marketplace=marketplace,
-                external_id=fetched_product.external_id,
-                defaults={
-                    "url": url,
-                    "title": fetched_product.title,
-                    "seller_name": fetched_product.seller_name,
-                    "brand": fetched_product.brand,
-                    "data": self._serialize_product_data(product=fetched_product),
-                    "parsed_at": parsed_at,
-                    "expires_at": expires_at,
-                    "effective_cache_minutes": effective_cache_minutes,
-                    "last_success_at": parsed_at,
-                    "last_error": "",
-                },
+        finally:
+            MONITORING_PRODUCT_CACHE_REFRESHES_TOTAL.labels(
+                marketplace=marketplace_label,
+                result=refresh_result,
+            ).inc()
+            MONITORING_PRODUCT_CACHE_REFRESH_DURATION_SECONDS.labels(
+                marketplace=marketplace_label,
+                result=refresh_result,
+            ).observe(
+                time.monotonic() - refresh_started_at
             )
-
-        logger.info(
-            "monitoring product cache refreshed from parser",
-            extra={
-                "service": "monitoring_product_cache",
-                "marketplace": marketplace,
-                "external_id": fetched_product.external_id,
-                "cache_entry_id": str(cache_entry.id),
-                "effective_cache_minutes": effective_cache_minutes,
-                "log_identity": log_identity,
-            },
-        )
-
-        return ProductCacheResult(
-            product=fetched_product,
-            source=SnapshotSource.PARSER,
-            is_stale=False,
-            parsed_at=parsed_at,
-            expires_at=expires_at,
-            effective_cache_minutes=effective_cache_minutes,
-        )
+            MONITORING_PRODUCT_CACHE_REFRESHES_IN_PROGRESS.labels(
+                marketplace=marketplace_label,
+            ).dec()
 
     def _get_cache_entry(
             self,
@@ -618,6 +835,58 @@ class ProductCacheService:
                 "updated_at",
             ]
         )
+
+    def _record_lookup(
+            self,
+            *,
+            marketplace_label: str,
+            operation: str,
+            cache_entry: ProductCacheEntry | None,
+    ) -> None:
+        result = "hit" if cache_entry is not None else "miss"
+
+        MONITORING_PRODUCT_CACHE_LOOKUPS_TOTAL.labels(
+            marketplace=marketplace_label,
+            operation=operation,
+            result=result,
+        ).inc()
+
+    def _record_request_result(
+            self,
+            *,
+            marketplace_label: str,
+            operation: str,
+            result: str,
+    ) -> None:
+        MONITORING_PRODUCT_CACHE_REQUESTS_TOTAL.labels(
+            marketplace=marketplace_label,
+            operation=operation,
+            result=result,
+        ).inc()
+
+    def _observe_cache_result(
+            self,
+            *,
+            marketplace_label: str,
+            cache_result: ProductCacheResult,
+    ) -> None:
+        parsed_at = getattr(cache_result, "parsed_at", None)
+        if parsed_at is None:
+            return
+
+        source = str(
+            getattr(cache_result, "source", "unknown")
+            or "unknown"
+        )
+        age_seconds = max(
+            0.0,
+            (timezone.now() - parsed_at).total_seconds(),
+        )
+
+        MONITORING_PRODUCT_CACHE_ENTRY_AGE_SECONDS.labels(
+            marketplace=marketplace_label,
+            source=source,
+        ).observe(age_seconds)
 
     def _serialize_product_data(
             self,

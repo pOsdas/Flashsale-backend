@@ -1,3 +1,4 @@
+import time
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any
@@ -6,6 +7,16 @@ from urllib.parse import urljoin
 import httpx
 from django.conf import settings
 
+from app.api.v1.monitoring.fetcher_metrics import (
+    MONITORING_GO_FETCHER_LAST_SUCCESS_TIMESTAMP_SECONDS,
+    MONITORING_GO_FETCHER_REQUEST_DURATION_SECONDS,
+    MONITORING_GO_FETCHER_REQUESTS_IN_PROGRESS,
+    MONITORING_GO_FETCHER_REQUESTS_TOTAL,
+)
+from app.api.v1.monitoring.metric_utils import (
+    build_http_status_class,
+    normalize_marketplace_label,
+)
 from app.api.v1.monitoring.models import Marketplace, MonitoringTarget
 from app.core.logging import get_logger
 
@@ -32,6 +43,14 @@ class MonitoringFetcherError(Exception):
     pass
 
 
+class MonitoringFetcherApplicationError(MonitoringFetcherError):
+    pass
+
+
+class MonitoringFetcherInvalidResponseError(MonitoringFetcherError):
+    pass
+
+
 class MonitoringFetcherClient:
     def fetch_target(self, *, target: MonitoringTarget) -> FetchedProductData:
         return self.fetch_product(
@@ -45,27 +64,27 @@ class MonitoringFetcherClient:
         )
 
     def fetch_product(
-            self,
-            *,
-            marketplace: str,
-            url: str,
-            external_id: str = "",
-            title: str = "",
-            seller_name: str = "",
-            brand: str = "",
-            log_identity: str = "",
+        self,
+        *,
+        marketplace: str,
+        url: str,
+        external_id: str = "",
+        title: str = "",
+        seller_name: str = "",
+        brand: str = "",
+        log_identity: str = "",
     ) -> FetchedProductData:
         raise NotImplementedError
 
 
 class HttpMonitoringFetcherClient(MonitoringFetcherClient):
     def __init__(
-            self,
-            *,
-            base_url: str,
-            product_endpoint: str,
-            api_key: str,
-            timeout_seconds: int,
+        self,
+        *,
+        base_url: str,
+        product_endpoint: str,
+        api_key: str,
+        timeout_seconds: int,
     ) -> None:
         self.base_url = base_url.rstrip("/") + "/"
         self.product_endpoint = product_endpoint.lstrip("/")
@@ -73,17 +92,21 @@ class HttpMonitoringFetcherClient(MonitoringFetcherClient):
         self.timeout_seconds = timeout_seconds
 
     def fetch_product(
-            self,
-            *,
-            marketplace: str,
-            url: str,
-            external_id: str = "",
-            title: str = "",
-            seller_name: str = "",
-            brand: str = "",
-            log_identity: str = "",
+        self,
+        *,
+        marketplace: str,
+        url: str,
+        external_id: str = "",
+        title: str = "",
+        seller_name: str = "",
+        brand: str = "",
+        log_identity: str = "",
     ) -> FetchedProductData:
         endpoint = urljoin(self.base_url, self.product_endpoint)
+        marketplace_label = normalize_marketplace_label(marketplace)
+        started_at = time.monotonic()
+        result = "error"
+        status_class = "none"
 
         payload = {
             "marketplace": marketplace,
@@ -112,79 +135,138 @@ class HttpMonitoringFetcherClient(MonitoringFetcherClient):
             },
         )
 
+        MONITORING_GO_FETCHER_REQUESTS_IN_PROGRESS.labels(
+            marketplace=marketplace_label,
+        ).inc()
+
         try:
-            with httpx.Client(timeout=self.timeout_seconds) as client:
-                response = client.post(
-                    endpoint,
-                    json=payload,
-                    headers=headers,
+            try:
+                with httpx.Client(timeout=self.timeout_seconds) as client:
+                    response = client.post(
+                        endpoint,
+                        json=payload,
+                        headers=headers,
+                    )
+
+                status_class = build_http_status_class(
+                    response.status_code
+                )
+                response.raise_for_status()
+
+            except httpx.TimeoutException as exc:
+                result = "timeout"
+                raise MonitoringFetcherError(
+                    f"go_fetcher request timeout: {exc}"
+                ) from exc
+
+            except httpx.HTTPStatusError as exc:
+                result = "http_error"
+                status_class = build_http_status_class(
+                    exc.response.status_code
+                )
+                response_text = exc.response.text[:1000]
+
+                raise MonitoringFetcherError(
+                    "go_fetcher returned HTTP "
+                    f"{exc.response.status_code}: {response_text}"
+                ) from exc
+
+            except httpx.HTTPError as exc:
+                result = "network_error"
+
+                logger.exception(
+                    "GO_FETCHER_REQUEST_FAILED",
+                    extra={
+                        "service": "monitoring",
+                        "log_identity": log_identity,
+                        "marketplace": marketplace,
+                        "full_url": endpoint,
+                        "error": str(exc),
+                    },
                 )
 
-            response.raise_for_status()
+                raise MonitoringFetcherError(
+                    f"go_fetcher request failed: {exc}"
+                ) from exc
 
-        except httpx.TimeoutException as exc:
-            raise MonitoringFetcherError(
-                f"go_fetcher request timeout: {exc}"
-            ) from exc
+            try:
+                data = response.json()
+            except ValueError as exc:
+                result = "invalid_json"
+                raise MonitoringFetcherInvalidResponseError(
+                    "go_fetcher returned invalid JSON"
+                ) from exc
 
-        except httpx.HTTPStatusError as exc:
-            response_text = exc.response.text[:1000]
+            try:
+                product = self._parse_response(
+                    data=data,
+                    fallback_external_id=external_id,
+                    fallback_title=title,
+                    fallback_seller_name=seller_name,
+                    fallback_brand=brand,
+                )
+            except MonitoringFetcherApplicationError:
+                result = "application_error"
+                raise
+            except MonitoringFetcherInvalidResponseError:
+                result = "invalid_response"
+                raise
 
-            raise MonitoringFetcherError(
-                f"go_fetcher returned HTTP {exc.response.status_code}: {response_text}"
-            ) from exc
+            result = "success"
+            MONITORING_GO_FETCHER_LAST_SUCCESS_TIMESTAMP_SECONDS.labels(
+                marketplace=marketplace_label,
+            ).set(time.time())
 
-        except httpx.HTTPError as exc:
-            logger.exception(
-                "GO_FETCHER_REQUEST_FAILED",
-                extra={
-                    "service": "monitoring",
-                    "log_identity": log_identity,
-                    "marketplace": marketplace,
-                    "full_url": endpoint,
-                    "error": str(exc),
-                },
+            return product
+
+        finally:
+            MONITORING_GO_FETCHER_REQUESTS_TOTAL.labels(
+                marketplace=marketplace_label,
+                result=result,
+                status_class=status_class,
+            ).inc()
+
+            MONITORING_GO_FETCHER_REQUEST_DURATION_SECONDS.labels(
+                marketplace=marketplace_label,
+                result=result,
+            ).observe(
+                time.monotonic() - started_at
             )
 
-            raise MonitoringFetcherError(
-                f"go_fetcher request failed: {exc}"
-            ) from exc
-
-        try:
-            data = response.json()
-        except ValueError as exc:
-            raise MonitoringFetcherError(
-                "go_fetcher returned invalid JSON"
-            ) from exc
-
-        return self._parse_response(
-            data=data,
-            fallback_external_id=external_id,
-            fallback_title=title,
-            fallback_seller_name=seller_name,
-            fallback_brand=brand,
-        )
+            MONITORING_GO_FETCHER_REQUESTS_IN_PROGRESS.labels(
+                marketplace=marketplace_label,
+            ).dec()
 
     def _parse_response(
-            self,
-            *,
-            data: dict[str, Any],
-            fallback_external_id: str = "",
-            fallback_title: str = "",
-            fallback_seller_name: str = "",
-            fallback_brand: str = "",
+        self,
+        *,
+        data: dict[str, Any],
+        fallback_external_id: str = "",
+        fallback_title: str = "",
+        fallback_seller_name: str = "",
+        fallback_brand: str = "",
     ) -> FetchedProductData:
         if not isinstance(data, dict):
-            raise MonitoringFetcherError("go_fetcher response must be JSON object")
+            raise MonitoringFetcherInvalidResponseError(
+                "go_fetcher response must be JSON object"
+            )
 
         if data.get("status") == "error":
-            error_message = data.get("error") or data.get("message") or "unknown fetcher error"
-            raise MonitoringFetcherError(str(error_message))
+            error_message = (
+                data.get("error")
+                or data.get("message")
+                or "unknown fetcher error"
+            )
+            raise MonitoringFetcherApplicationError(
+                str(error_message)
+            )
 
         product_data = data.get("product", data)
 
         if not isinstance(product_data, dict):
-            raise MonitoringFetcherError("go_fetcher product payload must be JSON object")
+            raise MonitoringFetcherInvalidResponseError(
+                "go_fetcher product payload must be JSON object"
+            )
 
         external_id = str(
             product_data.get("external_id")
@@ -214,8 +296,12 @@ class HttpMonitoringFetcherClient(MonitoringFetcherClient):
             or ""
         )
 
-        price = _cents_to_decimal_or_none(product_data.get("price_cents"))
-        old_price = _cents_to_decimal_or_none(product_data.get("old_price_cents"))
+        price = _cents_to_decimal_or_none(
+            product_data.get("price_cents")
+        )
+        old_price = _cents_to_decimal_or_none(
+            product_data.get("old_price_cents")
+        )
 
         currency = str(
             product_data.get("currency")
@@ -239,7 +325,10 @@ class HttpMonitoringFetcherClient(MonitoringFetcherClient):
         )
 
         if not external_id:
-            raise MonitoringFetcherError("go_fetcher response does not contain external_id/sku/id")
+            raise MonitoringFetcherInvalidResponseError(
+                "go_fetcher response does not contain "
+                "external_id/sku/id"
+            )
 
         return FetchedProductData(
             external_id=external_id,
@@ -286,11 +375,21 @@ class FakeMonitoringFetcherClient(MonitoringFetcherClient):
             reviews_count = 128
             is_available = False
 
-        external_id = target.external_id or self._extract_demo_external_id(marketplace=target.marketplace)
+        external_id = (
+            target.external_id
+            or self._extract_demo_external_id(
+                marketplace=target.marketplace
+            )
+        )
 
         return FetchedProductData(
             external_id=external_id,
-            title=target.title or self._build_demo_title(marketplace=target.marketplace),
+            title=(
+                target.title
+                or self._build_demo_title(
+                    marketplace=target.marketplace
+                )
+            ),
             seller_name=target.seller_name or "Demo Seller",
             brand=target.brand or "Demo Brand",
             price=price,
@@ -308,21 +407,31 @@ class FakeMonitoringFetcherClient(MonitoringFetcherClient):
         )
 
     def fetch_product(
-            self,
-            *,
-            marketplace: str,
-            url: str,
-            external_id: str = "",
-            title: str = "",
-            seller_name: str = "",
-            brand: str = "",
-            log_identity: str = "",
+        self,
+        *,
+        marketplace: str,
+        url: str,
+        external_id: str = "",
+        title: str = "",
+        seller_name: str = "",
+        brand: str = "",
+        log_identity: str = "",
     ) -> FetchedProductData:
-        resolved_external_id = external_id or self._extract_demo_external_id(marketplace=marketplace)
+        resolved_external_id = (
+            external_id
+            or self._extract_demo_external_id(
+                marketplace=marketplace
+            )
+        )
 
         return FetchedProductData(
             external_id=resolved_external_id,
-            title=title or self._build_demo_title(marketplace=marketplace),
+            title=(
+                title
+                or self._build_demo_title(
+                    marketplace=marketplace
+                )
+            ),
             seller_name=seller_name or "Demo Seller",
             brand=brand or "Demo Brand",
             price=Decimal("1000.00"),
@@ -373,7 +482,8 @@ def build_monitoring_fetcher_client() -> MonitoringFetcherClient:
         )
 
     raise RuntimeError(
-        f"Unsupported MONITORING_FETCHER_MODE={settings.MONITORING_FETCHER_MODE!r}. "
+        "Unsupported "
+        f"MONITORING_FETCHER_MODE={settings.MONITORING_FETCHER_MODE!r}. "
         "Allowed values: fake, http."
     )
 
@@ -388,7 +498,9 @@ def _to_decimal_or_none(value: Any) -> Decimal | None:
     try:
         return Decimal(str(value))
     except Exception as exc:
-        raise MonitoringFetcherError(f"Invalid decimal value: {value!r}") from exc
+        raise MonitoringFetcherInvalidResponseError(
+            f"Invalid decimal value: {value!r}"
+        ) from exc
 
 
 def _cents_to_decimal_or_none(value: Any) -> Decimal | None:
@@ -409,7 +521,9 @@ def _to_int_or_none(value: Any) -> int | None:
     try:
         return int(value)
     except Exception as exc:
-        raise MonitoringFetcherError(f"Invalid integer value: {value!r}") from exc
+        raise MonitoringFetcherInvalidResponseError(
+            f"Invalid integer value: {value!r}"
+        ) from exc
 
 
 def _to_bool_or_none(value: Any) -> bool | None:
@@ -422,13 +536,27 @@ def _to_bool_or_none(value: Any) -> bool | None:
     if isinstance(value, str):
         normalized = value.lower().strip()
 
-        if normalized in {"true", "1", "yes", "available", "in_stock"}:
+        if normalized in {
+            "true",
+            "1",
+            "yes",
+            "available",
+            "in_stock",
+        }:
             return True
 
-        if normalized in {"false", "0", "no", "unavailable", "out_of_stock"}:
+        if normalized in {
+            "false",
+            "0",
+            "no",
+            "unavailable",
+            "out_of_stock",
+        }:
             return False
 
     if isinstance(value, int):
         return bool(value)
 
-    raise MonitoringFetcherError(f"Invalid boolean value: {value!r}")
+    raise MonitoringFetcherInvalidResponseError(
+        f"Invalid boolean value: {value!r}"
+    )
