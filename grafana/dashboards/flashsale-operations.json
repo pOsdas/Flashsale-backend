@@ -30,8 +30,10 @@
       },
       "targets": [
         {
-          "expr": "up{job=\"backend\"} or vector(0)",
-          "refId": "A"
+          "expr": "max(up{job=\"backend\"}) or vector(0)",
+          "refId": "A",
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {
@@ -85,8 +87,10 @@
       },
       "targets": [
         {
-          "expr": "up{job=\"monitoring_scanner\"} or vector(0)",
-          "refId": "A"
+          "expr": "max(up{job=\"monitoring_scanner\"}) or vector(0)",
+          "refId": "A",
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {
@@ -140,8 +144,10 @@
       },
       "targets": [
         {
-          "expr": "up{job=\"notification_consumer\"} or vector(0)",
-          "refId": "A"
+          "expr": "max(up{job=\"notification_consumer\"}) or vector(0)",
+          "refId": "A",
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {
@@ -195,8 +201,10 @@
       },
       "targets": [
         {
-          "expr": "up{job=\"telegram_bot\"} or vector(0)",
-          "refId": "A"
+          "expr": "max(up{job=\"telegram_bot\"}) or vector(0)",
+          "refId": "A",
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {
@@ -250,8 +258,10 @@
       },
       "targets": [
         {
-          "expr": "up{job=\"go_fetcher\"} or vector(0)",
-          "refId": "A"
+          "expr": "max(up{job=\"go_fetcher\"}) or vector(0)",
+          "refId": "A",
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {
@@ -305,8 +315,10 @@
       },
       "targets": [
         {
-          "expr": "up{job=\"ozon_browser_fetcher\"} or vector(0)",
-          "refId": "A"
+          "expr": "max(up{job=\"ozon_browser_fetcher\"}) or vector(0)",
+          "refId": "A",
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {
@@ -361,7 +373,9 @@
       "targets": [
         {
           "expr": "outbox_pending_events or vector(0)",
-          "refId": "A"
+          "refId": "A",
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {
@@ -420,7 +434,9 @@
       "targets": [
         {
           "expr": "monitoring_scanner_overdue_targets or vector(0)",
-          "refId": "A"
+          "refId": "A",
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {
@@ -475,7 +491,9 @@
       "targets": [
         {
           "expr": "notification_delivery_records{status=\"pending\"} or vector(0)",
-          "refId": "A"
+          "refId": "A",
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {
@@ -534,7 +552,9 @@
       "targets": [
         {
           "expr": "sum(rabbitmq_queue_messages_ready) or vector(0)",
-          "refId": "A"
+          "refId": "A",
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {
@@ -593,7 +613,9 @@
       "targets": [
         {
           "expr": "sum(rate(django_http_responses_total_by_status_total{status=~\"5..\"}[$__rate_interval])) or vector(0)",
-          "refId": "A"
+          "refId": "A",
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {
@@ -648,7 +670,9 @@
       "targets": [
         {
           "expr": "sum(rate(go_fetcher_product_fetches_total{result!=\"success\"}[$__rate_interval])) or vector(0)",
-          "refId": "A"
+          "refId": "A",
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {
@@ -702,22 +726,22 @@
       },
       "targets": [
         {
-          "expr": "time() - monitoring_scanner_last_success_timestamp_seconds",
+          "expr": "time() - max(monitoring_scanner_last_success_timestamp_seconds{job=\"monitoring_scanner\"} > 0)",
           "legendFormat": "scanner",
           "refId": "A"
         },
         {
-          "expr": "time() - notification_consumer_heartbeat_timestamp_seconds",
+          "expr": "time() - max(notification_consumer_heartbeat_timestamp_seconds{job=\"notification_consumer\"} > 0)",
           "legendFormat": "notification consumer",
           "refId": "B"
         },
         {
-          "expr": "time() - telegram_polling_heartbeat_timestamp_seconds",
+          "expr": "time() - max(telegram_polling_heartbeat_timestamp_seconds{job=\"telegram_bot\"} > 0)",
           "legendFormat": "telegram polling",
           "refId": "C"
         },
         {
-          "expr": "time() - ozon_browser_worker_heartbeat_timestamp_seconds",
+          "expr": "time() - max(ozon_browser_worker_heartbeat_timestamp_seconds{job=\"ozon_browser_fetcher\"} > 0)",
           "legendFormat": "ozon browser",
           "refId": "D"
         }
@@ -725,7 +749,8 @@
       "fieldConfig": {
         "defaults": {
           "unit": "s",
-          "decimals": 1
+          "decimals": 1,
+          "noValue": "No heartbeat"
         },
         "overrides": []
       },

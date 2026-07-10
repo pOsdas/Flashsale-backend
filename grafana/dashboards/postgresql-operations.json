@@ -31,8 +31,10 @@
       },
       "targets": [
         {
-          "expr": "pg_up or vector(0)",
-          "refId": "A"
+          "expr": "max(pg_up{job=\"postgres\"}) or vector(0)",
+          "refId": "A",
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {
@@ -87,8 +89,10 @@
       },
       "targets": [
         {
-          "expr": "probe_success{job=\"blackbox_tcp\",instance=\"postgres:5432\"} or vector(0)",
-          "refId": "A"
+          "expr": "max(probe_success{job=\"blackbox_tcp\",instance=\"postgres:5432\"}) or vector(0)",
+          "refId": "A",
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {
@@ -143,7 +147,9 @@
       "targets": [
         {
           "expr": "sum(pg_stat_activity_count{datname=\"flashsale\"}) or vector(0)",
-          "refId": "A"
+          "refId": "A",
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {
@@ -194,7 +200,9 @@
       "targets": [
         {
           "expr": "pg_database_size_bytes{datname=\"flashsale\"} or vector(0)",
-          "refId": "A"
+          "refId": "A",
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {
@@ -245,7 +253,9 @@
       "targets": [
         {
           "expr": "rate(pg_stat_database_xact_rollback{datname=\"flashsale\"}[$__rate_interval]) or vector(0)",
-          "refId": "A"
+          "refId": "A",
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {
@@ -304,7 +314,9 @@
       "targets": [
         {
           "expr": "pg_stat_database_deadlocks{datname=\"flashsale\"} or vector(0)",
-          "refId": "A"
+          "refId": "A",
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {
@@ -652,7 +664,8 @@
               "mode": "none",
               "group": "A"
             }
-          }
+          },
+          "noValue": "No cache traffic"
         },
         "overrides": []
       },

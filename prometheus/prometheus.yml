@@ -95,7 +95,7 @@ scrape_configs:
     static_configs:
       - targets:
           - "http://backend:8000/api/v1/prometheus/metrics"
-          - "http://go_fetcher:8090/api/v1/parser/health/"
+          - "http://go_fetcher:8090/health"
           - "http://ozon_browser_fetcher:8095/api/v1/health"
           - "http://outbox_worker:9100/metrics"
           - "http://notification_consumer:8011/metrics"

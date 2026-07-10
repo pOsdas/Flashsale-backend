@@ -32,8 +32,10 @@
       },
       "targets": [
         {
-          "expr": "up{job=\"go_fetcher\"} or vector(0)",
-          "refId": "A"
+          "expr": "max(up{job=\"go_fetcher\"}) or vector(0)",
+          "refId": "A",
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {
@@ -87,8 +89,10 @@
       },
       "targets": [
         {
-          "expr": "up{job=\"ozon_browser_fetcher\"} or vector(0)",
-          "refId": "A"
+          "expr": "max(up{job=\"ozon_browser_fetcher\"}) or vector(0)",
+          "refId": "A",
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {
@@ -142,8 +146,10 @@
       },
       "targets": [
         {
-          "expr": "go_fetcher_parser_health_state{marketplace=\"wb\",status=\"ok\"} or vector(0)",
-          "refId": "A"
+          "expr": "max(go_fetcher_parser_health_state{job=\"go_fetcher\",marketplace=\"wb\",status=\"ok\"}) or vector(0)",
+          "refId": "A",
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {
@@ -197,8 +203,10 @@
       },
       "targets": [
         {
-          "expr": "go_fetcher_parser_health_state{marketplace=\"ozon\",status=\"ok\"} or vector(0)",
-          "refId": "A"
+          "expr": "max(go_fetcher_parser_health_state{job=\"go_fetcher\",marketplace=\"ozon\",status=\"ok\"}) or vector(0)",
+          "refId": "A",
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {
@@ -252,8 +260,10 @@
       },
       "targets": [
         {
-          "expr": "ozon_browser_worker_ready or vector(0)",
-          "refId": "A"
+          "expr": "max(ozon_browser_worker_ready{job=\"ozon_browser_fetcher\"}) or vector(0)",
+          "refId": "A",
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {
@@ -308,7 +318,9 @@
       "targets": [
         {
           "expr": "ozon_browser_queue_size or vector(0)",
-          "refId": "A"
+          "refId": "A",
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {
@@ -367,7 +379,9 @@
       "targets": [
         {
           "expr": "sum(go_fetcher_ozon_browser_fallback_in_progress) or vector(0)",
-          "refId": "A"
+          "refId": "A",
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {
@@ -425,8 +439,10 @@
       },
       "targets": [
         {
-          "expr": "100 * sum(rate(monitoring_product_cache_lookups_total{result=\"hit\"}[$__rate_interval])) / clamp_min(sum(rate(monitoring_product_cache_lookups_total[$__rate_interval])), 0.000001) or vector(0)",
-          "refId": "A"
+          "expr": "(\n  100\n  *\n  sum(rate(monitoring_product_cache_lookups_total{result=~\"fresh_hit|fresh_hit_after_lock|wait_fresh_hit\"}[$__rate_interval]))\n  /\n  sum(rate(monitoring_product_cache_lookups_total[$__rate_interval]))\n)\nand\nsum(rate(monitoring_product_cache_lookups_total[$__rate_interval])) > 0",
+          "refId": "A",
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {
@@ -449,7 +465,8 @@
                 "value": 95
               }
             ]
-          }
+          },
+          "noValue": "No cache traffic"
         },
         "overrides": []
       },

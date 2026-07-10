@@ -31,7 +31,9 @@
       "targets": [
         {
           "expr": "outbox_pending_events or vector(0)",
-          "refId": "A"
+          "refId": "A",
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {
@@ -90,7 +92,9 @@
       "targets": [
         {
           "expr": "outbox_processing_events or vector(0)",
-          "refId": "A"
+          "refId": "A",
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {
@@ -149,7 +153,9 @@
       "targets": [
         {
           "expr": "outbox_failed_events or vector(0)",
-          "refId": "A"
+          "refId": "A",
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {
@@ -204,7 +210,9 @@
       "targets": [
         {
           "expr": "outbox_processed_events or vector(0)",
-          "refId": "A"
+          "refId": "A",
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {
@@ -246,7 +254,9 @@
       "targets": [
         {
           "expr": "outbox_total_events or vector(0)",
-          "refId": "A"
+          "refId": "A",
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {
@@ -288,7 +298,9 @@
       "targets": [
         {
           "expr": "100 * sum(rate(outbox_events_failed_total[$__rate_interval])) / clamp_min(sum(rate(outbox_events_processed_total[$__rate_interval])) + sum(rate(outbox_events_failed_total[$__rate_interval])), 0.000001)",
-          "refId": "A"
+          "refId": "A",
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {

@@ -31,8 +31,10 @@
       },
       "targets": [
         {
-          "expr": "up{job=\"backend\"} or vector(0)",
-          "refId": "A"
+          "expr": "max(up{job=\"backend\"}) or vector(0)",
+          "refId": "A",
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {
@@ -87,8 +89,10 @@
       },
       "targets": [
         {
-          "expr": "probe_success{job=\"blackbox_http\",instance=\"http://backend:8000/api/v1/prometheus/metrics\"} or vector(0)",
-          "refId": "A"
+          "expr": "max(probe_success{job=\"blackbox_http\",instance=\"http://backend:8000/api/v1/prometheus/metrics\"}) or vector(0)",
+          "refId": "A",
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {
@@ -144,7 +148,9 @@
       "targets": [
         {
           "expr": "sum(rate(django_http_requests_total_by_method_total[$__rate_interval])) or vector(0)",
-          "refId": "A"
+          "refId": "A",
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {
@@ -186,7 +192,9 @@
       "targets": [
         {
           "expr": "sum(rate(django_http_responses_total_by_status_total{status=~\"4..\"}[$__rate_interval])) or vector(0)",
-          "refId": "A"
+          "refId": "A",
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {
@@ -245,7 +253,9 @@
       "targets": [
         {
           "expr": "sum(rate(django_http_responses_total_by_status_total{status=~\"5..\"}[$__rate_interval])) or vector(0)",
-          "refId": "A"
+          "refId": "A",
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {
@@ -300,7 +310,9 @@
       "targets": [
         {
           "expr": "100 * sum(rate(django_http_responses_total_by_status_total{status=~\"5..\"}[$__rate_interval])) / clamp_min(sum(rate(django_http_responses_total_by_status_total[$__rate_interval])), 0.000001)",
-          "refId": "A"
+          "refId": "A",
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {

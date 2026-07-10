@@ -1,105 +1,2064 @@
 apiVersion: 1
-
 groups:
-  - orgId: 1
-    name: Flashsale operations alerts
-    folder: Flashsale
-    interval: 1m
-    rules:
-      - uid: flashsale_outbox_failed_events
-        title: Failed Outbox Events
-        condition: C
-        data:
-          - refId: A
-            datasourceUid: Prometheus
-            relativeTimeRange:
-              from: 300
-              to: 0
-            model:
-              expr: increase(outbox_events_failed_total[5m])
-              refId: A
-              instant: true
-              range: false
-          - refId: B
-            datasourceUid: __expr__
-            model:
-              type: reduce
-              expression: A
-              reducer: last
-              refId: B
-          - refId: C
-            datasourceUid: __expr__
-            model:
-              type: threshold
-              expression: B
-              conditions:
-                - evaluator:
-                    type: gt
-                    params: [0]
-                  operator:
-                    type: and
-                  query:
-                    params: [C]
-                  reducer:
-                    type: last
-                  type: query
-              refId: C
-        noDataState: OK
-        execErrState: Error
-        for: 1m
-        annotations:
-          summary: Failed outbox events detected
-          description: Outbox worker has failed events during the last 5 minutes.
-        labels:
-          severity: warning
-          service: outbox_worker
-        isPaused: false
-
-      - uid: flashsale_outbox_pending_high
-        title: Pending Outbox Events High
-        condition: C
-        data:
-          - refId: A
-            datasourceUid: Prometheus
-            relativeTimeRange:
-              from: 300
-              to: 0
-            model:
-              expr: outbox_pending_events
-              refId: A
-              instant: true
-              range: false
-          - refId: B
-            datasourceUid: __expr__
-            model:
-              type: reduce
-              expression: A
-              reducer: last
-              refId: B
-          - refId: C
-            datasourceUid: __expr__
-            model:
-              type: threshold
-              expression: B
-              conditions:
-                - evaluator:
-                    type: gt
-                    params: [50]
-                  operator:
-                    type: and
-                  query:
-                    params: [C]
-                  reducer:
-                    type: last
-                  type: query
-              refId: C
-        noDataState: OK
-        execErrState: Error
-        for: 5m
-        annotations:
-          summary: Too many pending outbox events
-          description: Pending outbox events stayed above 50 for 5 minutes.
-        labels:
-          severity: warning
-          service: outbox_worker
-        isPaused: false
+- orgId: 1
+  name: Flashsale availability alerts
+  folder: Flashsale
+  interval: 30s
+  rules:
+  - uid: flashsale_core_scrape_target_down
+    title: Core Prometheus Target Down
+    condition: C
+    data:
+    - refId: A
+      datasourceUid: Prometheus
+      relativeTimeRange:
+        from: 300
+        to: 0
+      model:
+        expr: |-
+          (up{job="prometheus"} == bool 0)
+            or absent(up{job="prometheus"})
+            or (up{job="backend"} == bool 0)
+            or absent(up{job="backend"})
+            or (up{job="outbox_worker"} == bool 0)
+            or absent(up{job="outbox_worker"})
+            or (up{job="monitoring_scanner"} == bool 0)
+            or absent(up{job="monitoring_scanner"})
+            or (up{job="notification_consumer"} == bool 0)
+            or absent(up{job="notification_consumer"})
+            or (up{job="telegram_bot"} == bool 0)
+            or absent(up{job="telegram_bot"})
+            or (up{job="go_fetcher"} == bool 0)
+            or absent(up{job="go_fetcher"})
+            or (up{job="ozon_browser_fetcher"} == bool 0)
+            or absent(up{job="ozon_browser_fetcher"})
+            or (up{job="postgres"} == bool 0)
+            or absent(up{job="postgres"})
+            or (up{job="redis"} == bool 0)
+            or absent(up{job="redis"})
+            or (up{job="rabbitmq"} == bool 0)
+            or absent(up{job="rabbitmq"})
+            or (up{job="cadvisor"} == bool 0)
+            or absent(up{job="cadvisor"})
+            or (up{job="blackbox_exporter"} == bool 0)
+            or absent(up{job="blackbox_exporter"})
+            or (up{job="loki"} == bool 0)
+            or absent(up{job="loki"})
+            or (up{job="promtail"} == bool 0)
+            or absent(up{job="promtail"})
+            or (up{job="grafana"} == bool 0)
+            or absent(up{job="grafana"})
+        refId: A
+        instant: true
+        range: false
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        type: reduce
+        expression: A
+        reducer: last
+        refId: B
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0.5
+          operator:
+            type: and
+          query:
+            params:
+            - C
+          reducer:
+            type: last
+          type: query
+        refId: C
+    noDataState: OK
+    execErrState: Error
+    for: 2m
+    annotations:
+      summary: A required Prometheus scrape target is down
+      description: 'Prometheus job {{ $labels.job }} is missing or unavailable. Instance: {{ $labels.instance }}.'
+    labels:
+      severity: critical
+      service: observability
+      category: availability
+    isPaused: false
+  - uid: flashsale_http_probe_failed
+    title: HTTP Health Probe Failed
+    condition: C
+    data:
+    - refId: A
+      datasourceUid: Prometheus
+      relativeTimeRange:
+        from: 300
+        to: 0
+      model:
+        expr: |-
+          (probe_success{instance="http://backend:8000/api/v1/prometheus/metrics"} == bool 0)
+            or absent(probe_success{instance="http://backend:8000/api/v1/prometheus/metrics"})
+            or (probe_success{instance="http://go_fetcher:8090/api/v1/parser/health/"} == bool 0)
+            or absent(probe_success{instance="http://go_fetcher:8090/api/v1/parser/health/"})
+            or (probe_success{instance="http://ozon_browser_fetcher:8095/api/v1/health"} == bool 0)
+            or absent(probe_success{instance="http://ozon_browser_fetcher:8095/api/v1/health"})
+            or (probe_success{instance="http://outbox_worker:9100/metrics"} == bool 0)
+            or absent(probe_success{instance="http://outbox_worker:9100/metrics"})
+            or (probe_success{instance="http://notification_consumer:8011/metrics"} == bool 0)
+            or absent(probe_success{instance="http://notification_consumer:8011/metrics"})
+            or (probe_success{instance="http://prometheus:9090/-/ready"} == bool 0)
+            or absent(probe_success{instance="http://prometheus:9090/-/ready"})
+            or (probe_success{instance="http://loki:3100/ready"} == bool 0)
+            or absent(probe_success{instance="http://loki:3100/ready"})
+            or (probe_success{instance="http://grafana:3000/api/health"} == bool 0)
+            or absent(probe_success{instance="http://grafana:3000/api/health"})
+        refId: A
+        instant: true
+        range: false
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        type: reduce
+        expression: A
+        reducer: last
+        refId: B
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0.5
+          operator:
+            type: and
+          query:
+            params:
+            - C
+          reducer:
+            type: last
+          type: query
+        refId: C
+    noDataState: OK
+    execErrState: Error
+    for: 2m
+    annotations:
+      summary: A required HTTP endpoint is unavailable
+      description: Blackbox HTTP probe failed for {{ $labels.instance }}.
+    labels:
+      severity: critical
+      service: blackbox
+      category: availability
+    isPaused: false
+  - uid: flashsale_tcp_probe_failed
+    title: TCP Dependency Probe Failed
+    condition: C
+    data:
+    - refId: A
+      datasourceUid: Prometheus
+      relativeTimeRange:
+        from: 300
+        to: 0
+      model:
+        expr: |-
+          (probe_success{instance="postgres:5432"} == bool 0)
+            or absent(probe_success{instance="postgres:5432"})
+            or (probe_success{instance="redis:6379"} == bool 0)
+            or absent(probe_success{instance="redis:6379"})
+            or (probe_success{instance="rabbitmq:5672"} == bool 0)
+            or absent(probe_success{instance="rabbitmq:5672"})
+        refId: A
+        instant: true
+        range: false
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        type: reduce
+        expression: A
+        reducer: last
+        refId: B
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0.5
+          operator:
+            type: and
+          query:
+            params:
+            - C
+          reducer:
+            type: last
+          type: query
+        refId: C
+    noDataState: OK
+    execErrState: Error
+    for: 2m
+    annotations:
+      summary: A required TCP dependency is unavailable
+      description: Blackbox TCP probe failed for {{ $labels.instance }}.
+    labels:
+      severity: critical
+      service: blackbox
+      category: availability
+    isPaused: false
+- orgId: 1
+  name: Flashsale backend and outbox alerts
+  folder: Flashsale
+  interval: 1m
+  rules:
+  - uid: flashsale_backend_high_5xx_ratio
+    title: Backend High 5xx Ratio
+    condition: C
+    data:
+    - refId: A
+      datasourceUid: Prometheus
+      relativeTimeRange:
+        from: 600
+        to: 0
+      model:
+        expr: |-
+          (
+            (
+              sum(increase(django_http_responses_total_by_status_total{status=~"5.."}[5m]))
+              /
+              clamp_min(sum(increase(django_http_responses_total_by_status_total[5m])), 1)
+            ) > bool 0.05
+          )
+          *
+          (
+            sum(increase(django_http_responses_total_by_status_total[5m])) >= bool 20
+          )
+        refId: A
+        instant: true
+        range: false
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        type: reduce
+        expression: A
+        reducer: last
+        refId: B
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0.5
+          operator:
+            type: and
+          query:
+            params:
+            - C
+          reducer:
+            type: last
+          type: query
+        refId: C
+    noDataState: OK
+    execErrState: Error
+    for: 5m
+    annotations:
+      summary: Backend 5xx ratio is above 5%
+      description: More than 5% of backend responses are 5xx, with at least 20 requests during the last 5 minutes.
+    labels:
+      severity: critical
+      service: backend
+      category: application
+    isPaused: false
+  - uid: flashsale_backend_high_p95_latency
+    title: Backend High P95 Latency
+    condition: C
+    data:
+    - refId: A
+      datasourceUid: Prometheus
+      relativeTimeRange:
+        from: 600
+        to: 0
+      model:
+        expr: |-
+          histogram_quantile(
+            0.95,
+            sum(rate(django_http_requests_latency_seconds_by_view_method_bucket[5m])) by (le)
+          ) or vector(0)
+        refId: A
+        instant: true
+        range: false
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        type: reduce
+        expression: A
+        reducer: last
+        refId: B
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 2
+          operator:
+            type: and
+          query:
+            params:
+            - C
+          reducer:
+            type: last
+          type: query
+        refId: C
+    noDataState: OK
+    execErrState: Error
+    for: 5m
+    annotations:
+      summary: Backend P95 latency is above 2 seconds
+      description: The backend P95 request latency remained above 2 seconds for 5 minutes.
+    labels:
+      severity: warning
+      service: backend
+      category: application
+    isPaused: false
+  - uid: flashsale_outbox_failed_events
+    title: Failed Outbox Events
+    condition: C
+    data:
+    - refId: A
+      datasourceUid: Prometheus
+      relativeTimeRange:
+        from: 600
+        to: 0
+      model:
+        expr: sum(increase(outbox_events_failed_total[5m])) or vector(0)
+        refId: A
+        instant: true
+        range: false
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        type: reduce
+        expression: A
+        reducer: last
+        refId: B
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0
+          operator:
+            type: and
+          query:
+            params:
+            - C
+          reducer:
+            type: last
+          type: query
+        refId: C
+    noDataState: OK
+    execErrState: Error
+    for: 1m
+    annotations:
+      summary: New failed outbox events detected
+      description: The outbox worker recorded failed processing attempts during the last 5 minutes.
+    labels:
+      severity: warning
+      service: outbox_worker
+      category: application
+    isPaused: false
+  - uid: flashsale_outbox_pending_high
+    title: Pending Outbox Events High
+    condition: C
+    data:
+    - refId: A
+      datasourceUid: Prometheus
+      relativeTimeRange:
+        from: 600
+        to: 0
+      model:
+        expr: outbox_pending_events or vector(0)
+        refId: A
+        instant: true
+        range: false
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        type: reduce
+        expression: A
+        reducer: last
+        refId: B
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 50
+          operator:
+            type: and
+          query:
+            params:
+            - C
+          reducer:
+            type: last
+          type: query
+        refId: C
+    noDataState: OK
+    execErrState: Error
+    for: 5m
+    annotations:
+      summary: Too many pending outbox events
+      description: Pending outbox events remained above 50 for 5 minutes.
+    labels:
+      severity: warning
+      service: outbox_worker
+      category: application
+    isPaused: false
+- orgId: 1
+  name: Flashsale scanner alerts
+  folder: Flashsale
+  interval: 1m
+  rules:
+  - uid: flashsale_scanner_heartbeat_stale
+    title: Monitoring Scanner Heartbeat Stale
+    condition: C
+    data:
+    - refId: A
+      datasourceUid: Prometheus
+      relativeTimeRange:
+        from: 300
+        to: 0
+      model:
+        expr: |-
+          (
+            time() - monitoring_scanner_last_success_timestamp_seconds
+          )
+          or
+          (
+            absent(monitoring_scanner_last_success_timestamp_seconds) * 999999
+          )
+        refId: A
+        instant: true
+        range: false
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        type: reduce
+        expression: A
+        reducer: last
+        refId: B
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 120
+          operator:
+            type: and
+          query:
+            params:
+            - C
+          reducer:
+            type: last
+          type: query
+        refId: C
+    noDataState: OK
+    execErrState: Error
+    for: 2m
+    annotations:
+      summary: Monitoring scanner stopped completing iterations
+      description: The last successful scanner iteration is more than 120 seconds old.
+    labels:
+      severity: critical
+      service: monitoring_scanner
+      category: application
+    isPaused: false
+  - uid: flashsale_scanner_overdue_targets
+    title: Monitoring Targets Overdue
+    condition: C
+    data:
+    - refId: A
+      datasourceUid: Prometheus
+      relativeTimeRange:
+        from: 600
+        to: 0
+      model:
+        expr: monitoring_scanner_overdue_targets or vector(0)
+        refId: A
+        instant: true
+        range: false
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        type: reduce
+        expression: A
+        reducer: last
+        refId: B
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0
+          operator:
+            type: and
+          query:
+            params:
+            - C
+          reducer:
+            type: last
+          type: query
+        refId: C
+    noDataState: OK
+    execErrState: Error
+    for: 5m
+    annotations:
+      summary: Monitoring targets are overdue
+      description: At least one active target has remained overdue beyond the configured scanner threshold for 5 minutes.
+    labels:
+      severity: warning
+      service: monitoring_scanner
+      category: application
+    isPaused: false
+  - uid: flashsale_scanner_overdue_age_crit
+    title: Monitoring Target Severely Overdue
+    condition: C
+    data:
+    - refId: A
+      datasourceUid: Prometheus
+      relativeTimeRange:
+        from: 600
+        to: 0
+      model:
+        expr: monitoring_scanner_oldest_overdue_age_seconds or vector(0)
+        refId: A
+        instant: true
+        range: false
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        type: reduce
+        expression: A
+        reducer: last
+        refId: B
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 900
+          operator:
+            type: and
+          query:
+            params:
+            - C
+          reducer:
+            type: last
+          type: query
+        refId: C
+    noDataState: OK
+    execErrState: Error
+    for: 2m
+    annotations:
+      summary: A monitoring target is more than 15 minutes overdue
+      description: The oldest overdue monitoring target has exceeded 900 seconds.
+    labels:
+      severity: critical
+      service: monitoring_scanner
+      category: application
+    isPaused: false
+  - uid: flashsale_scanner_processing_errors
+    title: Monitoring Scanner Processing Errors
+    condition: C
+    data:
+    - refId: A
+      datasourceUid: Prometheus
+      relativeTimeRange:
+        from: 600
+        to: 0
+      model:
+        expr: sum(increase(monitoring_target_processing_total{result="error"}[10m])) or vector(0)
+        refId: A
+        instant: true
+        range: false
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        type: reduce
+        expression: A
+        reducer: last
+        refId: B
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 2
+          operator:
+            type: and
+          query:
+            params:
+            - C
+          reducer:
+            type: last
+          type: query
+        refId: C
+    noDataState: OK
+    execErrState: Error
+    for: 1m
+    annotations:
+      summary: Repeated target processing errors detected
+      description: The monitoring scanner produced more than two target processing errors during the last 10 minutes.
+    labels:
+      severity: warning
+      service: monitoring_scanner
+      category: application
+    isPaused: false
+- orgId: 1
+  name: Flashsale notification alerts
+  folder: Flashsale
+  interval: 1m
+  rules:
+  - uid: flashsale_notif_consumer_down
+    title: Notification Consumer Not Running
+    condition: C
+    data:
+    - refId: A
+      datasourceUid: Prometheus
+      relativeTimeRange:
+        from: 300
+        to: 0
+      model:
+        expr: |-
+          (notification_consumer_running == bool 0)
+          or absent(notification_consumer_running)
+        refId: A
+        instant: true
+        range: false
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        type: reduce
+        expression: A
+        reducer: last
+        refId: B
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0.5
+          operator:
+            type: and
+          query:
+            params:
+            - C
+          reducer:
+            type: last
+          type: query
+        refId: C
+    noDataState: OK
+    execErrState: Error
+    for: 2m
+    annotations:
+      summary: Notification consumer is not running
+      description: The metrics endpoint is available, but the RabbitMQ consumer loop is not running or its metric is missing.
+    labels:
+      severity: critical
+      service: notification_consumer
+      category: application
+    isPaused: false
+  - uid: flashsale_notif_heartbeat_stale
+    title: Notification Consumer Heartbeat Stale
+    condition: C
+    data:
+    - refId: A
+      datasourceUid: Prometheus
+      relativeTimeRange:
+        from: 300
+        to: 0
+      model:
+        expr: |-
+          (
+            time() - notification_consumer_heartbeat_timestamp_seconds
+          )
+          or
+          (
+            absent(notification_consumer_heartbeat_timestamp_seconds) * 999999
+          )
+        refId: A
+        instant: true
+        range: false
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        type: reduce
+        expression: A
+        reducer: last
+        refId: B
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 60
+          operator:
+            type: and
+          query:
+            params:
+            - C
+          reducer:
+            type: last
+          type: query
+        refId: C
+    noDataState: OK
+    execErrState: Error
+    for: 2m
+    annotations:
+      summary: Notification consumer heartbeat is stale
+      description: The notification consumer heartbeat is more than 60 seconds old.
+    labels:
+      severity: critical
+      service: notification_consumer
+      category: application
+    isPaused: false
+  - uid: flashsale_notif_pending_old
+    title: Notification Delivery Stuck Pending
+    condition: C
+    data:
+    - refId: A
+      datasourceUid: Prometheus
+      relativeTimeRange:
+        from: 600
+        to: 0
+      model:
+        expr: notification_oldest_pending_delivery_age_seconds or vector(0)
+        refId: A
+        instant: true
+        range: false
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        type: reduce
+        expression: A
+        reducer: last
+        refId: B
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 120
+          operator:
+            type: and
+          query:
+            params:
+            - C
+          reducer:
+            type: last
+          type: query
+        refId: C
+    noDataState: OK
+    execErrState: Error
+    for: 5m
+    annotations:
+      summary: A notification delivery is stuck in pending state
+      description: The oldest pending notification delivery has been pending for more than 120 seconds.
+    labels:
+      severity: warning
+      service: notification_consumer
+      category: application
+    isPaused: false
+  - uid: flashsale_notification_message_failures
+    title: Notification Message Processing Failures
+    condition: C
+    data:
+    - refId: A
+      datasourceUid: Prometheus
+      relativeTimeRange:
+        from: 600
+        to: 0
+      model:
+        expr: sum(increase(notification_rabbitmq_messages_total{status="failed"}[5m])) or vector(0)
+        refId: A
+        instant: true
+        range: false
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        type: reduce
+        expression: A
+        reducer: last
+        refId: B
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0
+          operator:
+            type: and
+          query:
+            params:
+            - C
+          reducer:
+            type: last
+          type: query
+        refId: C
+    noDataState: OK
+    execErrState: Error
+    for: 1m
+    annotations:
+      summary: Notification consumer failed to process RabbitMQ messages
+      description: At least one RabbitMQ notification message failed during the last 5 minutes.
+    labels:
+      severity: warning
+      service: notification_consumer
+      category: application
+    isPaused: false
+  - uid: flashsale_telegram_delivery_failures
+    title: Telegram Delivery Failures
+    condition: C
+    data:
+    - refId: A
+      datasourceUid: Prometheus
+      relativeTimeRange:
+        from: 600
+        to: 0
+      model:
+        expr: sum(increase(telegram_notifications_total{status="failed"}[5m])) or vector(0)
+        refId: A
+        instant: true
+        range: false
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        type: reduce
+        expression: A
+        reducer: last
+        refId: B
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0
+          operator:
+            type: and
+          query:
+            params:
+            - C
+          reducer:
+            type: last
+          type: query
+        refId: C
+    noDataState: OK
+    execErrState: Error
+    for: 1m
+    annotations:
+      summary: Telegram notification delivery failures detected
+      description: At least one outbound Telegram notification failed during the last 5 minutes.
+    labels:
+      severity: warning
+      service: notification_consumer
+      category: application
+    isPaused: false
+- orgId: 1
+  name: Flashsale Telegram alerts
+  folder: Flashsale
+  interval: 1m
+  rules:
+  - uid: flashsale_telegram_bot_not_running
+    title: Telegram Bot Polling Not Running
+    condition: C
+    data:
+    - refId: A
+      datasourceUid: Prometheus
+      relativeTimeRange:
+        from: 300
+        to: 0
+      model:
+        expr: |-
+          (telegram_bot_running == bool 0)
+          or absent(telegram_bot_running)
+        refId: A
+        instant: true
+        range: false
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        type: reduce
+        expression: A
+        reducer: last
+        refId: B
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0.5
+          operator:
+            type: and
+          query:
+            params:
+            - C
+          reducer:
+            type: last
+          type: query
+        refId: C
+    noDataState: OK
+    execErrState: Error
+    for: 2m
+    annotations:
+      summary: Telegram bot polling loop is not running
+      description: The Telegram bot metrics endpoint is available, but the polling loop is stopped or its metric is missing.
+    labels:
+      severity: critical
+      service: telegram_bot
+      category: application
+    isPaused: false
+  - uid: flashsale_tg_poll_heartbeat_stale
+    title: Telegram Polling Heartbeat Stale
+    condition: C
+    data:
+    - refId: A
+      datasourceUid: Prometheus
+      relativeTimeRange:
+        from: 300
+        to: 0
+      model:
+        expr: |-
+          (
+            time() - telegram_polling_heartbeat_timestamp_seconds
+          )
+          or
+          (
+            absent(telegram_polling_heartbeat_timestamp_seconds) * 999999
+          )
+        refId: A
+        instant: true
+        range: false
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        type: reduce
+        expression: A
+        reducer: last
+        refId: B
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 90
+          operator:
+            type: and
+          query:
+            params:
+            - C
+          reducer:
+            type: last
+          type: query
+        refId: C
+    noDataState: OK
+    execErrState: Error
+    for: 2m
+    annotations:
+      summary: Telegram polling heartbeat is stale
+      description: The last successful Telegram getUpdates request is more than 90 seconds old.
+    labels:
+      severity: critical
+      service: telegram_bot
+      category: application
+    isPaused: false
+  - uid: flashsale_telegram_handler_errors
+    title: Telegram Handler Errors
+    condition: C
+    data:
+    - refId: A
+      datasourceUid: Prometheus
+      relativeTimeRange:
+        from: 600
+        to: 0
+      model:
+        expr: sum(increase(telegram_handler_errors_total[5m])) or vector(0)
+        refId: A
+        instant: true
+        range: false
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        type: reduce
+        expression: A
+        reducer: last
+        refId: B
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 2
+          operator:
+            type: and
+          query:
+            params:
+            - C
+          reducer:
+            type: last
+          type: query
+        refId: C
+    noDataState: OK
+    execErrState: Error
+    for: 1m
+    annotations:
+      summary: Repeated Telegram handler errors detected
+      description: The Telegram bot recorded more than two handler or polling errors during the last 5 minutes.
+    labels:
+      severity: warning
+      service: telegram_bot
+      category: application
+    isPaused: false
+  - uid: flashsale_telegram_rate_limit_fail_open
+    title: Telegram Rate Limiter Fail-Open
+    condition: C
+    data:
+    - refId: A
+      datasourceUid: Prometheus
+      relativeTimeRange:
+        from: 600
+        to: 0
+      model:
+        expr: sum(increase(telegram_rate_limit_decisions_total{result="error_fail_open"}[5m])) or vector(0)
+        refId: A
+        instant: true
+        range: false
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        type: reduce
+        expression: A
+        reducer: last
+        refId: B
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0
+          operator:
+            type: and
+          query:
+            params:
+            - C
+          reducer:
+            type: last
+          type: query
+        refId: C
+    noDataState: OK
+    execErrState: Error
+    for: 1m
+    annotations:
+      summary: Telegram rate limiter is failing open
+      description: Redis rate-limit checks failed and actions were allowed through fail-open during the last 5 minutes.
+    labels:
+      severity: warning
+      service: telegram_bot
+      category: application
+    isPaused: false
+- orgId: 1
+  name: Flashsale parser alerts
+  folder: Flashsale
+  interval: 1m
+  rules:
+  - uid: flashsale_parser_health_error
+    title: Marketplace Parser Health Error
+    condition: C
+    data:
+    - refId: A
+      datasourceUid: Prometheus
+      relativeTimeRange:
+        from: 600
+        to: 0
+      model:
+        expr: max(go_fetcher_parser_health_state{status="error"}) or vector(0)
+        refId: A
+        instant: true
+        range: false
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        type: reduce
+        expression: A
+        reducer: last
+        refId: B
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0.5
+          operator:
+            type: and
+          query:
+            params:
+            - C
+          reducer:
+            type: last
+          type: query
+        refId: C
+    noDataState: OK
+    execErrState: Error
+    for: 2m
+    annotations:
+      summary: A marketplace parser is in error state
+      description: Go Fetcher reports a parser health state of error.
+    labels:
+      severity: critical
+      service: go_fetcher
+      category: application
+    isPaused: false
+  - uid: flashsale_parser_health_warning
+    title: Marketplace Parser Health Warning
+    condition: C
+    data:
+    - refId: A
+      datasourceUid: Prometheus
+      relativeTimeRange:
+        from: 600
+        to: 0
+      model:
+        expr: max(go_fetcher_parser_health_state{status="warning"}) or vector(0)
+        refId: A
+        instant: true
+        range: false
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        type: reduce
+        expression: A
+        reducer: last
+        refId: B
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0.5
+          operator:
+            type: and
+          query:
+            params:
+            - C
+          reducer:
+            type: last
+          type: query
+        refId: C
+    noDataState: OK
+    execErrState: Error
+    for: 5m
+    annotations:
+      summary: A marketplace parser remains degraded
+      description: Go Fetcher reports a parser health state of warning for at least 5 minutes.
+    labels:
+      severity: warning
+      service: go_fetcher
+      category: application
+    isPaused: false
+  - uid: flashsale_go_fetcher_high_error_ratio
+    title: Go Fetcher High Error Ratio
+    condition: C
+    data:
+    - refId: A
+      datasourceUid: Prometheus
+      relativeTimeRange:
+        from: 600
+        to: 0
+      model:
+        expr: |-
+          (
+            (
+              sum(increase(go_fetcher_product_fetches_total{result!="success"}[10m]))
+              /
+              clamp_min(sum(increase(go_fetcher_product_fetches_total[10m])), 1)
+            ) > bool 0.25
+          )
+          *
+          (
+            sum(increase(go_fetcher_product_fetches_total[10m])) >= bool 4
+          )
+        refId: A
+        instant: true
+        range: false
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        type: reduce
+        expression: A
+        reducer: last
+        refId: B
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0.5
+          operator:
+            type: and
+          query:
+            params:
+            - C
+          reducer:
+            type: last
+          type: query
+        refId: C
+    noDataState: OK
+    execErrState: Error
+    for: 3m
+    annotations:
+      summary: Go Fetcher error ratio is above 25%
+      description: More than 25% of product fetches failed, with at least four attempts during the last 10 minutes.
+    labels:
+      severity: critical
+      service: go_fetcher
+      category: application
+    isPaused: false
+  - uid: flashsale_marketplace_access_failures
+    title: Marketplace Access Restrictions Detected
+    condition: C
+    data:
+    - refId: A
+      datasourceUid: Prometheus
+      relativeTimeRange:
+        from: 600
+        to: 0
+      model:
+        expr: |-
+          sum(
+            increase(
+              go_fetcher_marketplace_failures_total{
+                error_type=~"blocked_by_antibot|rate_limited|http_status_403|http_status_429|antibot"
+              }[10m]
+            )
+          ) or vector(0)
+        refId: A
+        instant: true
+        range: false
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        type: reduce
+        expression: A
+        reducer: last
+        refId: B
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0
+          operator:
+            type: and
+          query:
+            params:
+            - C
+          reducer:
+            type: last
+          type: query
+        refId: C
+    noDataState: OK
+    execErrState: Error
+    for: 1m
+    annotations:
+      summary: Marketplace antibot or rate-limit failures detected
+      description: Go Fetcher detected a marketplace access restriction during the last 10 minutes.
+    labels:
+      severity: warning
+      service: go_fetcher
+      category: application
+    isPaused: false
+  - uid: flashsale_ozon_fallback_failures
+    title: Ozon Browser Fallback Failures
+    condition: C
+    data:
+    - refId: A
+      datasourceUid: Prometheus
+      relativeTimeRange:
+        from: 600
+        to: 0
+      model:
+        expr: sum(increase(go_fetcher_ozon_browser_fallback_results_total{result="failed"}[10m])) or vector(0)
+        refId: A
+        instant: true
+        range: false
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        type: reduce
+        expression: A
+        reducer: last
+        refId: B
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0
+          operator:
+            type: and
+          query:
+            params:
+            - C
+          reducer:
+            type: last
+          type: query
+        refId: C
+    noDataState: OK
+    execErrState: Error
+    for: 1m
+    annotations:
+      summary: Ozon browser fallback failed
+      description: At least one Ozon browser fallback attempt failed during the last 10 minutes.
+    labels:
+      severity: warning
+      service: go_fetcher
+      category: application
+    isPaused: false
+  - uid: flashsale_ozon_browser_not_ready
+    title: Ozon Browser Worker Not Ready
+    condition: C
+    data:
+    - refId: A
+      datasourceUid: Prometheus
+      relativeTimeRange:
+        from: 300
+        to: 0
+      model:
+        expr: |-
+          (ozon_browser_worker_ready == bool 0)
+          or absent(ozon_browser_worker_ready)
+        refId: A
+        instant: true
+        range: false
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        type: reduce
+        expression: A
+        reducer: last
+        refId: B
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0.5
+          operator:
+            type: and
+          query:
+            params:
+            - C
+          reducer:
+            type: last
+          type: query
+        refId: C
+    noDataState: OK
+    execErrState: Error
+    for: 2m
+    annotations:
+      summary: Ozon browser worker is not ready
+      description: The Ozon browser process is reachable, but Chromium or the worker context is unavailable.
+    labels:
+      severity: critical
+      service: ozon_browser_fetcher
+      category: application
+    isPaused: false
+  - uid: flashsale_ozon_browser_heartbeat_stale
+    title: Ozon Browser Worker Heartbeat Stale
+    condition: C
+    data:
+    - refId: A
+      datasourceUid: Prometheus
+      relativeTimeRange:
+        from: 300
+        to: 0
+      model:
+        expr: |-
+          (
+            time() - ozon_browser_worker_heartbeat_timestamp_seconds
+          )
+          or
+          (
+            absent(ozon_browser_worker_heartbeat_timestamp_seconds) * 999999
+          )
+        refId: A
+        instant: true
+        range: false
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        type: reduce
+        expression: A
+        reducer: last
+        refId: B
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 180
+          operator:
+            type: and
+          query:
+            params:
+            - C
+          reducer:
+            type: last
+          type: query
+        refId: C
+    noDataState: OK
+    execErrState: Error
+    for: 2m
+    annotations:
+      summary: Ozon browser worker heartbeat is stale
+      description: The browser worker heartbeat is more than 180 seconds old. The threshold allows for long Playwright tasks.
+    labels:
+      severity: critical
+      service: ozon_browser_fetcher
+      category: application
+    isPaused: false
+  - uid: flashsale_ozon_browser_queue_high
+    title: Ozon Browser Queue High
+    condition: C
+    data:
+    - refId: A
+      datasourceUid: Prometheus
+      relativeTimeRange:
+        from: 600
+        to: 0
+      model:
+        expr: ozon_browser_queue_size or vector(0)
+        refId: A
+        instant: true
+        range: false
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        type: reduce
+        expression: A
+        reducer: last
+        refId: B
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 5
+          operator:
+            type: and
+          query:
+            params:
+            - C
+          reducer:
+            type: last
+          type: query
+        refId: C
+    noDataState: OK
+    execErrState: Error
+    for: 5m
+    annotations:
+      summary: Ozon browser task queue is growing
+      description: More than five tasks remained queued for 5 minutes.
+    labels:
+      severity: warning
+      service: ozon_browser_fetcher
+      category: application
+    isPaused: false
+  - uid: flashsale_ozon_browser_high_error_ratio
+    title: Ozon Browser High Task Error Ratio
+    condition: C
+    data:
+    - refId: A
+      datasourceUid: Prometheus
+      relativeTimeRange:
+        from: 600
+        to: 0
+      model:
+        expr: |-
+          (
+            (
+              sum(increase(ozon_browser_task_executions_total{result!="success"}[15m]))
+              /
+              clamp_min(sum(increase(ozon_browser_task_executions_total[15m])), 1)
+            ) > bool 0.30
+          )
+          *
+          (
+            sum(increase(ozon_browser_task_executions_total[15m])) >= bool 3
+          )
+        refId: A
+        instant: true
+        range: false
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        type: reduce
+        expression: A
+        reducer: last
+        refId: B
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0.5
+          operator:
+            type: and
+          query:
+            params:
+            - C
+          reducer:
+            type: last
+          type: query
+        refId: C
+    noDataState: OK
+    execErrState: Error
+    for: 3m
+    annotations:
+      summary: Ozon browser task error ratio is above 30%
+      description: More than 30% of browser tasks failed, with at least three executions during the last 15 minutes.
+    labels:
+      severity: critical
+      service: ozon_browser_fetcher
+      category: application
+    isPaused: false
+- orgId: 1
+  name: Flashsale infrastructure alerts
+  folder: Flashsale
+  interval: 1m
+  rules:
+  - uid: flashsale_rmq_notif_dlq_nonempty
+    title: Notification DLQ Is Not Empty
+    condition: C
+    data:
+    - refId: A
+      datasourceUid: Prometheus
+      relativeTimeRange:
+        from: 600
+        to: 0
+      model:
+        expr: sum(rabbitmq_queue_messages_ready{queue="flashsale.notifications.dlq"}) or vector(0)
+        refId: A
+        instant: true
+        range: false
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        type: reduce
+        expression: A
+        reducer: last
+        refId: B
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0
+          operator:
+            type: and
+          query:
+            params:
+            - C
+          reducer:
+            type: last
+          type: query
+        refId: C
+    noDataState: OK
+    execErrState: Error
+    for: 1m
+    annotations:
+      summary: Notification messages are present in the DLQ
+      description: The notification dead-letter queue contains one or more messages.
+    labels:
+      severity: critical
+      service: rabbitmq
+      category: application
+    isPaused: false
+  - uid: flashsale_rabbitmq_notification_backlog
+    title: Notification Queue Backlog High
+    condition: C
+    data:
+    - refId: A
+      datasourceUid: Prometheus
+      relativeTimeRange:
+        from: 600
+        to: 0
+      model:
+        expr: sum(rabbitmq_queue_messages_ready{queue="flashsale.notifications"}) or vector(0)
+        refId: A
+        instant: true
+        range: false
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        type: reduce
+        expression: A
+        reducer: last
+        refId: B
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 50
+          operator:
+            type: and
+          query:
+            params:
+            - C
+          reducer:
+            type: last
+          type: query
+        refId: C
+    noDataState: OK
+    execErrState: Error
+    for: 5m
+    annotations:
+      summary: Notification queue backlog is high
+      description: More than 50 notification messages remained ready for 5 minutes.
+    labels:
+      severity: warning
+      service: rabbitmq
+      category: application
+    isPaused: false
+  - uid: flashsale_rmq_notif_no_consumer
+    title: Notification Queue Has No Consumers
+    condition: C
+    data:
+    - refId: A
+      datasourceUid: Prometheus
+      relativeTimeRange:
+        from: 300
+        to: 0
+      model:
+        expr: |-
+          (
+            sum(rabbitmq_queue_consumers{queue="flashsale.notifications"}) == bool 0
+          )
+          or absent(rabbitmq_queue_consumers{queue="flashsale.notifications"})
+        refId: A
+        instant: true
+        range: false
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        type: reduce
+        expression: A
+        reducer: last
+        refId: B
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0.5
+          operator:
+            type: and
+          query:
+            params:
+            - C
+          reducer:
+            type: last
+          type: query
+        refId: C
+    noDataState: OK
+    execErrState: Error
+    for: 2m
+    annotations:
+      summary: Notification queue has no active consumer
+      description: RabbitMQ reports no consumers for flashsale.notifications.
+    labels:
+      severity: critical
+      service: rabbitmq
+      category: application
+    isPaused: false
+  - uid: flashsale_redis_unavailable
+    title: Redis Exporter Cannot Reach Redis
+    condition: C
+    data:
+    - refId: A
+      datasourceUid: Prometheus
+      relativeTimeRange:
+        from: 300
+        to: 0
+      model:
+        expr: |-
+          (redis_up == bool 0)
+          or absent(redis_up)
+        refId: A
+        instant: true
+        range: false
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        type: reduce
+        expression: A
+        reducer: last
+        refId: B
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0.5
+          operator:
+            type: and
+          query:
+            params:
+            - C
+          reducer:
+            type: last
+          type: query
+        refId: C
+    noDataState: OK
+    execErrState: Error
+    for: 2m
+    annotations:
+      summary: Redis is unavailable to its exporter
+      description: The Redis exporter cannot successfully query Redis.
+    labels:
+      severity: critical
+      service: redis
+      category: application
+    isPaused: false
+  - uid: flashsale_redis_blocked_clients
+    title: Redis Has Blocked Clients
+    condition: C
+    data:
+    - refId: A
+      datasourceUid: Prometheus
+      relativeTimeRange:
+        from: 600
+        to: 0
+      model:
+        expr: redis_blocked_clients or vector(0)
+        refId: A
+        instant: true
+        range: false
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        type: reduce
+        expression: A
+        reducer: last
+        refId: B
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0
+          operator:
+            type: and
+          query:
+            params:
+            - C
+          reducer:
+            type: last
+          type: query
+        refId: C
+    noDataState: OK
+    execErrState: Error
+    for: 5m
+    annotations:
+      summary: Redis clients are blocked
+      description: Redis reported one or more blocked clients for 5 minutes.
+    labels:
+      severity: warning
+      service: redis
+      category: application
+    isPaused: false
+  - uid: flashsale_redis_evictions
+    title: Redis Key Evictions Detected
+    condition: C
+    data:
+    - refId: A
+      datasourceUid: Prometheus
+      relativeTimeRange:
+        from: 600
+        to: 0
+      model:
+        expr: sum(increase(redis_evicted_keys_total[10m])) or vector(0)
+        refId: A
+        instant: true
+        range: false
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        type: reduce
+        expression: A
+        reducer: last
+        refId: B
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0
+          operator:
+            type: and
+          query:
+            params:
+            - C
+          reducer:
+            type: last
+          type: query
+        refId: C
+    noDataState: OK
+    execErrState: Error
+    for: 1m
+    annotations:
+      summary: Redis evicted keys due to memory pressure
+      description: Redis reported key evictions during the last 10 minutes.
+    labels:
+      severity: warning
+      service: redis
+      category: application
+    isPaused: false
+  - uid: flashsale_postgres_unavailable
+    title: PostgreSQL Exporter Cannot Reach Database
+    condition: C
+    data:
+    - refId: A
+      datasourceUid: Prometheus
+      relativeTimeRange:
+        from: 300
+        to: 0
+      model:
+        expr: |-
+          (pg_up == bool 0)
+          or absent(pg_up)
+        refId: A
+        instant: true
+        range: false
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        type: reduce
+        expression: A
+        reducer: last
+        refId: B
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0.5
+          operator:
+            type: and
+          query:
+            params:
+            - C
+          reducer:
+            type: last
+          type: query
+        refId: C
+    noDataState: OK
+    execErrState: Error
+    for: 2m
+    annotations:
+      summary: PostgreSQL is unavailable to its exporter
+      description: The PostgreSQL exporter cannot successfully query the database.
+    labels:
+      severity: critical
+      service: postgres
+      category: application
+    isPaused: false
+  - uid: flashsale_postgres_deadlocks
+    title: PostgreSQL Deadlocks Detected
+    condition: C
+    data:
+    - refId: A
+      datasourceUid: Prometheus
+      relativeTimeRange:
+        from: 600
+        to: 0
+      model:
+        expr: sum(increase(pg_stat_database_deadlocks{datname="flashsale"}[15m])) or vector(0)
+        refId: A
+        instant: true
+        range: false
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        type: reduce
+        expression: A
+        reducer: last
+        refId: B
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0
+          operator:
+            type: and
+          query:
+            params:
+            - C
+          reducer:
+            type: last
+          type: query
+        refId: C
+    noDataState: OK
+    execErrState: Error
+    for: 1m
+    annotations:
+      summary: PostgreSQL deadlocks detected
+      description: The flashsale database reported one or more deadlocks during the last 15 minutes.
+    labels:
+      severity: warning
+      service: postgres
+      category: application
+    isPaused: false

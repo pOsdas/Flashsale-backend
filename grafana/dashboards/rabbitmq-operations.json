@@ -31,8 +31,10 @@
       },
       "targets": [
         {
-          "expr": "up{job=\"rabbitmq\"} or vector(0)",
-          "refId": "A"
+          "expr": "max(up{job=\"rabbitmq\"}) or vector(0)",
+          "refId": "A",
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {
@@ -86,8 +88,10 @@
       },
       "targets": [
         {
-          "expr": "probe_success{job=\"blackbox_tcp\",instance=\"rabbitmq:5672\"} or vector(0)",
-          "refId": "A"
+          "expr": "max(probe_success{job=\"blackbox_tcp\",instance=\"rabbitmq:5672\"}) or vector(0)",
+          "refId": "A",
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {
@@ -142,7 +146,9 @@
       "targets": [
         {
           "expr": "sum(rabbitmq_queue_messages_ready) or vector(0)",
-          "refId": "A"
+          "refId": "A",
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {
@@ -201,7 +207,9 @@
       "targets": [
         {
           "expr": "sum(rabbitmq_queue_messages_unacked) or vector(0)",
-          "refId": "A"
+          "refId": "A",
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {
@@ -260,7 +268,9 @@
       "targets": [
         {
           "expr": "sum(rabbitmq_queue_consumers) or vector(0)",
-          "refId": "A"
+          "refId": "A",
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {
@@ -311,7 +321,9 @@
       "targets": [
         {
           "expr": "sum(rabbitmq_queue_messages_ready{queue=\"flashsale.notifications.dlq\"}) or vector(0)",
-          "refId": "A"
+          "refId": "A",
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {

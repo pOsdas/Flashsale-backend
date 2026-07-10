@@ -31,8 +31,10 @@
       },
       "targets": [
         {
-          "expr": "up{job=\"cadvisor\"} or vector(0)",
-          "refId": "A"
+          "expr": "max(up{job=\"cadvisor\"}) or vector(0)",
+          "refId": "A",
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {
@@ -87,7 +89,9 @@
       "targets": [
         {
           "expr": "sum(rate(container_cpu_usage_seconds_total{container_label_com_docker_compose_service!=\"\"}[$__rate_interval])) or vector(0)",
-          "refId": "A"
+          "refId": "A",
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {
@@ -138,7 +142,9 @@
       "targets": [
         {
           "expr": "sum(container_memory_working_set_bytes{container_label_com_docker_compose_service!=\"\"}) or vector(0)",
-          "refId": "A"
+          "refId": "A",
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {
@@ -189,7 +195,9 @@
       "targets": [
         {
           "expr": "sum(rate(container_network_receive_bytes_total{container_label_com_docker_compose_service!=\"\"}[$__rate_interval])) or vector(0)",
-          "refId": "A"
+          "refId": "A",
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {
@@ -240,7 +248,9 @@
       "targets": [
         {
           "expr": "sum(rate(container_network_transmit_bytes_total{container_label_com_docker_compose_service!=\"\"}[$__rate_interval])) or vector(0)",
-          "refId": "A"
+          "refId": "A",
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {
@@ -290,8 +300,10 @@
       },
       "targets": [
         {
-          "expr": "sum((time() - container_last_seen{container_label_com_docker_compose_service!=\"\"}) > 60) or vector(0)",
-          "refId": "A"
+          "expr": "sum(\n  (\n    time()\n    -\n    max by (container_label_com_docker_compose_service) (\n      container_last_seen{\n        container_label_com_docker_compose_project=\"flashsale-backend\",\n        container_label_com_docker_compose_service!=\"\"\n      }\n    )\n  ) > bool 60\n)\nor vector(0)",
+          "refId": "A",
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {

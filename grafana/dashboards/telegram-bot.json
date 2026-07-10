@@ -31,8 +31,10 @@
       },
       "targets": [
         {
-          "expr": "up{job=\"telegram_bot\"} or vector(0)",
-          "refId": "A"
+          "expr": "max(up{job=\"telegram_bot\"}) or vector(0)",
+          "refId": "A",
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {
@@ -86,8 +88,10 @@
       },
       "targets": [
         {
-          "expr": "telegram_bot_running or vector(0)",
-          "refId": "A"
+          "expr": "max(telegram_bot_running{job=\"telegram_bot\"}) or vector(0)",
+          "refId": "A",
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {
@@ -141,8 +145,10 @@
       },
       "targets": [
         {
-          "expr": "time() - telegram_polling_heartbeat_timestamp_seconds",
-          "refId": "A"
+          "expr": "time() - max(telegram_polling_heartbeat_timestamp_seconds{job=\"telegram_bot\"} > 0)",
+          "refId": "A",
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {
@@ -165,7 +171,8 @@
                 "value": 120
               }
             ]
-          }
+          },
+          "noValue": "No heartbeat"
         },
         "overrides": []
       },
@@ -201,7 +208,9 @@
       "targets": [
         {
           "expr": "telegram_updates_in_progress or vector(0)",
-          "refId": "A"
+          "refId": "A",
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {
@@ -260,7 +269,9 @@
       "targets": [
         {
           "expr": "sum(rate(telegram_handler_errors_total[$__rate_interval])) or vector(0)",
-          "refId": "A"
+          "refId": "A",
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {
@@ -319,7 +330,9 @@
       "targets": [
         {
           "expr": "sum(rate(telegram_rate_limit_decisions_total{result=\"error_fail_open\"}[$__rate_interval])) or vector(0)",
-          "refId": "A"
+          "refId": "A",
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {

@@ -15,13 +15,16 @@ services:
       retries: 10
 
   postgres_exporter:
-    image: prometheuscommunity/postgres-exporter:v0.16.0
+    image: prometheuscommunity/postgres-exporter:v0.20.1
     container_name: flashsale_postgres_exporter
+    command:
+      - --collector.stat_checkpointer
     environment:
       DATA_SOURCE_NAME: "postgresql://user:pwd@postgres:5432/flashsale?sslmode=disable"
     depends_on:
       postgres:
         condition: service_healthy
+    restart: unless-stopped
 
   redis:
     image: redis:8-alpine

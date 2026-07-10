@@ -31,8 +31,10 @@
       },
       "targets": [
         {
-          "expr": "up{job=\"monitoring_scanner\"} or vector(0)",
-          "refId": "A"
+          "expr": "max(up{job=\"monitoring_scanner\"}) or vector(0)",
+          "refId": "A",
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {
@@ -86,8 +88,10 @@
       },
       "targets": [
         {
-          "expr": "time() - monitoring_scanner_last_success_timestamp_seconds",
-          "refId": "A"
+          "expr": "time() - max(monitoring_scanner_last_success_timestamp_seconds{job=\"monitoring_scanner\"} > 0)",
+          "refId": "A",
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {
@@ -110,7 +114,8 @@
                 "value": 120
               }
             ]
-          }
+          },
+          "noValue": "No heartbeat"
         },
         "overrides": []
       },
@@ -146,7 +151,9 @@
       "targets": [
         {
           "expr": "monitoring_scanner_due_targets or vector(0)",
-          "refId": "A"
+          "refId": "A",
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {
@@ -205,7 +212,9 @@
       "targets": [
         {
           "expr": "monitoring_scanner_overdue_targets or vector(0)",
-          "refId": "A"
+          "refId": "A",
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {
@@ -264,7 +273,9 @@
       "targets": [
         {
           "expr": "monitoring_scanner_oldest_overdue_age_seconds or vector(0)",
-          "refId": "A"
+          "refId": "A",
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {
@@ -323,7 +334,9 @@
       "targets": [
         {
           "expr": "monitoring_scanner_last_processed_targets or vector(0)",
-          "refId": "A"
+          "refId": "A",
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {
