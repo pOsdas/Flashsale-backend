@@ -1,14 +1,14 @@
 {
-  "uid": "flashsale-backend-api",
-  "title": "Flashsale Backend API",
+  "uid": "flashsale-redis-operations",
+  "title": "Redis Operations",
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 2,
+  "version": 1,
   "refresh": "15s",
   "tags": [
     "flashsale",
-    "django",
-    "api"
+    "redis",
+    "cache"
   ],
   "time": {
     "from": "now-6h",
@@ -18,7 +18,7 @@
     {
       "id": 1,
       "type": "stat",
-      "title": "Backend Metrics UP",
+      "title": "Redis Exporter UP",
       "gridPos": {
         "x": 0,
         "y": 0,
@@ -31,7 +31,7 @@
       },
       "targets": [
         {
-          "expr": "up{job=\"backend\"} or vector(0)",
+          "expr": "redis_up or vector(0)",
           "refId": "A"
         }
       ],
@@ -68,13 +68,12 @@
         "colorMode": "value",
         "graphMode": "area",
         "justifyMode": "auto"
-      },
-      "description": "Can Prometheus scrape the Django backend metrics endpoint?"
+      }
     },
     {
       "id": 2,
       "type": "stat",
-      "title": "Backend HTTP Probe",
+      "title": "Redis TCP Probe",
       "gridPos": {
         "x": 4,
         "y": 0,
@@ -87,7 +86,7 @@
       },
       "targets": [
         {
-          "expr": "probe_success{job=\"blackbox_http\",instance=\"http://backend:8000/api/v1/prometheus/metrics\"} or vector(0)",
+          "expr": "probe_success{job=\"blackbox_tcp\",instance=\"redis:6379\"} or vector(0)",
           "refId": "A"
         }
       ],
@@ -124,13 +123,12 @@
         "colorMode": "value",
         "graphMode": "area",
         "justifyMode": "auto"
-      },
-      "description": "Can Blackbox Exporter reach the backend over HTTP?"
+      }
     },
     {
       "id": 3,
       "type": "stat",
-      "title": "Requests/sec",
+      "title": "Memory Used",
       "gridPos": {
         "x": 8,
         "y": 0,
@@ -143,14 +141,23 @@
       },
       "targets": [
         {
-          "expr": "sum(rate(django_http_requests_total_by_method_total[$__rate_interval])) or vector(0)",
+          "expr": "redis_memory_used_bytes or vector(0)",
           "refId": "A"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "reqps",
-          "decimals": 3
+          "unit": "bytes",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
         },
         "overrides": []
       },
@@ -172,7 +179,7 @@
     {
       "id": 4,
       "type": "stat",
-      "title": "4xx/sec",
+      "title": "Connected Clients",
       "gridPos": {
         "x": 12,
         "y": 0,
@@ -185,28 +192,20 @@
       },
       "targets": [
         {
-          "expr": "sum(rate(django_http_responses_total_by_status_total{status=~\"4..\"}[$__rate_interval])) or vector(0)",
+          "expr": "redis_connected_clients or vector(0)",
           "refId": "A"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "reqps",
-          "decimals": 3,
+          "unit": "short",
+          "decimals": 0,
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
                 "color": "green",
                 "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 0.1
-              },
-              {
-                "color": "red",
-                "value": 1
               }
             ]
           }
@@ -231,7 +230,7 @@
     {
       "id": 5,
       "type": "stat",
-      "title": "5xx/sec",
+      "title": "Blocked Clients",
       "gridPos": {
         "x": 16,
         "y": 0,
@@ -244,14 +243,14 @@
       },
       "targets": [
         {
-          "expr": "sum(rate(django_http_responses_total_by_status_total{status=~\"5..\"}[$__rate_interval])) or vector(0)",
+          "expr": "redis_blocked_clients or vector(0)",
           "refId": "A"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "reqps",
-          "decimals": 3,
+          "unit": "short",
+          "decimals": 0,
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -260,8 +259,12 @@
                 "value": null
               },
               {
+                "color": "yellow",
+                "value": 1
+              },
+              {
                 "color": "red",
-                "value": 0.01
+                "value": 10
               }
             ]
           }
@@ -286,7 +289,7 @@
     {
       "id": 6,
       "type": "stat",
-      "title": "5xx Ratio",
+      "title": "Cache Hit Ratio",
       "gridPos": {
         "x": 20,
         "y": 0,
@@ -299,28 +302,28 @@
       },
       "targets": [
         {
-          "expr": "100 * sum(rate(django_http_responses_total_by_status_total{status=~\"5..\"}[$__rate_interval])) / clamp_min(sum(rate(django_http_responses_total_by_status_total[$__rate_interval])), 0.000001)",
+          "expr": "100 * sum(rate(redis_keyspace_hits_total[$__rate_interval])) / clamp_min(sum(rate(redis_keyspace_hits_total[$__rate_interval])) + sum(rate(redis_keyspace_misses_total[$__rate_interval])), 0.000001) or vector(0)",
           "refId": "A"
         }
       ],
       "fieldConfig": {
         "defaults": {
           "unit": "percent",
-          "decimals": 2,
+          "decimals": 1,
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "red",
                 "value": null
               },
               {
                 "color": "yellow",
-                "value": 1
+                "value": 80
               },
               {
-                "color": "red",
-                "value": 5
+                "color": "green",
+                "value": 95
               }
             ]
           }
@@ -345,7 +348,7 @@
     {
       "id": 7,
       "type": "timeseries",
-      "title": "HTTP Request Rate by Method",
+      "title": "Memory Usage",
       "gridPos": {
         "x": 0,
         "y": 4,
@@ -358,34 +361,60 @@
       },
       "targets": [
         {
-          "expr": "sum by(method) (rate(django_http_requests_total_by_method_total[$__rate_interval]))",
-          "legendFormat": "{{method}}",
-          "refId": "A"
+          "expr": "redis_memory_used_bytes",
+          "refId": "A",
+          "legendFormat": "used"
+        },
+        {
+          "expr": "redis_memory_max_bytes",
+          "refId": "B",
+          "legendFormat": "max"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "reqps",
-          "decimals": 3
+          "unit": "bytes",
+          "decimals": 2,
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 1,
+            "fillOpacity": 12,
+            "gradientMode": "none",
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisPlacement": "auto",
+            "axisLabel": "",
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          }
         },
         "overrides": []
       },
       "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
         "legend": {
           "displayMode": "list",
           "placement": "bottom",
-          "calcs": []
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "none"
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
         }
       }
     },
     {
       "id": 8,
       "type": "timeseries",
-      "title": "HTTP Responses by Status",
+      "title": "Operations per Second",
       "gridPos": {
         "x": 12,
         "y": 4,
@@ -398,34 +427,55 @@
       },
       "targets": [
         {
-          "expr": "sum by(status) (rate(django_http_responses_total_by_status_total[$__rate_interval]))",
-          "legendFormat": "{{status}}",
-          "refId": "A"
+          "expr": "rate(redis_commands_processed_total[$__rate_interval])",
+          "refId": "A",
+          "legendFormat": "commands/sec"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "reqps",
-          "decimals": 3
+          "unit": "ops",
+          "decimals": 2,
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 1,
+            "fillOpacity": 12,
+            "gradientMode": "none",
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisPlacement": "auto",
+            "axisLabel": "",
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          }
         },
         "overrides": []
       },
       "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
         "legend": {
           "displayMode": "list",
           "placement": "bottom",
-          "calcs": []
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "none"
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
         }
       }
     },
     {
       "id": 9,
       "type": "timeseries",
-      "title": "HTTP Latency Quantiles",
+      "title": "Clients",
       "gridPos": {
         "x": 0,
         "y": 12,
@@ -438,44 +488,60 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.50, sum(rate(django_http_requests_latency_seconds_by_view_method_bucket[$__rate_interval])) by (le))",
-          "legendFormat": "p50",
-          "refId": "A"
+          "expr": "redis_connected_clients",
+          "refId": "A",
+          "legendFormat": "connected"
         },
         {
-          "expr": "histogram_quantile(0.95, sum(rate(django_http_requests_latency_seconds_by_view_method_bucket[$__rate_interval])) by (le))",
-          "legendFormat": "p95",
-          "refId": "B"
-        },
-        {
-          "expr": "histogram_quantile(0.99, sum(rate(django_http_requests_latency_seconds_by_view_method_bucket[$__rate_interval])) by (le))",
-          "legendFormat": "p99",
-          "refId": "C"
+          "expr": "redis_blocked_clients",
+          "refId": "B",
+          "legendFormat": "blocked"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "s",
-          "decimals": 4
+          "unit": "short",
+          "decimals": 2,
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 1,
+            "fillOpacity": 12,
+            "gradientMode": "none",
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisPlacement": "auto",
+            "axisLabel": "",
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          }
         },
         "overrides": []
       },
       "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
         "legend": {
           "displayMode": "list",
           "placement": "bottom",
-          "calcs": []
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "none"
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
         }
       }
     },
     {
       "id": 10,
       "type": "timeseries",
-      "title": "Top Views by Request Rate",
+      "title": "Keyspace Hits and Misses",
       "gridPos": {
         "x": 12,
         "y": 12,
@@ -488,39 +554,65 @@
       },
       "targets": [
         {
-          "expr": "topk(10, sum by(view) (rate(django_http_requests_total_by_view_transport_method_total[$__rate_interval])))",
-          "legendFormat": "{{view}}",
-          "refId": "A"
+          "expr": "rate(redis_keyspace_hits_total[$__rate_interval])",
+          "refId": "A",
+          "legendFormat": "hits/sec"
+        },
+        {
+          "expr": "rate(redis_keyspace_misses_total[$__rate_interval])",
+          "refId": "B",
+          "legendFormat": "misses/sec"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "reqps",
-          "decimals": 3
+          "unit": "ops",
+          "decimals": 2,
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 1,
+            "fillOpacity": 12,
+            "gradientMode": "none",
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisPlacement": "auto",
+            "axisLabel": "",
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          }
         },
         "overrides": []
       },
       "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
         "legend": {
           "displayMode": "list",
           "placement": "bottom",
-          "calcs": []
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "none"
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
         }
       }
     },
     {
       "id": 11,
       "type": "timeseries",
-      "title": "P95 Latency by View",
+      "title": "Expired and Evicted Keys",
       "gridPos": {
         "x": 0,
         "y": 20,
-        "w": 24,
-        "h": 9
+        "w": 12,
+        "h": 8
       },
       "datasource": {
         "type": "prometheus",
@@ -528,72 +620,131 @@
       },
       "targets": [
         {
-          "expr": "topk(10, histogram_quantile(0.95, sum by(le, view) (rate(django_http_requests_latency_seconds_by_view_method_bucket[$__rate_interval]))))",
-          "legendFormat": "{{view}}",
-          "refId": "A"
+          "expr": "rate(redis_expired_keys_total[$__rate_interval])",
+          "refId": "A",
+          "legendFormat": "expired/sec"
+        },
+        {
+          "expr": "rate(redis_evicted_keys_total[$__rate_interval])",
+          "refId": "B",
+          "legendFormat": "evicted/sec"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "s",
-          "decimals": 4
+          "unit": "ops",
+          "decimals": 2,
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 1,
+            "fillOpacity": 12,
+            "gradientMode": "none",
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisPlacement": "auto",
+            "axisLabel": "",
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          }
         },
         "overrides": []
       },
       "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
         "legend": {
           "displayMode": "list",
           "placement": "bottom",
-          "calcs": []
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "none"
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
         }
-      },
-      "description": "Top 10 views by estimated P95 request latency."
+      }
     },
     {
       "id": 12,
-      "type": "logs",
-      "title": "Recent Backend Errors",
+      "type": "timeseries",
+      "title": "Keys by Database",
       "gridPos": {
-        "x": 0,
-        "y": 29,
+        "x": 12,
+        "y": 20,
         "w": 12,
-        "h": 9
+        "h": 8
       },
       "datasource": {
-        "type": "loki",
-        "uid": "Loki"
+        "type": "prometheus",
+        "uid": "Prometheus"
       },
       "targets": [
         {
-          "expr": "{compose_service=\"backend\",level=\"ERROR\"}",
-          "refId": "A"
+          "expr": "redis_db_keys",
+          "refId": "A",
+          "legendFormat": "{{db}} keys"
+        },
+        {
+          "expr": "redis_db_keys_expiring",
+          "refId": "B",
+          "legendFormat": "{{db}} expiring"
         }
       ],
-      "options": {
-        "showTime": true,
-        "showLabels": false,
-        "showCommonLabels": false,
-        "wrapLogMessage": true,
-        "prettifyLogMessage": false,
-        "enableLogDetails": true,
-        "sortOrder": "Descending",
-        "dedupStrategy": "none"
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 2,
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 1,
+            "fillOpacity": 12,
+            "gradientMode": "none",
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisPlacement": "auto",
+            "axisLabel": "",
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          }
+        },
+        "overrides": []
       },
-      "description": "JSON application logs from the backend container with ERROR level."
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        }
+      }
     },
     {
       "id": 13,
       "type": "logs",
-      "title": "Recent Backend Requests",
+      "title": "Recent Redis Logs",
       "gridPos": {
-        "x": 12,
-        "y": 29,
-        "w": 12,
-        "h": 9
+        "x": 0,
+        "y": 28,
+        "w": 24,
+        "h": 10
       },
       "datasource": {
         "type": "loki",
@@ -601,8 +752,9 @@
       },
       "targets": [
         {
-          "expr": "{compose_service=\"backend\"} |= \"http request completed\"",
-          "refId": "A"
+          "expr": "{compose_service=\"redis\"}",
+          "refId": "A",
+          "queryType": "range"
         }
       ],
       "options": {

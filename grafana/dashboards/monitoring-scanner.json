@@ -1,14 +1,14 @@
 {
-  "uid": "postgresql-operations",
-  "title": "PostgreSQL Operations",
+  "uid": "flashsale-monitoring-scanner",
+  "title": "Monitoring Scanner",
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 2,
+  "version": 1,
   "refresh": "15s",
   "tags": [
     "flashsale",
-    "postgresql",
-    "database"
+    "monitoring",
+    "scanner"
   ],
   "time": {
     "from": "now-6h",
@@ -18,7 +18,7 @@
     {
       "id": 1,
       "type": "stat",
-      "title": "PostgreSQL Exporter UP",
+      "title": "Scanner Metrics UP",
       "gridPos": {
         "x": 0,
         "y": 0,
@@ -31,7 +31,7 @@
       },
       "targets": [
         {
-          "expr": "pg_up or vector(0)",
+          "expr": "up{job=\"monitoring_scanner\"} or vector(0)",
           "refId": "A"
         }
       ],
@@ -68,13 +68,12 @@
         "colorMode": "value",
         "graphMode": "area",
         "justifyMode": "auto"
-      },
-      "description": "Whether postgres_exporter can query PostgreSQL."
+      }
     },
     {
       "id": 2,
       "type": "stat",
-      "title": "PostgreSQL TCP Probe",
+      "title": "Heartbeat Age",
       "gridPos": {
         "x": 4,
         "y": 0,
@@ -87,24 +86,28 @@
       },
       "targets": [
         {
-          "expr": "probe_success{job=\"blackbox_tcp\",instance=\"postgres:5432\"} or vector(0)",
+          "expr": "time() - monitoring_scanner_last_success_timestamp_seconds",
           "refId": "A"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "short",
-          "decimals": 0,
+          "unit": "s",
+          "decimals": 1,
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "red",
+                "color": "green",
                 "value": null
               },
               {
-                "color": "green",
-                "value": 1
+                "color": "yellow",
+                "value": 60
+              },
+              {
+                "color": "red",
+                "value": 120
               }
             ]
           }
@@ -129,7 +132,7 @@
     {
       "id": 3,
       "type": "stat",
-      "title": "Connections",
+      "title": "Due Targets",
       "gridPos": {
         "x": 8,
         "y": 0,
@@ -142,168 +145,7 @@
       },
       "targets": [
         {
-          "expr": "sum(pg_stat_activity_count{datname=\"flashsale\"}) or vector(0)",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "decimals": 0,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": {
-          "values": false,
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": ""
-        },
-        "orientation": "auto",
-        "textMode": "auto",
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto"
-      }
-    },
-    {
-      "id": 4,
-      "type": "stat",
-      "title": "Database Size",
-      "gridPos": {
-        "x": 12,
-        "y": 0,
-        "w": 4,
-        "h": 4
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "Prometheus"
-      },
-      "targets": [
-        {
-          "expr": "pg_database_size_bytes{datname=\"flashsale\"} or vector(0)",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "bytes",
-          "decimals": 0,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": {
-          "values": false,
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": ""
-        },
-        "orientation": "auto",
-        "textMode": "auto",
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto"
-      }
-    },
-    {
-      "id": 5,
-      "type": "stat",
-      "title": "Rollbacks/sec",
-      "gridPos": {
-        "x": 16,
-        "y": 0,
-        "w": 4,
-        "h": 4
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "Prometheus"
-      },
-      "targets": [
-        {
-          "expr": "rate(pg_stat_database_xact_rollback{datname=\"flashsale\"}[$__rate_interval]) or vector(0)",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "ops",
-          "decimals": 3,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 0.01
-              },
-              {
-                "color": "red",
-                "value": 0.1
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": {
-          "values": false,
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": ""
-        },
-        "orientation": "auto",
-        "textMode": "auto",
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto"
-      }
-    },
-    {
-      "id": 6,
-      "type": "stat",
-      "title": "Deadlocks",
-      "gridPos": {
-        "x": 20,
-        "y": 0,
-        "w": 4,
-        "h": 4
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "Prometheus"
-      },
-      "targets": [
-        {
-          "expr": "pg_stat_database_deadlocks{datname=\"flashsale\"} or vector(0)",
+          "expr": "monitoring_scanner_due_targets or vector(0)",
           "refId": "A"
         }
       ],
@@ -347,9 +189,178 @@
       }
     },
     {
+      "id": 4,
+      "type": "stat",
+      "title": "Overdue Targets",
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 4,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "targets": [
+        {
+          "expr": "monitoring_scanner_overdue_targets or vector(0)",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 10
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Oldest Overdue Age",
+      "gridPos": {
+        "x": 16,
+        "y": 0,
+        "w": 4,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "targets": [
+        {
+          "expr": "monitoring_scanner_oldest_overdue_age_seconds or vector(0)",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 120
+              },
+              {
+                "color": "red",
+                "value": 300
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Last Processed Targets",
+      "gridPos": {
+        "x": 20,
+        "y": 0,
+        "w": 4,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "targets": [
+        {
+          "expr": "monitoring_scanner_last_processed_targets or vector(0)",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto"
+      }
+    },
+    {
       "id": 7,
       "type": "timeseries",
-      "title": "Transactions per Second",
+      "title": "Scanner Iterations",
       "gridPos": {
         "x": 0,
         "y": 4,
@@ -362,14 +373,9 @@
       },
       "targets": [
         {
-          "expr": "rate(pg_stat_database_xact_commit{datname=\"flashsale\"}[$__rate_interval])",
+          "expr": "sum by(status) (rate(monitoring_scanner_iterations_total[$__rate_interval]))",
           "refId": "A",
-          "legendFormat": "commits"
-        },
-        {
-          "expr": "rate(pg_stat_database_xact_rollback{datname=\"flashsale\"}[$__rate_interval])",
-          "refId": "B",
-          "legendFormat": "rollbacks"
+          "legendFormat": "{{status}}"
         }
       ],
       "fieldConfig": {
@@ -415,7 +421,7 @@
     {
       "id": 8,
       "type": "timeseries",
-      "title": "Connections by State",
+      "title": "Iteration Duration Quantiles",
       "gridPos": {
         "x": 12,
         "y": 4,
@@ -428,14 +434,24 @@
       },
       "targets": [
         {
-          "expr": "sum by(state) (pg_stat_activity_count{datname=\"flashsale\"})",
+          "expr": "histogram_quantile(0.50, sum(rate(monitoring_scanner_iteration_duration_seconds_bucket[$__rate_interval])) by (le))",
           "refId": "A",
-          "legendFormat": "{{state}}"
+          "legendFormat": "P50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(monitoring_scanner_iteration_duration_seconds_bucket[$__rate_interval])) by (le))",
+          "refId": "B",
+          "legendFormat": "P95"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(monitoring_scanner_iteration_duration_seconds_bucket[$__rate_interval])) by (le))",
+          "refId": "C",
+          "legendFormat": "P99"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "short",
+          "unit": "s",
           "decimals": 2,
           "custom": {
             "drawStyle": "line",
@@ -476,7 +492,7 @@
     {
       "id": 9,
       "type": "timeseries",
-      "title": "Rows Read and Returned",
+      "title": "Target Processing by Result",
       "gridPos": {
         "x": 0,
         "y": 12,
@@ -489,19 +505,14 @@
       },
       "targets": [
         {
-          "expr": "rate(pg_stat_database_tup_fetched{datname=\"flashsale\"}[$__rate_interval])",
+          "expr": "sum by(result) (rate(monitoring_target_processing_total[$__rate_interval]))",
           "refId": "A",
-          "legendFormat": "fetched"
-        },
-        {
-          "expr": "rate(pg_stat_database_tup_returned{datname=\"flashsale\"}[$__rate_interval])",
-          "refId": "B",
-          "legendFormat": "returned"
+          "legendFormat": "{{result}}"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "rows/s",
+          "unit": "ops",
           "decimals": 2,
           "custom": {
             "drawStyle": "line",
@@ -542,7 +553,7 @@
     {
       "id": 10,
       "type": "timeseries",
-      "title": "Rows Changed",
+      "title": "Target Processing by Marketplace",
       "gridPos": {
         "x": 12,
         "y": 12,
@@ -555,24 +566,14 @@
       },
       "targets": [
         {
-          "expr": "rate(pg_stat_database_tup_inserted{datname=\"flashsale\"}[$__rate_interval])",
+          "expr": "sum by(marketplace, result) (rate(monitoring_target_processing_total[$__rate_interval]))",
           "refId": "A",
-          "legendFormat": "inserted"
-        },
-        {
-          "expr": "rate(pg_stat_database_tup_updated{datname=\"flashsale\"}[$__rate_interval])",
-          "refId": "B",
-          "legendFormat": "updated"
-        },
-        {
-          "expr": "rate(pg_stat_database_tup_deleted{datname=\"flashsale\"}[$__rate_interval])",
-          "refId": "C",
-          "legendFormat": "deleted"
+          "legendFormat": "{{marketplace}} / {{result}}"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "rows/s",
+          "unit": "ops",
           "decimals": 2,
           "custom": {
             "drawStyle": "line",
@@ -613,7 +614,7 @@
     {
       "id": 11,
       "type": "timeseries",
-      "title": "Cache Hit Ratio",
+      "title": "Target Processing P95",
       "gridPos": {
         "x": 0,
         "y": 20,
@@ -626,14 +627,14 @@
       },
       "targets": [
         {
-          "expr": "100 * pg_stat_database_blks_hit{datname=\"flashsale\"} / clamp_min(pg_stat_database_blks_hit{datname=\"flashsale\"} + pg_stat_database_blks_read{datname=\"flashsale\"}, 1)",
+          "expr": "histogram_quantile(0.95, sum by(le, marketplace, trigger) (rate(monitoring_target_processing_duration_seconds_bucket[$__rate_interval])))",
           "refId": "A",
-          "legendFormat": "cache hit %"
+          "legendFormat": "{{marketplace}} / {{trigger}}"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "percent",
+          "unit": "s",
           "decimals": 2,
           "custom": {
             "drawStyle": "line",
@@ -674,7 +675,7 @@
     {
       "id": 12,
       "type": "timeseries",
-      "title": "Locks by Mode",
+      "title": "Snapshots Created",
       "gridPos": {
         "x": 12,
         "y": 20,
@@ -687,14 +688,14 @@
       },
       "targets": [
         {
-          "expr": "sum by(mode) (pg_locks_count{datname=\"flashsale\"})",
+          "expr": "sum by(marketplace, parse_status) (rate(monitoring_snapshots_created_total[$__rate_interval]))",
           "refId": "A",
-          "legendFormat": "{{mode}}"
+          "legendFormat": "{{marketplace}} / {{parse_status}}"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "short",
+          "unit": "ops",
           "decimals": 2,
           "custom": {
             "drawStyle": "line",
@@ -735,7 +736,7 @@
     {
       "id": 13,
       "type": "timeseries",
-      "title": "Database Size Over Time",
+      "title": "Alerts Created",
       "gridPos": {
         "x": 0,
         "y": 28,
@@ -748,14 +749,14 @@
       },
       "targets": [
         {
-          "expr": "pg_database_size_bytes{datname=\"flashsale\"}",
+          "expr": "sum by(marketplace, trigger) (rate(monitoring_alerts_created_total[$__rate_interval]))",
           "refId": "A",
-          "legendFormat": "flashsale"
+          "legendFormat": "{{marketplace}} / {{trigger}}"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "bytes",
+          "unit": "ops",
           "decimals": 2,
           "custom": {
             "drawStyle": "line",
@@ -796,7 +797,7 @@
     {
       "id": 14,
       "type": "timeseries",
-      "title": "Temporary Data",
+      "title": "Cache Results Used by Scanner",
       "gridPos": {
         "x": 12,
         "y": 28,
@@ -809,19 +810,14 @@
       },
       "targets": [
         {
-          "expr": "rate(pg_stat_database_temp_files{datname=\"flashsale\"}[$__rate_interval])",
+          "expr": "sum by(source, is_stale) (rate(monitoring_cache_results_total[$__rate_interval]))",
           "refId": "A",
-          "legendFormat": "temp files/sec"
-        },
-        {
-          "expr": "rate(pg_stat_database_temp_bytes{datname=\"flashsale\"}[$__rate_interval])",
-          "refId": "B",
-          "legendFormat": "temp bytes/sec"
+          "legendFormat": "{{source}} / stale={{is_stale}}"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "short",
+          "unit": "ops",
           "decimals": 2,
           "custom": {
             "drawStyle": "line",
@@ -861,149 +857,12 @@
     },
     {
       "id": 15,
-      "type": "timeseries",
-      "title": "Checkpoints",
-      "gridPos": {
-        "x": 0,
-        "y": 36,
-        "w": 12,
-        "h": 8
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "Prometheus"
-      },
-      "targets": [
-        {
-          "expr": "rate(pg_stat_bgwriter_checkpoints_timed[$__rate_interval])",
-          "refId": "A",
-          "legendFormat": "timed"
-        },
-        {
-          "expr": "rate(pg_stat_bgwriter_checkpoints_req[$__rate_interval])",
-          "refId": "B",
-          "legendFormat": "requested"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "ops",
-          "decimals": 2,
-          "custom": {
-            "drawStyle": "line",
-            "lineInterpolation": "smooth",
-            "lineWidth": 1,
-            "fillOpacity": 12,
-            "gradientMode": "none",
-            "showPoints": "never",
-            "spanNulls": false,
-            "axisPlacement": "auto",
-            "axisLabel": "",
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "stacking": {
-              "mode": "none",
-              "group": "A"
-            }
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        },
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "calcs": [
-            "lastNotNull",
-            "max"
-          ]
-        }
-      }
-    },
-    {
-      "id": 16,
-      "type": "timeseries",
-      "title": "Buffers Written",
-      "gridPos": {
-        "x": 12,
-        "y": 36,
-        "w": 12,
-        "h": 8
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "Prometheus"
-      },
-      "targets": [
-        {
-          "expr": "rate(pg_stat_bgwriter_buffers_checkpoint[$__rate_interval])",
-          "refId": "A",
-          "legendFormat": "checkpoint"
-        },
-        {
-          "expr": "rate(pg_stat_bgwriter_buffers_clean[$__rate_interval])",
-          "refId": "B",
-          "legendFormat": "clean"
-        },
-        {
-          "expr": "rate(pg_stat_bgwriter_buffers_backend[$__rate_interval])",
-          "refId": "C",
-          "legendFormat": "backend"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "ops",
-          "decimals": 2,
-          "custom": {
-            "drawStyle": "line",
-            "lineInterpolation": "smooth",
-            "lineWidth": 1,
-            "fillOpacity": 12,
-            "gradientMode": "none",
-            "showPoints": "never",
-            "spanNulls": false,
-            "axisPlacement": "auto",
-            "axisLabel": "",
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "stacking": {
-              "mode": "none",
-              "group": "A"
-            }
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        },
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "calcs": [
-            "lastNotNull",
-            "max"
-          ]
-        }
-      }
-    },
-    {
-      "id": 17,
       "type": "logs",
-      "title": "Recent PostgreSQL Logs",
+      "title": "Recent Scanner Errors",
       "gridPos": {
         "x": 0,
-        "y": 44,
-        "w": 24,
+        "y": 36,
+        "w": 12,
         "h": 10
       },
       "datasource": {
@@ -1012,7 +871,39 @@
       },
       "targets": [
         {
-          "expr": "{compose_service=\"postgres\"}",
+          "expr": "{compose_service=\"monitoring_scanner\",level=\"ERROR\"}",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "showLabels": false,
+        "showCommonLabels": false,
+        "wrapLogMessage": true,
+        "prettifyLogMessage": false,
+        "enableLogDetails": true,
+        "sortOrder": "Descending",
+        "dedupStrategy": "none"
+      }
+    },
+    {
+      "id": 16,
+      "type": "logs",
+      "title": "Recent Scanner Logs",
+      "gridPos": {
+        "x": 12,
+        "y": 36,
+        "w": 12,
+        "h": 10
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "Loki"
+      },
+      "targets": [
+        {
+          "expr": "{compose_service=\"monitoring_scanner\"}",
           "refId": "A",
           "queryType": "range"
         }

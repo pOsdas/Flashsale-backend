@@ -1,14 +1,14 @@
 {
-  "uid": "postgresql-operations",
-  "title": "PostgreSQL Operations",
+  "uid": "flashsale-containers-platform",
+  "title": "Containers and Platform",
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 2,
+  "version": 1,
   "refresh": "15s",
   "tags": [
     "flashsale",
-    "postgresql",
-    "database"
+    "containers",
+    "platform"
   ],
   "time": {
     "from": "now-6h",
@@ -18,7 +18,7 @@
     {
       "id": 1,
       "type": "stat",
-      "title": "PostgreSQL Exporter UP",
+      "title": "cAdvisor UP",
       "gridPos": {
         "x": 0,
         "y": 0,
@@ -31,7 +31,7 @@
       },
       "targets": [
         {
-          "expr": "pg_up or vector(0)",
+          "expr": "up{job=\"cadvisor\"} or vector(0)",
           "refId": "A"
         }
       ],
@@ -68,13 +68,12 @@
         "colorMode": "value",
         "graphMode": "area",
         "justifyMode": "auto"
-      },
-      "description": "Whether postgres_exporter can query PostgreSQL."
+      }
     },
     {
       "id": 2,
       "type": "stat",
-      "title": "PostgreSQL TCP Probe",
+      "title": "Total Container CPU",
       "gridPos": {
         "x": 4,
         "y": 0,
@@ -87,24 +86,20 @@
       },
       "targets": [
         {
-          "expr": "probe_success{job=\"blackbox_tcp\",instance=\"postgres:5432\"} or vector(0)",
+          "expr": "sum(rate(container_cpu_usage_seconds_total{container_label_com_docker_compose_service!=\"\"}[$__rate_interval])) or vector(0)",
           "refId": "A"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "short",
-          "decimals": 0,
+          "unit": "cores",
+          "decimals": 2,
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "red",
-                "value": null
-              },
-              {
                 "color": "green",
-                "value": 1
+                "value": null
               }
             ]
           }
@@ -129,7 +124,7 @@
     {
       "id": 3,
       "type": "stat",
-      "title": "Connections",
+      "title": "Total Working Memory",
       "gridPos": {
         "x": 8,
         "y": 0,
@@ -142,58 +137,7 @@
       },
       "targets": [
         {
-          "expr": "sum(pg_stat_activity_count{datname=\"flashsale\"}) or vector(0)",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "decimals": 0,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": {
-          "values": false,
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": ""
-        },
-        "orientation": "auto",
-        "textMode": "auto",
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto"
-      }
-    },
-    {
-      "id": 4,
-      "type": "stat",
-      "title": "Database Size",
-      "gridPos": {
-        "x": 12,
-        "y": 0,
-        "w": 4,
-        "h": 4
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "Prometheus"
-      },
-      "targets": [
-        {
-          "expr": "pg_database_size_bytes{datname=\"flashsale\"} or vector(0)",
+          "expr": "sum(container_memory_working_set_bytes{container_label_com_docker_compose_service!=\"\"}) or vector(0)",
           "refId": "A"
         }
       ],
@@ -229,9 +173,60 @@
       }
     },
     {
+      "id": 4,
+      "type": "stat",
+      "title": "Network Receive/sec",
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 4,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(container_network_receive_bytes_total{container_label_com_docker_compose_service!=\"\"}[$__rate_interval])) or vector(0)",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto"
+      }
+    },
+    {
       "id": 5,
       "type": "stat",
-      "title": "Rollbacks/sec",
+      "title": "Network Transmit/sec",
       "gridPos": {
         "x": 16,
         "y": 0,
@@ -244,28 +239,20 @@
       },
       "targets": [
         {
-          "expr": "rate(pg_stat_database_xact_rollback{datname=\"flashsale\"}[$__rate_interval]) or vector(0)",
+          "expr": "sum(rate(container_network_transmit_bytes_total{container_label_com_docker_compose_service!=\"\"}[$__rate_interval])) or vector(0)",
           "refId": "A"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "ops",
-          "decimals": 3,
+          "unit": "Bps",
+          "decimals": 0,
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
                 "color": "green",
                 "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 0.01
-              },
-              {
-                "color": "red",
-                "value": 0.1
               }
             ]
           }
@@ -290,7 +277,7 @@
     {
       "id": 6,
       "type": "stat",
-      "title": "Deadlocks",
+      "title": "Containers Not Seen 60s",
       "gridPos": {
         "x": 20,
         "y": 0,
@@ -303,7 +290,7 @@
       },
       "targets": [
         {
-          "expr": "pg_stat_database_deadlocks{datname=\"flashsale\"} or vector(0)",
+          "expr": "sum((time() - container_last_seen{container_label_com_docker_compose_service!=\"\"}) > 60) or vector(0)",
           "refId": "A"
         }
       ],
@@ -349,7 +336,7 @@
     {
       "id": 7,
       "type": "timeseries",
-      "title": "Transactions per Second",
+      "title": "CPU Usage by Compose Service",
       "gridPos": {
         "x": 0,
         "y": 4,
@@ -362,19 +349,14 @@
       },
       "targets": [
         {
-          "expr": "rate(pg_stat_database_xact_commit{datname=\"flashsale\"}[$__rate_interval])",
+          "expr": "sum by(container_label_com_docker_compose_service) (rate(container_cpu_usage_seconds_total{container_label_com_docker_compose_service!=\"\"}[$__rate_interval]))",
           "refId": "A",
-          "legendFormat": "commits"
-        },
-        {
-          "expr": "rate(pg_stat_database_xact_rollback{datname=\"flashsale\"}[$__rate_interval])",
-          "refId": "B",
-          "legendFormat": "rollbacks"
+          "legendFormat": "{{container_label_com_docker_compose_service}}"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "ops",
+          "unit": "cores",
           "decimals": 2,
           "custom": {
             "drawStyle": "line",
@@ -415,7 +397,7 @@
     {
       "id": 8,
       "type": "timeseries",
-      "title": "Connections by State",
+      "title": "Working Memory by Compose Service",
       "gridPos": {
         "x": 12,
         "y": 4,
@@ -428,329 +410,9 @@
       },
       "targets": [
         {
-          "expr": "sum by(state) (pg_stat_activity_count{datname=\"flashsale\"})",
+          "expr": "sum by(container_label_com_docker_compose_service) (container_memory_working_set_bytes{container_label_com_docker_compose_service!=\"\"})",
           "refId": "A",
-          "legendFormat": "{{state}}"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "decimals": 2,
-          "custom": {
-            "drawStyle": "line",
-            "lineInterpolation": "smooth",
-            "lineWidth": 1,
-            "fillOpacity": 12,
-            "gradientMode": "none",
-            "showPoints": "never",
-            "spanNulls": false,
-            "axisPlacement": "auto",
-            "axisLabel": "",
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "stacking": {
-              "mode": "none",
-              "group": "A"
-            }
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        },
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "calcs": [
-            "lastNotNull",
-            "max"
-          ]
-        }
-      }
-    },
-    {
-      "id": 9,
-      "type": "timeseries",
-      "title": "Rows Read and Returned",
-      "gridPos": {
-        "x": 0,
-        "y": 12,
-        "w": 12,
-        "h": 8
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "Prometheus"
-      },
-      "targets": [
-        {
-          "expr": "rate(pg_stat_database_tup_fetched{datname=\"flashsale\"}[$__rate_interval])",
-          "refId": "A",
-          "legendFormat": "fetched"
-        },
-        {
-          "expr": "rate(pg_stat_database_tup_returned{datname=\"flashsale\"}[$__rate_interval])",
-          "refId": "B",
-          "legendFormat": "returned"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "rows/s",
-          "decimals": 2,
-          "custom": {
-            "drawStyle": "line",
-            "lineInterpolation": "smooth",
-            "lineWidth": 1,
-            "fillOpacity": 12,
-            "gradientMode": "none",
-            "showPoints": "never",
-            "spanNulls": false,
-            "axisPlacement": "auto",
-            "axisLabel": "",
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "stacking": {
-              "mode": "none",
-              "group": "A"
-            }
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        },
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "calcs": [
-            "lastNotNull",
-            "max"
-          ]
-        }
-      }
-    },
-    {
-      "id": 10,
-      "type": "timeseries",
-      "title": "Rows Changed",
-      "gridPos": {
-        "x": 12,
-        "y": 12,
-        "w": 12,
-        "h": 8
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "Prometheus"
-      },
-      "targets": [
-        {
-          "expr": "rate(pg_stat_database_tup_inserted{datname=\"flashsale\"}[$__rate_interval])",
-          "refId": "A",
-          "legendFormat": "inserted"
-        },
-        {
-          "expr": "rate(pg_stat_database_tup_updated{datname=\"flashsale\"}[$__rate_interval])",
-          "refId": "B",
-          "legendFormat": "updated"
-        },
-        {
-          "expr": "rate(pg_stat_database_tup_deleted{datname=\"flashsale\"}[$__rate_interval])",
-          "refId": "C",
-          "legendFormat": "deleted"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "rows/s",
-          "decimals": 2,
-          "custom": {
-            "drawStyle": "line",
-            "lineInterpolation": "smooth",
-            "lineWidth": 1,
-            "fillOpacity": 12,
-            "gradientMode": "none",
-            "showPoints": "never",
-            "spanNulls": false,
-            "axisPlacement": "auto",
-            "axisLabel": "",
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "stacking": {
-              "mode": "none",
-              "group": "A"
-            }
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        },
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "calcs": [
-            "lastNotNull",
-            "max"
-          ]
-        }
-      }
-    },
-    {
-      "id": 11,
-      "type": "timeseries",
-      "title": "Cache Hit Ratio",
-      "gridPos": {
-        "x": 0,
-        "y": 20,
-        "w": 12,
-        "h": 8
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "Prometheus"
-      },
-      "targets": [
-        {
-          "expr": "100 * pg_stat_database_blks_hit{datname=\"flashsale\"} / clamp_min(pg_stat_database_blks_hit{datname=\"flashsale\"} + pg_stat_database_blks_read{datname=\"flashsale\"}, 1)",
-          "refId": "A",
-          "legendFormat": "cache hit %"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "percent",
-          "decimals": 2,
-          "custom": {
-            "drawStyle": "line",
-            "lineInterpolation": "smooth",
-            "lineWidth": 1,
-            "fillOpacity": 12,
-            "gradientMode": "none",
-            "showPoints": "never",
-            "spanNulls": false,
-            "axisPlacement": "auto",
-            "axisLabel": "",
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "stacking": {
-              "mode": "none",
-              "group": "A"
-            }
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        },
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "calcs": [
-            "lastNotNull",
-            "max"
-          ]
-        }
-      }
-    },
-    {
-      "id": 12,
-      "type": "timeseries",
-      "title": "Locks by Mode",
-      "gridPos": {
-        "x": 12,
-        "y": 20,
-        "w": 12,
-        "h": 8
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "Prometheus"
-      },
-      "targets": [
-        {
-          "expr": "sum by(mode) (pg_locks_count{datname=\"flashsale\"})",
-          "refId": "A",
-          "legendFormat": "{{mode}}"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "decimals": 2,
-          "custom": {
-            "drawStyle": "line",
-            "lineInterpolation": "smooth",
-            "lineWidth": 1,
-            "fillOpacity": 12,
-            "gradientMode": "none",
-            "showPoints": "never",
-            "spanNulls": false,
-            "axisPlacement": "auto",
-            "axisLabel": "",
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "stacking": {
-              "mode": "none",
-              "group": "A"
-            }
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        },
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "calcs": [
-            "lastNotNull",
-            "max"
-          ]
-        }
-      }
-    },
-    {
-      "id": 13,
-      "type": "timeseries",
-      "title": "Database Size Over Time",
-      "gridPos": {
-        "x": 0,
-        "y": 28,
-        "w": 12,
-        "h": 8
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "Prometheus"
-      },
-      "targets": [
-        {
-          "expr": "pg_database_size_bytes{datname=\"flashsale\"}",
-          "refId": "A",
-          "legendFormat": "flashsale"
+          "legendFormat": "{{container_label_com_docker_compose_service}}"
         }
       ],
       "fieldConfig": {
@@ -794,12 +456,12 @@
       }
     },
     {
-      "id": 14,
+      "id": 9,
       "type": "timeseries",
-      "title": "Temporary Data",
+      "title": "Network Receive by Compose Service",
       "gridPos": {
-        "x": 12,
-        "y": 28,
+        "x": 0,
+        "y": 12,
         "w": 12,
         "h": 8
       },
@@ -809,14 +471,253 @@
       },
       "targets": [
         {
-          "expr": "rate(pg_stat_database_temp_files{datname=\"flashsale\"}[$__rate_interval])",
+          "expr": "sum by(container_label_com_docker_compose_service) (rate(container_network_receive_bytes_total{container_label_com_docker_compose_service!=\"\"}[$__rate_interval]))",
           "refId": "A",
-          "legendFormat": "temp files/sec"
+          "legendFormat": "{{container_label_com_docker_compose_service}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps",
+          "decimals": 2,
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 1,
+            "fillOpacity": 12,
+            "gradientMode": "none",
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisPlacement": "auto",
+            "axisLabel": "",
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          }
         },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        }
+      }
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Network Transmit by Compose Service",
+      "gridPos": {
+        "x": 12,
+        "y": 12,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "targets": [
         {
-          "expr": "rate(pg_stat_database_temp_bytes{datname=\"flashsale\"}[$__rate_interval])",
-          "refId": "B",
-          "legendFormat": "temp bytes/sec"
+          "expr": "sum by(container_label_com_docker_compose_service) (rate(container_network_transmit_bytes_total{container_label_com_docker_compose_service!=\"\"}[$__rate_interval]))",
+          "refId": "A",
+          "legendFormat": "{{container_label_com_docker_compose_service}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps",
+          "decimals": 2,
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 1,
+            "fillOpacity": 12,
+            "gradientMode": "none",
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisPlacement": "auto",
+            "axisLabel": "",
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        }
+      }
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "Filesystem Usage by Compose Service",
+      "gridPos": {
+        "x": 0,
+        "y": 20,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "targets": [
+        {
+          "expr": "max by(container_label_com_docker_compose_service) (container_fs_usage_bytes{container_label_com_docker_compose_service!=\"\"})",
+          "refId": "A",
+          "legendFormat": "{{container_label_com_docker_compose_service}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "decimals": 2,
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 1,
+            "fillOpacity": 12,
+            "gradientMode": "none",
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisPlacement": "auto",
+            "axisLabel": "",
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        }
+      }
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "Container Last Seen Age",
+      "gridPos": {
+        "x": 12,
+        "y": 20,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "targets": [
+        {
+          "expr": "time() - max by(container_label_com_docker_compose_service) (container_last_seen{container_label_com_docker_compose_service!=\"\"})",
+          "refId": "A",
+          "legendFormat": "{{container_label_com_docker_compose_service}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 2,
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 1,
+            "fillOpacity": 12,
+            "gradientMode": "none",
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisPlacement": "auto",
+            "axisLabel": "",
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        }
+      }
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "Platform Scrape Status",
+      "gridPos": {
+        "x": 0,
+        "y": 28,
+        "w": 24,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "targets": [
+        {
+          "expr": "up{job=~\"prometheus|cadvisor|blackbox_exporter|loki|promtail|grafana|redis|postgres|rabbitmq\"}",
+          "refId": "A",
+          "legendFormat": "{{job}} / {{instance}}"
         }
       ],
       "fieldConfig": {
@@ -860,149 +761,12 @@
       }
     },
     {
-      "id": 15,
-      "type": "timeseries",
-      "title": "Checkpoints",
-      "gridPos": {
-        "x": 0,
-        "y": 36,
-        "w": 12,
-        "h": 8
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "Prometheus"
-      },
-      "targets": [
-        {
-          "expr": "rate(pg_stat_bgwriter_checkpoints_timed[$__rate_interval])",
-          "refId": "A",
-          "legendFormat": "timed"
-        },
-        {
-          "expr": "rate(pg_stat_bgwriter_checkpoints_req[$__rate_interval])",
-          "refId": "B",
-          "legendFormat": "requested"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "ops",
-          "decimals": 2,
-          "custom": {
-            "drawStyle": "line",
-            "lineInterpolation": "smooth",
-            "lineWidth": 1,
-            "fillOpacity": 12,
-            "gradientMode": "none",
-            "showPoints": "never",
-            "spanNulls": false,
-            "axisPlacement": "auto",
-            "axisLabel": "",
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "stacking": {
-              "mode": "none",
-              "group": "A"
-            }
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        },
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "calcs": [
-            "lastNotNull",
-            "max"
-          ]
-        }
-      }
-    },
-    {
-      "id": 16,
-      "type": "timeseries",
-      "title": "Buffers Written",
-      "gridPos": {
-        "x": 12,
-        "y": 36,
-        "w": 12,
-        "h": 8
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "Prometheus"
-      },
-      "targets": [
-        {
-          "expr": "rate(pg_stat_bgwriter_buffers_checkpoint[$__rate_interval])",
-          "refId": "A",
-          "legendFormat": "checkpoint"
-        },
-        {
-          "expr": "rate(pg_stat_bgwriter_buffers_clean[$__rate_interval])",
-          "refId": "B",
-          "legendFormat": "clean"
-        },
-        {
-          "expr": "rate(pg_stat_bgwriter_buffers_backend[$__rate_interval])",
-          "refId": "C",
-          "legendFormat": "backend"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "ops",
-          "decimals": 2,
-          "custom": {
-            "drawStyle": "line",
-            "lineInterpolation": "smooth",
-            "lineWidth": 1,
-            "fillOpacity": 12,
-            "gradientMode": "none",
-            "showPoints": "never",
-            "spanNulls": false,
-            "axisPlacement": "auto",
-            "axisLabel": "",
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "stacking": {
-              "mode": "none",
-              "group": "A"
-            }
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        },
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "calcs": [
-            "lastNotNull",
-            "max"
-          ]
-        }
-      }
-    },
-    {
-      "id": 17,
+      "id": 14,
       "type": "logs",
-      "title": "Recent PostgreSQL Logs",
+      "title": "Recent Platform Errors",
       "gridPos": {
         "x": 0,
-        "y": 44,
+        "y": 36,
         "w": 24,
         "h": 10
       },
@@ -1012,7 +776,7 @@
       },
       "targets": [
         {
-          "expr": "{compose_service=\"postgres\"}",
+          "expr": "{compose_service=~\"prometheus|grafana|loki|promtail|cadvisor|blackbox_exporter|redis_exporter|postgres_exporter\"} |~ \"(?i)error|fail|panic\"",
           "refId": "A",
           "queryType": "range"
         }

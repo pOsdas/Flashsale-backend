@@ -1,14 +1,14 @@
 {
-  "uid": "postgresql-operations",
-  "title": "PostgreSQL Operations",
+  "uid": "flashsale-telegram-bot",
+  "title": "Telegram Bot",
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 2,
+  "version": 1,
   "refresh": "15s",
   "tags": [
     "flashsale",
-    "postgresql",
-    "database"
+    "telegram",
+    "bot"
   ],
   "time": {
     "from": "now-6h",
@@ -18,7 +18,7 @@
     {
       "id": 1,
       "type": "stat",
-      "title": "PostgreSQL Exporter UP",
+      "title": "Telegram Metrics UP",
       "gridPos": {
         "x": 0,
         "y": 0,
@@ -31,7 +31,7 @@
       },
       "targets": [
         {
-          "expr": "pg_up or vector(0)",
+          "expr": "up{job=\"telegram_bot\"} or vector(0)",
           "refId": "A"
         }
       ],
@@ -68,13 +68,12 @@
         "colorMode": "value",
         "graphMode": "area",
         "justifyMode": "auto"
-      },
-      "description": "Whether postgres_exporter can query PostgreSQL."
+      }
     },
     {
       "id": 2,
       "type": "stat",
-      "title": "PostgreSQL TCP Probe",
+      "title": "Bot Running",
       "gridPos": {
         "x": 4,
         "y": 0,
@@ -87,7 +86,7 @@
       },
       "targets": [
         {
-          "expr": "probe_success{job=\"blackbox_tcp\",instance=\"postgres:5432\"} or vector(0)",
+          "expr": "telegram_bot_running or vector(0)",
           "refId": "A"
         }
       ],
@@ -129,7 +128,7 @@
     {
       "id": 3,
       "type": "stat",
-      "title": "Connections",
+      "title": "Polling Heartbeat Age",
       "gridPos": {
         "x": 8,
         "y": 0,
@@ -142,20 +141,28 @@
       },
       "targets": [
         {
-          "expr": "sum(pg_stat_activity_count{datname=\"flashsale\"}) or vector(0)",
+          "expr": "time() - telegram_polling_heartbeat_timestamp_seconds",
           "refId": "A"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "short",
-          "decimals": 0,
+          "unit": "s",
+          "decimals": 1,
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
                 "color": "green",
                 "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 60
+              },
+              {
+                "color": "red",
+                "value": 120
               }
             ]
           }
@@ -180,7 +187,7 @@
     {
       "id": 4,
       "type": "stat",
-      "title": "Database Size",
+      "title": "Updates In Progress",
       "gridPos": {
         "x": 12,
         "y": 0,
@@ -193,13 +200,13 @@
       },
       "targets": [
         {
-          "expr": "pg_database_size_bytes{datname=\"flashsale\"} or vector(0)",
+          "expr": "telegram_updates_in_progress or vector(0)",
           "refId": "A"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "bytes",
+          "unit": "short",
           "decimals": 0,
           "thresholds": {
             "mode": "absolute",
@@ -207,6 +214,14 @@
               {
                 "color": "green",
                 "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 10
               }
             ]
           }
@@ -231,7 +246,7 @@
     {
       "id": 5,
       "type": "stat",
-      "title": "Rollbacks/sec",
+      "title": "Handler Errors/sec",
       "gridPos": {
         "x": 16,
         "y": 0,
@@ -244,7 +259,7 @@
       },
       "targets": [
         {
-          "expr": "rate(pg_stat_database_xact_rollback{datname=\"flashsale\"}[$__rate_interval]) or vector(0)",
+          "expr": "sum(rate(telegram_handler_errors_total[$__rate_interval])) or vector(0)",
           "refId": "A"
         }
       ],
@@ -290,7 +305,7 @@
     {
       "id": 6,
       "type": "stat",
-      "title": "Deadlocks",
+      "title": "Rate Limit Fail-Open/sec",
       "gridPos": {
         "x": 20,
         "y": 0,
@@ -303,14 +318,14 @@
       },
       "targets": [
         {
-          "expr": "pg_stat_database_deadlocks{datname=\"flashsale\"} or vector(0)",
+          "expr": "sum(rate(telegram_rate_limit_decisions_total{result=\"error_fail_open\"}[$__rate_interval])) or vector(0)",
           "refId": "A"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "short",
-          "decimals": 0,
+          "unit": "ops",
+          "decimals": 3,
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -320,11 +335,11 @@
               },
               {
                 "color": "yellow",
-                "value": 1
+                "value": 0.01
               },
               {
                 "color": "red",
-                "value": 10
+                "value": 0.1
               }
             ]
           }
@@ -349,7 +364,7 @@
     {
       "id": 7,
       "type": "timeseries",
-      "title": "Transactions per Second",
+      "title": "Polling Request Outcomes",
       "gridPos": {
         "x": 0,
         "y": 4,
@@ -362,14 +377,9 @@
       },
       "targets": [
         {
-          "expr": "rate(pg_stat_database_xact_commit{datname=\"flashsale\"}[$__rate_interval])",
+          "expr": "sum by(status) (rate(telegram_polling_requests_total[$__rate_interval]))",
           "refId": "A",
-          "legendFormat": "commits"
-        },
-        {
-          "expr": "rate(pg_stat_database_xact_rollback{datname=\"flashsale\"}[$__rate_interval])",
-          "refId": "B",
-          "legendFormat": "rollbacks"
+          "legendFormat": "{{status}}"
         }
       ],
       "fieldConfig": {
@@ -415,7 +425,7 @@
     {
       "id": 8,
       "type": "timeseries",
-      "title": "Connections by State",
+      "title": "Polling Request Duration",
       "gridPos": {
         "x": 12,
         "y": 4,
@@ -428,14 +438,24 @@
       },
       "targets": [
         {
-          "expr": "sum by(state) (pg_stat_activity_count{datname=\"flashsale\"})",
+          "expr": "histogram_quantile(0.50, sum(rate(telegram_polling_request_duration_seconds_bucket[$__rate_interval])) by (le))",
           "refId": "A",
-          "legendFormat": "{{state}}"
+          "legendFormat": "P50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(telegram_polling_request_duration_seconds_bucket[$__rate_interval])) by (le))",
+          "refId": "B",
+          "legendFormat": "P95"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(telegram_polling_request_duration_seconds_bucket[$__rate_interval])) by (le))",
+          "refId": "C",
+          "legendFormat": "P99"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "short",
+          "unit": "s",
           "decimals": 2,
           "custom": {
             "drawStyle": "line",
@@ -476,7 +496,7 @@
     {
       "id": 9,
       "type": "timeseries",
-      "title": "Rows Read and Returned",
+      "title": "Updates by Type and Status",
       "gridPos": {
         "x": 0,
         "y": 12,
@@ -489,19 +509,14 @@
       },
       "targets": [
         {
-          "expr": "rate(pg_stat_database_tup_fetched{datname=\"flashsale\"}[$__rate_interval])",
+          "expr": "sum by(update_type, status) (rate(telegram_updates_total[$__rate_interval]))",
           "refId": "A",
-          "legendFormat": "fetched"
-        },
-        {
-          "expr": "rate(pg_stat_database_tup_returned{datname=\"flashsale\"}[$__rate_interval])",
-          "refId": "B",
-          "legendFormat": "returned"
+          "legendFormat": "{{update_type}} / {{status}}"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "rows/s",
+          "unit": "ops",
           "decimals": 2,
           "custom": {
             "drawStyle": "line",
@@ -542,7 +557,7 @@
     {
       "id": 10,
       "type": "timeseries",
-      "title": "Rows Changed",
+      "title": "Commands",
       "gridPos": {
         "x": 12,
         "y": 12,
@@ -555,24 +570,14 @@
       },
       "targets": [
         {
-          "expr": "rate(pg_stat_database_tup_inserted{datname=\"flashsale\"}[$__rate_interval])",
+          "expr": "sum by(command) (rate(telegram_commands_total[$__rate_interval]))",
           "refId": "A",
-          "legendFormat": "inserted"
-        },
-        {
-          "expr": "rate(pg_stat_database_tup_updated{datname=\"flashsale\"}[$__rate_interval])",
-          "refId": "B",
-          "legendFormat": "updated"
-        },
-        {
-          "expr": "rate(pg_stat_database_tup_deleted{datname=\"flashsale\"}[$__rate_interval])",
-          "refId": "C",
-          "legendFormat": "deleted"
+          "legendFormat": "/{{command}}"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "rows/s",
+          "unit": "ops",
           "decimals": 2,
           "custom": {
             "drawStyle": "line",
@@ -613,7 +618,7 @@
     {
       "id": 11,
       "type": "timeseries",
-      "title": "Cache Hit Ratio",
+      "title": "Callbacks",
       "gridPos": {
         "x": 0,
         "y": 20,
@@ -626,14 +631,14 @@
       },
       "targets": [
         {
-          "expr": "100 * pg_stat_database_blks_hit{datname=\"flashsale\"} / clamp_min(pg_stat_database_blks_hit{datname=\"flashsale\"} + pg_stat_database_blks_read{datname=\"flashsale\"}, 1)",
+          "expr": "sum by(handler) (rate(telegram_callbacks_total[$__rate_interval]))",
           "refId": "A",
-          "legendFormat": "cache hit %"
+          "legendFormat": "{{handler}}"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "percent",
+          "unit": "ops",
           "decimals": 2,
           "custom": {
             "drawStyle": "line",
@@ -674,7 +679,7 @@
     {
       "id": 12,
       "type": "timeseries",
-      "title": "Locks by Mode",
+      "title": "Product Preview Outcomes",
       "gridPos": {
         "x": 12,
         "y": 20,
@@ -687,14 +692,14 @@
       },
       "targets": [
         {
-          "expr": "sum by(mode) (pg_locks_count{datname=\"flashsale\"})",
+          "expr": "sum by(marketplace, result) (rate(telegram_product_previews_total[$__rate_interval]))",
           "refId": "A",
-          "legendFormat": "{{mode}}"
+          "legendFormat": "{{marketplace}} / {{result}}"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "short",
+          "unit": "ops",
           "decimals": 2,
           "custom": {
             "drawStyle": "line",
@@ -735,7 +740,7 @@
     {
       "id": 13,
       "type": "timeseries",
-      "title": "Database Size Over Time",
+      "title": "Target Creation Outcomes",
       "gridPos": {
         "x": 0,
         "y": 28,
@@ -748,14 +753,14 @@
       },
       "targets": [
         {
-          "expr": "pg_database_size_bytes{datname=\"flashsale\"}",
+          "expr": "sum by(marketplace, result) (rate(telegram_target_creations_total[$__rate_interval]))",
           "refId": "A",
-          "legendFormat": "flashsale"
+          "legendFormat": "{{marketplace}} / {{result}}"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "bytes",
+          "unit": "ops",
           "decimals": 2,
           "custom": {
             "drawStyle": "line",
@@ -796,7 +801,7 @@
     {
       "id": 14,
       "type": "timeseries",
-      "title": "Temporary Data",
+      "title": "Target Actions",
       "gridPos": {
         "x": 12,
         "y": 28,
@@ -809,19 +814,14 @@
       },
       "targets": [
         {
-          "expr": "rate(pg_stat_database_temp_files{datname=\"flashsale\"}[$__rate_interval])",
+          "expr": "sum by(action, result) (rate(telegram_target_actions_total[$__rate_interval]))",
           "refId": "A",
-          "legendFormat": "temp files/sec"
-        },
-        {
-          "expr": "rate(pg_stat_database_temp_bytes{datname=\"flashsale\"}[$__rate_interval])",
-          "refId": "B",
-          "legendFormat": "temp bytes/sec"
+          "legendFormat": "{{action}} / {{result}}"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "short",
+          "unit": "ops",
           "decimals": 2,
           "custom": {
             "drawStyle": "line",
@@ -862,7 +862,7 @@
     {
       "id": 15,
       "type": "timeseries",
-      "title": "Checkpoints",
+      "title": "Rate Limit Decisions",
       "gridPos": {
         "x": 0,
         "y": 36,
@@ -875,14 +875,9 @@
       },
       "targets": [
         {
-          "expr": "rate(pg_stat_bgwriter_checkpoints_timed[$__rate_interval])",
+          "expr": "sum by(scope, result) (rate(telegram_rate_limit_decisions_total[$__rate_interval]))",
           "refId": "A",
-          "legendFormat": "timed"
-        },
-        {
-          "expr": "rate(pg_stat_bgwriter_checkpoints_req[$__rate_interval])",
-          "refId": "B",
-          "legendFormat": "requested"
+          "legendFormat": "{{scope}} / {{result}}"
         }
       ],
       "fieldConfig": {
@@ -928,7 +923,7 @@
     {
       "id": 16,
       "type": "timeseries",
-      "title": "Buffers Written",
+      "title": "Handler Errors by Stage",
       "gridPos": {
         "x": 12,
         "y": 36,
@@ -941,19 +936,9 @@
       },
       "targets": [
         {
-          "expr": "rate(pg_stat_bgwriter_buffers_checkpoint[$__rate_interval])",
+          "expr": "sum by(stage) (rate(telegram_handler_errors_total[$__rate_interval]))",
           "refId": "A",
-          "legendFormat": "checkpoint"
-        },
-        {
-          "expr": "rate(pg_stat_bgwriter_buffers_clean[$__rate_interval])",
-          "refId": "B",
-          "legendFormat": "clean"
-        },
-        {
-          "expr": "rate(pg_stat_bgwriter_buffers_backend[$__rate_interval])",
-          "refId": "C",
-          "legendFormat": "backend"
+          "legendFormat": "{{stage}}"
         }
       ],
       "fieldConfig": {
@@ -999,11 +984,11 @@
     {
       "id": 17,
       "type": "logs",
-      "title": "Recent PostgreSQL Logs",
+      "title": "Recent Telegram Errors",
       "gridPos": {
         "x": 0,
         "y": 44,
-        "w": 24,
+        "w": 12,
         "h": 10
       },
       "datasource": {
@@ -1012,7 +997,39 @@
       },
       "targets": [
         {
-          "expr": "{compose_service=\"postgres\"}",
+          "expr": "{compose_service=\"telegram_bot\",level=\"ERROR\"}",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "showLabels": false,
+        "showCommonLabels": false,
+        "wrapLogMessage": true,
+        "prettifyLogMessage": false,
+        "enableLogDetails": true,
+        "sortOrder": "Descending",
+        "dedupStrategy": "none"
+      }
+    },
+    {
+      "id": 18,
+      "type": "logs",
+      "title": "Recent Telegram Logs",
+      "gridPos": {
+        "x": 12,
+        "y": 44,
+        "w": 12,
+        "h": 10
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "Loki"
+      },
+      "targets": [
+        {
+          "expr": "{compose_service=\"telegram_bot\"}",
           "refId": "A",
           "queryType": "range"
         }

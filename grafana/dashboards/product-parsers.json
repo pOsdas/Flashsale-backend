@@ -1,14 +1,15 @@
 {
-  "uid": "postgresql-operations",
-  "title": "PostgreSQL Operations",
+  "uid": "flashsale-product-parsers",
+  "title": "Product Parsers",
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 2,
+  "version": 1,
   "refresh": "15s",
   "tags": [
     "flashsale",
-    "postgresql",
-    "database"
+    "parsers",
+    "go",
+    "ozon"
   ],
   "time": {
     "from": "now-6h",
@@ -18,11 +19,11 @@
     {
       "id": 1,
       "type": "stat",
-      "title": "PostgreSQL Exporter UP",
+      "title": "Go Fetcher UP",
       "gridPos": {
         "x": 0,
         "y": 0,
-        "w": 4,
+        "w": 3,
         "h": 4
       },
       "datasource": {
@@ -31,7 +32,7 @@
       },
       "targets": [
         {
-          "expr": "pg_up or vector(0)",
+          "expr": "up{job=\"go_fetcher\"} or vector(0)",
           "refId": "A"
         }
       ],
@@ -68,17 +69,16 @@
         "colorMode": "value",
         "graphMode": "area",
         "justifyMode": "auto"
-      },
-      "description": "Whether postgres_exporter can query PostgreSQL."
+      }
     },
     {
       "id": 2,
       "type": "stat",
-      "title": "PostgreSQL TCP Probe",
+      "title": "Ozon Browser UP",
       "gridPos": {
-        "x": 4,
+        "x": 3,
         "y": 0,
-        "w": 4,
+        "w": 3,
         "h": 4
       },
       "datasource": {
@@ -87,7 +87,7 @@
       },
       "targets": [
         {
-          "expr": "probe_success{job=\"blackbox_tcp\",instance=\"postgres:5432\"} or vector(0)",
+          "expr": "up{job=\"ozon_browser_fetcher\"} or vector(0)",
           "refId": "A"
         }
       ],
@@ -129,11 +129,11 @@
     {
       "id": 3,
       "type": "stat",
-      "title": "Connections",
+      "title": "WB Parser Healthy",
       "gridPos": {
-        "x": 8,
+        "x": 6,
         "y": 0,
-        "w": 4,
+        "w": 3,
         "h": 4
       },
       "datasource": {
@@ -142,7 +142,7 @@
       },
       "targets": [
         {
-          "expr": "sum(pg_stat_activity_count{datname=\"flashsale\"}) or vector(0)",
+          "expr": "go_fetcher_parser_health_state{marketplace=\"wb\",status=\"ok\"} or vector(0)",
           "refId": "A"
         }
       ],
@@ -154,8 +154,12 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "red",
                 "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
               }
             ]
           }
@@ -180,11 +184,11 @@
     {
       "id": 4,
       "type": "stat",
-      "title": "Database Size",
+      "title": "Ozon Parser Healthy",
       "gridPos": {
-        "x": 12,
+        "x": 9,
         "y": 0,
-        "w": 4,
+        "w": 3,
         "h": 4
       },
       "datasource": {
@@ -193,20 +197,24 @@
       },
       "targets": [
         {
-          "expr": "pg_database_size_bytes{datname=\"flashsale\"} or vector(0)",
+          "expr": "go_fetcher_parser_health_state{marketplace=\"ozon\",status=\"ok\"} or vector(0)",
           "refId": "A"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "bytes",
+          "unit": "short",
           "decimals": 0,
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "red",
                 "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
               }
             ]
           }
@@ -231,11 +239,11 @@
     {
       "id": 5,
       "type": "stat",
-      "title": "Rollbacks/sec",
+      "title": "Browser Ready",
       "gridPos": {
-        "x": 16,
+        "x": 12,
         "y": 0,
-        "w": 4,
+        "w": 3,
         "h": 4
       },
       "datasource": {
@@ -244,28 +252,24 @@
       },
       "targets": [
         {
-          "expr": "rate(pg_stat_database_xact_rollback{datname=\"flashsale\"}[$__rate_interval]) or vector(0)",
+          "expr": "ozon_browser_worker_ready or vector(0)",
           "refId": "A"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "ops",
-          "decimals": 3,
+          "unit": "short",
+          "decimals": 0,
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "red",
                 "value": null
               },
               {
-                "color": "yellow",
-                "value": 0.01
-              },
-              {
-                "color": "red",
-                "value": 0.1
+                "color": "green",
+                "value": 1
               }
             ]
           }
@@ -290,11 +294,11 @@
     {
       "id": 6,
       "type": "stat",
-      "title": "Deadlocks",
+      "title": "Browser Queue",
       "gridPos": {
-        "x": 20,
+        "x": 15,
         "y": 0,
-        "w": 4,
+        "w": 3,
         "h": 4
       },
       "datasource": {
@@ -303,7 +307,7 @@
       },
       "targets": [
         {
-          "expr": "pg_stat_database_deadlocks{datname=\"flashsale\"} or vector(0)",
+          "expr": "ozon_browser_queue_size or vector(0)",
           "refId": "A"
         }
       ],
@@ -348,8 +352,126 @@
     },
     {
       "id": 7,
+      "type": "stat",
+      "title": "Fallback In Progress",
+      "gridPos": {
+        "x": 18,
+        "y": 0,
+        "w": 3,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "targets": [
+        {
+          "expr": "sum(go_fetcher_ozon_browser_fallback_in_progress) or vector(0)",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 10
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 8,
+      "type": "stat",
+      "title": "Cache Hit Ratio",
+      "gridPos": {
+        "x": 21,
+        "y": 0,
+        "w": 3,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "targets": [
+        {
+          "expr": "100 * sum(rate(monitoring_product_cache_lookups_total{result=\"hit\"}[$__rate_interval])) / clamp_min(sum(rate(monitoring_product_cache_lookups_total[$__rate_interval])), 0.000001) or vector(0)",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 80
+              },
+              {
+                "color": "green",
+                "value": 95
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 9,
       "type": "timeseries",
-      "title": "Transactions per Second",
+      "title": "Backend to Go Fetcher Outcomes",
       "gridPos": {
         "x": 0,
         "y": 4,
@@ -362,14 +484,9 @@
       },
       "targets": [
         {
-          "expr": "rate(pg_stat_database_xact_commit{datname=\"flashsale\"}[$__rate_interval])",
+          "expr": "sum by(job, marketplace, result) (rate(monitoring_go_fetcher_requests_total[$__rate_interval]))",
           "refId": "A",
-          "legendFormat": "commits"
-        },
-        {
-          "expr": "rate(pg_stat_database_xact_rollback{datname=\"flashsale\"}[$__rate_interval])",
-          "refId": "B",
-          "legendFormat": "rollbacks"
+          "legendFormat": "{{job}} / {{marketplace}} / {{result}}"
         }
       ],
       "fieldConfig": {
@@ -413,9 +530,9 @@
       }
     },
     {
-      "id": 8,
+      "id": 10,
       "type": "timeseries",
-      "title": "Connections by State",
+      "title": "Backend to Go Fetcher P95",
       "gridPos": {
         "x": 12,
         "y": 4,
@@ -428,151 +545,14 @@
       },
       "targets": [
         {
-          "expr": "sum by(state) (pg_stat_activity_count{datname=\"flashsale\"})",
+          "expr": "histogram_quantile(0.95, sum by(le, job, marketplace) (rate(monitoring_go_fetcher_request_duration_seconds_bucket[$__rate_interval])))",
           "refId": "A",
-          "legendFormat": "{{state}}"
+          "legendFormat": "{{job}} / {{marketplace}}"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "short",
-          "decimals": 2,
-          "custom": {
-            "drawStyle": "line",
-            "lineInterpolation": "smooth",
-            "lineWidth": 1,
-            "fillOpacity": 12,
-            "gradientMode": "none",
-            "showPoints": "never",
-            "spanNulls": false,
-            "axisPlacement": "auto",
-            "axisLabel": "",
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "stacking": {
-              "mode": "none",
-              "group": "A"
-            }
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        },
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "calcs": [
-            "lastNotNull",
-            "max"
-          ]
-        }
-      }
-    },
-    {
-      "id": 9,
-      "type": "timeseries",
-      "title": "Rows Read and Returned",
-      "gridPos": {
-        "x": 0,
-        "y": 12,
-        "w": 12,
-        "h": 8
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "Prometheus"
-      },
-      "targets": [
-        {
-          "expr": "rate(pg_stat_database_tup_fetched{datname=\"flashsale\"}[$__rate_interval])",
-          "refId": "A",
-          "legendFormat": "fetched"
-        },
-        {
-          "expr": "rate(pg_stat_database_tup_returned{datname=\"flashsale\"}[$__rate_interval])",
-          "refId": "B",
-          "legendFormat": "returned"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "rows/s",
-          "decimals": 2,
-          "custom": {
-            "drawStyle": "line",
-            "lineInterpolation": "smooth",
-            "lineWidth": 1,
-            "fillOpacity": 12,
-            "gradientMode": "none",
-            "showPoints": "never",
-            "spanNulls": false,
-            "axisPlacement": "auto",
-            "axisLabel": "",
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "stacking": {
-              "mode": "none",
-              "group": "A"
-            }
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        },
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "calcs": [
-            "lastNotNull",
-            "max"
-          ]
-        }
-      }
-    },
-    {
-      "id": 10,
-      "type": "timeseries",
-      "title": "Rows Changed",
-      "gridPos": {
-        "x": 12,
-        "y": 12,
-        "w": 12,
-        "h": 8
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "Prometheus"
-      },
-      "targets": [
-        {
-          "expr": "rate(pg_stat_database_tup_inserted{datname=\"flashsale\"}[$__rate_interval])",
-          "refId": "A",
-          "legendFormat": "inserted"
-        },
-        {
-          "expr": "rate(pg_stat_database_tup_updated{datname=\"flashsale\"}[$__rate_interval])",
-          "refId": "B",
-          "legendFormat": "updated"
-        },
-        {
-          "expr": "rate(pg_stat_database_tup_deleted{datname=\"flashsale\"}[$__rate_interval])",
-          "refId": "C",
-          "legendFormat": "deleted"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "rows/s",
+          "unit": "s",
           "decimals": 2,
           "custom": {
             "drawStyle": "line",
@@ -613,10 +593,10 @@
     {
       "id": 11,
       "type": "timeseries",
-      "title": "Cache Hit Ratio",
+      "title": "Go Product Fetch Outcomes",
       "gridPos": {
         "x": 0,
-        "y": 20,
+        "y": 12,
         "w": 12,
         "h": 8
       },
@@ -626,14 +606,14 @@
       },
       "targets": [
         {
-          "expr": "100 * pg_stat_database_blks_hit{datname=\"flashsale\"} / clamp_min(pg_stat_database_blks_hit{datname=\"flashsale\"} + pg_stat_database_blks_read{datname=\"flashsale\"}, 1)",
+          "expr": "sum by(marketplace, result, error_type) (rate(go_fetcher_product_fetches_total[$__rate_interval]))",
           "refId": "A",
-          "legendFormat": "cache hit %"
+          "legendFormat": "{{marketplace}} / {{result}} / {{error_type}}"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "percent",
+          "unit": "ops",
           "decimals": 2,
           "custom": {
             "drawStyle": "line",
@@ -674,10 +654,10 @@
     {
       "id": 12,
       "type": "timeseries",
-      "title": "Locks by Mode",
+      "title": "Go Product Fetch P95",
       "gridPos": {
         "x": 12,
-        "y": 20,
+        "y": 12,
         "w": 12,
         "h": 8
       },
@@ -687,14 +667,14 @@
       },
       "targets": [
         {
-          "expr": "sum by(mode) (pg_locks_count{datname=\"flashsale\"})",
+          "expr": "histogram_quantile(0.95, sum by(le, marketplace, result) (rate(go_fetcher_product_fetch_duration_seconds_bucket[$__rate_interval])))",
           "refId": "A",
-          "legendFormat": "{{mode}}"
+          "legendFormat": "{{marketplace}} / {{result}}"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "short",
+          "unit": "s",
           "decimals": 2,
           "custom": {
             "drawStyle": "line",
@@ -735,10 +715,10 @@
     {
       "id": 13,
       "type": "timeseries",
-      "title": "Database Size Over Time",
+      "title": "Parser Operations",
       "gridPos": {
         "x": 0,
-        "y": 28,
+        "y": 20,
         "w": 12,
         "h": 8
       },
@@ -748,14 +728,14 @@
       },
       "targets": [
         {
-          "expr": "pg_database_size_bytes{datname=\"flashsale\"}",
+          "expr": "sum by(marketplace, mode, parser, result) (rate(go_fetcher_parser_operations_total[$__rate_interval]))",
           "refId": "A",
-          "legendFormat": "flashsale"
+          "legendFormat": "{{marketplace}} / {{mode}} / {{parser}} / {{result}}"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "bytes",
+          "unit": "ops",
           "decimals": 2,
           "custom": {
             "drawStyle": "line",
@@ -796,10 +776,10 @@
     {
       "id": 14,
       "type": "timeseries",
-      "title": "Temporary Data",
+      "title": "Marketplace Failures",
       "gridPos": {
         "x": 12,
-        "y": 28,
+        "y": 20,
         "w": 12,
         "h": 8
       },
@@ -809,19 +789,14 @@
       },
       "targets": [
         {
-          "expr": "rate(pg_stat_database_temp_files{datname=\"flashsale\"}[$__rate_interval])",
+          "expr": "sum by(marketplace, operation, error_type) (rate(go_fetcher_marketplace_failures_total[$__rate_interval]))",
           "refId": "A",
-          "legendFormat": "temp files/sec"
-        },
-        {
-          "expr": "rate(pg_stat_database_temp_bytes{datname=\"flashsale\"}[$__rate_interval])",
-          "refId": "B",
-          "legendFormat": "temp bytes/sec"
+          "legendFormat": "{{marketplace}} / {{operation}} / {{error_type}}"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "short",
+          "unit": "ops",
           "decimals": 2,
           "custom": {
             "drawStyle": "line",
@@ -862,10 +837,10 @@
     {
       "id": 15,
       "type": "timeseries",
-      "title": "Checkpoints",
+      "title": "Ozon Browser Fallback Results",
       "gridPos": {
         "x": 0,
-        "y": 36,
+        "y": 28,
         "w": 12,
         "h": 8
       },
@@ -875,14 +850,9 @@
       },
       "targets": [
         {
-          "expr": "rate(pg_stat_bgwriter_checkpoints_timed[$__rate_interval])",
+          "expr": "sum by(mode, result, reason) (rate(go_fetcher_ozon_browser_fallback_results_total[$__rate_interval]))",
           "refId": "A",
-          "legendFormat": "timed"
-        },
-        {
-          "expr": "rate(pg_stat_bgwriter_checkpoints_req[$__rate_interval])",
-          "refId": "B",
-          "legendFormat": "requested"
+          "legendFormat": "{{mode}} / {{result}} / {{reason}}"
         }
       ],
       "fieldConfig": {
@@ -928,9 +898,70 @@
     {
       "id": 16,
       "type": "timeseries",
-      "title": "Buffers Written",
+      "title": "Ozon Fallback P95",
       "gridPos": {
         "x": 12,
+        "y": 28,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by(le, mode, result) (rate(go_fetcher_ozon_browser_fallback_duration_seconds_bucket[$__rate_interval])))",
+          "refId": "A",
+          "legendFormat": "{{mode}} / {{result}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 2,
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 1,
+            "fillOpacity": 12,
+            "gradientMode": "none",
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisPlacement": "auto",
+            "axisLabel": "",
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        }
+      }
+    },
+    {
+      "id": 17,
+      "type": "timeseries",
+      "title": "Browser Task Outcomes",
+      "gridPos": {
+        "x": 0,
         "y": 36,
         "w": 12,
         "h": 8
@@ -941,19 +972,9 @@
       },
       "targets": [
         {
-          "expr": "rate(pg_stat_bgwriter_buffers_checkpoint[$__rate_interval])",
+          "expr": "sum by(task_type, result, error_type) (rate(ozon_browser_task_executions_total[$__rate_interval]))",
           "refId": "A",
-          "legendFormat": "checkpoint"
-        },
-        {
-          "expr": "rate(pg_stat_bgwriter_buffers_clean[$__rate_interval])",
-          "refId": "B",
-          "legendFormat": "clean"
-        },
-        {
-          "expr": "rate(pg_stat_bgwriter_buffers_backend[$__rate_interval])",
-          "refId": "C",
-          "legendFormat": "backend"
+          "legendFormat": "{{task_type}} / {{result}} / {{error_type}}"
         }
       ],
       "fieldConfig": {
@@ -997,13 +1018,201 @@
       }
     },
     {
-      "id": 17,
-      "type": "logs",
-      "title": "Recent PostgreSQL Logs",
+      "id": 18,
+      "type": "timeseries",
+      "title": "Browser Execution and Queue P95",
+      "gridPos": {
+        "x": 12,
+        "y": 36,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by(le, task_type) (rate(ozon_browser_task_execution_duration_seconds_bucket[$__rate_interval])))",
+          "refId": "A",
+          "legendFormat": "execution {{task_type}}"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by(le, task_type) (rate(ozon_browser_task_queue_wait_seconds_bucket[$__rate_interval])))",
+          "refId": "B",
+          "legendFormat": "queue wait {{task_type}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 2,
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 1,
+            "fillOpacity": 12,
+            "gradientMode": "none",
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisPlacement": "auto",
+            "axisLabel": "",
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        }
+      }
+    },
+    {
+      "id": 19,
+      "type": "timeseries",
+      "title": "Product Cache Outcomes",
       "gridPos": {
         "x": 0,
         "y": 44,
-        "w": 24,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "targets": [
+        {
+          "expr": "sum by(job, marketplace, operation, result) (rate(monitoring_product_cache_requests_total[$__rate_interval]))",
+          "refId": "A",
+          "legendFormat": "{{job}} / {{marketplace}} / {{operation}} / {{result}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "decimals": 2,
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 1,
+            "fillOpacity": 12,
+            "gradientMode": "none",
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisPlacement": "auto",
+            "axisLabel": "",
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        }
+      }
+    },
+    {
+      "id": 20,
+      "type": "timeseries",
+      "title": "Cache Hit Ratio Over Time",
+      "gridPos": {
+        "x": 12,
+        "y": 44,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "targets": [
+        {
+          "expr": "100 * sum(rate(monitoring_product_cache_lookups_total{result=\"hit\"}[$__rate_interval])) / clamp_min(sum(rate(monitoring_product_cache_lookups_total[$__rate_interval])), 0.000001)",
+          "refId": "A",
+          "legendFormat": "hit ratio"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1,
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 1,
+            "fillOpacity": 12,
+            "gradientMode": "none",
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisPlacement": "auto",
+            "axisLabel": "",
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        }
+      }
+    },
+    {
+      "id": 21,
+      "type": "logs",
+      "title": "Recent Go Fetcher Logs",
+      "gridPos": {
+        "x": 0,
+        "y": 52,
+        "w": 12,
         "h": 10
       },
       "datasource": {
@@ -1012,7 +1221,39 @@
       },
       "targets": [
         {
-          "expr": "{compose_service=\"postgres\"}",
+          "expr": "{compose_service=\"go_fetcher\"}",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "showLabels": false,
+        "showCommonLabels": false,
+        "wrapLogMessage": true,
+        "prettifyLogMessage": false,
+        "enableLogDetails": true,
+        "sortOrder": "Descending",
+        "dedupStrategy": "none"
+      }
+    },
+    {
+      "id": 22,
+      "type": "logs",
+      "title": "Recent Ozon Browser Logs",
+      "gridPos": {
+        "x": 12,
+        "y": 52,
+        "w": 12,
+        "h": 10
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "Loki"
+      },
+      "targets": [
+        {
+          "expr": "{compose_service=\"ozon_browser_fetcher\"}",
           "refId": "A",
           "queryType": "range"
         }
