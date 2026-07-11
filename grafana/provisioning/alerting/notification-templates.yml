@@ -1,0 +1,24 @@
+apiVersion: 1
+
+templates:
+  - orgId: 1
+    name: flashsale_telegram
+    template: |
+      {{ define "flashsale.telegram.message" -}}
+      {{- if gt (len .Alerts.Firing) 0 }}
+      🚨 АКТИВНЫЕ ПРОБЛЕМЫ: {{ len .Alerts.Firing }}
+      {{ range .Alerts.Firing }}
+      • {{ .Annotations.summary }}
+        Сервис: {{ .Labels.service }}
+        Уровень: {{ .Labels.severity }}
+        {{ .Annotations.description }}
+      {{ end }}
+      {{- end }}
+      {{- if gt (len .Alerts.Resolved) 0 }}
+      ✅ ИСПРАВЛЕНО: {{ len .Alerts.Resolved }}
+      {{ range .Alerts.Resolved }}
+      • {{ .Annotations.summary }}
+        Сервис: {{ .Labels.service }}
+      {{ end }}
+      {{- end }}
+      {{- end }}

@@ -3,7 +3,7 @@
   "title": "Monitoring Scanner",
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "refresh": "15s",
   "tags": [
     "flashsale",
@@ -150,7 +150,7 @@
       },
       "targets": [
         {
-          "expr": "monitoring_scanner_due_targets or vector(0)",
+          "expr": "max(monitoring_scanner_due_targets{job=\"monitoring_scanner\"}) or vector(0)",
           "refId": "A",
           "instant": true,
           "range": false
@@ -211,7 +211,7 @@
       },
       "targets": [
         {
-          "expr": "monitoring_scanner_overdue_targets or vector(0)",
+          "expr": "max(monitoring_scanner_overdue_targets{job=\"monitoring_scanner\"}) or vector(0)",
           "refId": "A",
           "instant": true,
           "range": false
@@ -272,7 +272,7 @@
       },
       "targets": [
         {
-          "expr": "monitoring_scanner_oldest_overdue_age_seconds or vector(0)",
+          "expr": "max(monitoring_scanner_oldest_overdue_age_seconds{job=\"monitoring_scanner\"}) or vector(0)",
           "refId": "A",
           "instant": true,
           "range": false
@@ -333,7 +333,7 @@
       },
       "targets": [
         {
-          "expr": "monitoring_scanner_last_processed_targets or vector(0)",
+          "expr": "max(monitoring_scanner_last_processed_targets{job=\"monitoring_scanner\"}) or vector(0)",
           "refId": "A",
           "instant": true,
           "range": false
@@ -880,7 +880,7 @@
       },
       "datasource": {
         "type": "loki",
-        "uid": "Loki"
+        "uid": "loki"
       },
       "targets": [
         {
@@ -912,7 +912,7 @@
       },
       "datasource": {
         "type": "loki",
-        "uid": "Loki"
+        "uid": "loki"
       },
       "targets": [
         {

@@ -3,7 +3,7 @@
   "title": "Flashsale Operations",
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 2,
+  "version": 3,
   "refresh": "15s",
   "tags": [
     "flashsale",
@@ -372,7 +372,7 @@
       },
       "targets": [
         {
-          "expr": "outbox_pending_events or vector(0)",
+          "expr": "max(outbox_pending_events{job=\"outbox_worker\"}) or vector(0)",
           "refId": "A",
           "instant": true,
           "range": false
@@ -433,7 +433,7 @@
       },
       "targets": [
         {
-          "expr": "monitoring_scanner_overdue_targets or vector(0)",
+          "expr": "max(monitoring_scanner_overdue_targets{job=\"monitoring_scanner\"}) or vector(0)",
           "refId": "A",
           "instant": true,
           "range": false
@@ -490,7 +490,7 @@
       },
       "targets": [
         {
-          "expr": "notification_delivery_records{status=\"pending\"} or vector(0)",
+          "expr": "max(notification_delivery_records{job=\"notification_consumer\",status=\"pending\"}) or vector(0)",
           "refId": "A",
           "instant": true,
           "range": false
@@ -551,7 +551,7 @@
       },
       "targets": [
         {
-          "expr": "sum(rabbitmq_queue_messages_ready) or vector(0)",
+          "expr": "sum(rabbitmq_detailed_queue_messages_ready{job=\"rabbitmq_detailed\"}) or vector(0)",
           "refId": "A",
           "instant": true,
           "range": false
@@ -922,7 +922,7 @@
           "refId": "C"
         },
         {
-          "expr": "sum(rabbitmq_queue_messages_ready)",
+          "expr": "sum(rabbitmq_detailed_queue_messages_ready{job=\"rabbitmq_detailed\"})",
           "legendFormat": "RabbitMQ ready",
           "refId": "D"
         },
@@ -1083,7 +1083,7 @@
       },
       "datasource": {
         "type": "loki",
-        "uid": "Loki"
+        "uid": "loki"
       },
       "targets": [
         {
@@ -1114,7 +1114,7 @@
       },
       "datasource": {
         "type": "loki",
-        "uid": "Loki"
+        "uid": "loki"
       },
       "targets": [
         {
@@ -1145,7 +1145,7 @@
       },
       "datasource": {
         "type": "loki",
-        "uid": "Loki"
+        "uid": "loki"
       },
       "targets": [
         {

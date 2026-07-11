@@ -3,7 +3,7 @@
   "title": "Flashsale Outbox",
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 2,
+  "version": 3,
   "refresh": "15s",
   "tags": [
     "flashsale",
@@ -30,7 +30,7 @@
       },
       "targets": [
         {
-          "expr": "outbox_pending_events or vector(0)",
+          "expr": "max(outbox_pending_events{job=\"outbox_worker\"}) or vector(0)",
           "refId": "A",
           "instant": true,
           "range": false
@@ -91,7 +91,7 @@
       },
       "targets": [
         {
-          "expr": "outbox_processing_events or vector(0)",
+          "expr": "max(outbox_processing_events{job=\"outbox_worker\"}) or vector(0)",
           "refId": "A",
           "instant": true,
           "range": false
@@ -152,7 +152,7 @@
       },
       "targets": [
         {
-          "expr": "outbox_failed_events or vector(0)",
+          "expr": "max(outbox_failed_events{job=\"outbox_worker\"}) or vector(0)",
           "refId": "A",
           "instant": true,
           "range": false
@@ -209,7 +209,7 @@
       },
       "targets": [
         {
-          "expr": "outbox_processed_events or vector(0)",
+          "expr": "max(outbox_processed_events{job=\"outbox_worker\"}) or vector(0)",
           "refId": "A",
           "instant": true,
           "range": false
@@ -253,7 +253,7 @@
       },
       "targets": [
         {
-          "expr": "outbox_total_events or vector(0)",
+          "expr": "max(outbox_total_events{job=\"outbox_worker\"}) or vector(0)",
           "refId": "A",
           "instant": true,
           "range": false
@@ -624,7 +624,7 @@
       },
       "datasource": {
         "type": "loki",
-        "uid": "Loki"
+        "uid": "loki"
       },
       "targets": [
         {
@@ -655,7 +655,7 @@
       },
       "datasource": {
         "type": "loki",
-        "uid": "Loki"
+        "uid": "loki"
       },
       "targets": [
         {

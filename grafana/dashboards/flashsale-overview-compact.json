@@ -266,7 +266,7 @@
       },
       "targets": [
         {
-          "expr": "outbox_pending_events or vector(0)",
+          "expr": "max(outbox_pending_events{job=\"outbox_worker\"}) or vector(0)",
           "refId": "A",
           "instant": true
         }
@@ -326,7 +326,7 @@
       },
       "targets": [
         {
-          "expr": "outbox_failed_events or vector(0)",
+          "expr": "max(outbox_failed_events{job=\"outbox_worker\"}) or vector(0)",
           "refId": "A",
           "instant": true
         }
@@ -675,12 +675,12 @@
           "refId": "A"
         },
         {
-          "expr": "sum(rabbitmq_queue_messages_ready)",
+          "expr": "sum(rabbitmq_detailed_queue_messages_ready{job=\"rabbitmq_detailed\"})",
           "legendFormat": "RabbitMQ ready",
           "refId": "B"
         },
         {
-          "expr": "sum(rabbitmq_queue_messages_unacked)",
+          "expr": "sum(rabbitmq_detailed_queue_messages_unacked{job=\"rabbitmq_detailed\"})",
           "legendFormat": "RabbitMQ unacked",
           "refId": "C"
         }
@@ -831,6 +831,6 @@
   "timezone": "browser",
   "title": "Flashsale Overview",
   "uid": "flashsale-overview",
-  "version": 1,
+  "version": 2,
   "weekStart": ""
 }

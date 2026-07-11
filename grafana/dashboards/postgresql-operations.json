@@ -3,7 +3,7 @@
   "title": "PostgreSQL Operations",
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 2,
+  "version": 3,
   "refresh": "15s",
   "tags": [
     "flashsale",
@@ -199,7 +199,7 @@
       },
       "targets": [
         {
-          "expr": "pg_database_size_bytes{datname=\"flashsale\"} or vector(0)",
+          "expr": "max(pg_database_size_bytes{job=\"postgres\",datname=\"flashsale\"}) or vector(0)",
           "refId": "A",
           "instant": true,
           "range": false
@@ -252,7 +252,7 @@
       },
       "targets": [
         {
-          "expr": "rate(pg_stat_database_xact_rollback{datname=\"flashsale\"}[$__rate_interval]) or vector(0)",
+          "expr": "max(rate(pg_stat_database_xact_rollback{job=\"postgres\",datname=\"flashsale\"}[$__rate_interval])) or vector(0)",
           "refId": "A",
           "instant": true,
           "range": false
@@ -313,7 +313,7 @@
       },
       "targets": [
         {
-          "expr": "pg_stat_database_deadlocks{datname=\"flashsale\"} or vector(0)",
+          "expr": "max(pg_stat_database_deadlocks{job=\"postgres\",datname=\"flashsale\"}) or vector(0)",
           "refId": "A",
           "instant": true,
           "range": false
@@ -888,12 +888,12 @@
       },
       "targets": [
         {
-          "expr": "rate(pg_stat_bgwriter_checkpoints_timed[$__rate_interval])",
+          "expr": "rate(pg_stat_checkpointer_num_timed_total{job=\"postgres\"}[$__rate_interval])",
           "refId": "A",
           "legendFormat": "timed"
         },
         {
-          "expr": "rate(pg_stat_bgwriter_checkpoints_req[$__rate_interval])",
+          "expr": "rate(pg_stat_checkpointer_num_requested_total{job=\"postgres\"}[$__rate_interval])",
           "refId": "B",
           "legendFormat": "requested"
         }
@@ -954,7 +954,7 @@
       },
       "targets": [
         {
-          "expr": "rate(pg_stat_bgwriter_buffers_checkpoint[$__rate_interval])",
+          "expr": "rate(pg_stat_checkpointer_buffers_written_total{job=\"postgres\"}[$__rate_interval])",
           "refId": "A",
           "legendFormat": "checkpoint"
         },
@@ -1021,7 +1021,7 @@
       },
       "datasource": {
         "type": "loki",
-        "uid": "Loki"
+        "uid": "loki"
       },
       "targets": [
         {

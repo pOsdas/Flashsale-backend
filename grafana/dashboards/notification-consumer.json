@@ -3,7 +3,7 @@
   "title": "Notification Consumer",
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "refresh": "15s",
   "tags": [
     "flashsale",
@@ -207,7 +207,7 @@
       },
       "targets": [
         {
-          "expr": "notification_consumer_messages_in_progress or vector(0)",
+          "expr": "max(notification_consumer_messages_in_progress{job=\"notification_consumer\"}) or vector(0)",
           "refId": "A",
           "instant": true,
           "range": false
@@ -268,7 +268,7 @@
       },
       "targets": [
         {
-          "expr": "notification_delivery_records{status=\"pending\"} or vector(0)",
+          "expr": "max(notification_delivery_records{job=\"notification_consumer\",status=\"pending\"}) or vector(0)",
           "refId": "A",
           "instant": true,
           "range": false
@@ -329,7 +329,7 @@
       },
       "targets": [
         {
-          "expr": "notification_delivery_records{status=\"failed\"} or vector(0)",
+          "expr": "max(notification_delivery_records{job=\"notification_consumer\",status=\"failed\"}) or vector(0)",
           "refId": "A",
           "instant": true,
           "range": false
@@ -390,7 +390,7 @@
       },
       "targets": [
         {
-          "expr": "notification_oldest_pending_delivery_age_seconds or vector(0)",
+          "expr": "max(notification_oldest_pending_delivery_age_seconds{job=\"notification_consumer\"}) or vector(0)",
           "refId": "A",
           "instant": true,
           "range": false
@@ -451,7 +451,7 @@
       },
       "targets": [
         {
-          "expr": "rabbitmq_queue_messages_ready{queue=\"flashsale.notifications\"} or vector(0)",
+          "expr": "max(rabbitmq_detailed_queue_messages_ready{job=\"rabbitmq_detailed\",queue=\"flashsale.notifications\",vhost=\"/\"}) or vector(0)",
           "refId": "A",
           "instant": true,
           "range": false
@@ -512,7 +512,7 @@
       },
       "targets": [
         {
-          "expr": "rabbitmq_queue_messages_unacked{queue=\"flashsale.notifications\"} or vector(0)",
+          "expr": "max(rabbitmq_detailed_queue_messages_unacked{job=\"rabbitmq_detailed\",queue=\"flashsale.notifications\",vhost=\"/\"}) or vector(0)",
           "refId": "A",
           "instant": true,
           "range": false
@@ -573,7 +573,7 @@
       },
       "targets": [
         {
-          "expr": "rabbitmq_queue_messages_ready{queue=\"flashsale.notifications.dlq\"} or vector(0)",
+          "expr": "max(rabbitmq_detailed_queue_messages_ready{job=\"rabbitmq_detailed\",queue=\"flashsale.notifications.dlq\",vhost=\"/\"}) or vector(0)",
           "refId": "A",
           "instant": true,
           "range": false
@@ -1131,7 +1131,7 @@
       },
       "datasource": {
         "type": "loki",
-        "uid": "Loki"
+        "uid": "loki"
       },
       "targets": [
         {
@@ -1163,7 +1163,7 @@
       },
       "datasource": {
         "type": "loki",
-        "uid": "Loki"
+        "uid": "loki"
       },
       "targets": [
         {

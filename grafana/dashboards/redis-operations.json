@@ -3,7 +3,7 @@
   "title": "Redis Operations",
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "refresh": "15s",
   "tags": [
     "flashsale",
@@ -145,7 +145,7 @@
       },
       "targets": [
         {
-          "expr": "redis_memory_used_bytes or vector(0)",
+          "expr": "max(redis_memory_used_bytes{job=\"redis\"}) or vector(0)",
           "refId": "A",
           "instant": true,
           "range": false
@@ -198,7 +198,7 @@
       },
       "targets": [
         {
-          "expr": "redis_connected_clients or vector(0)",
+          "expr": "max(redis_connected_clients{job=\"redis\"}) or vector(0)",
           "refId": "A",
           "instant": true,
           "range": false
@@ -251,7 +251,7 @@
       },
       "targets": [
         {
-          "expr": "redis_blocked_clients or vector(0)",
+          "expr": "max(redis_blocked_clients{job=\"redis\"}) or vector(0)",
           "refId": "A",
           "instant": true,
           "range": false
@@ -761,7 +761,7 @@
       },
       "datasource": {
         "type": "loki",
-        "uid": "Loki"
+        "uid": "loki"
       },
       "targets": [
         {

@@ -3,7 +3,7 @@
   "title": "Telegram Bot",
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "refresh": "15s",
   "tags": [
     "flashsale",
@@ -207,7 +207,7 @@
       },
       "targets": [
         {
-          "expr": "telegram_updates_in_progress or vector(0)",
+          "expr": "max(telegram_updates_in_progress{job=\"telegram_bot\"}) or vector(0)",
           "refId": "A",
           "instant": true,
           "range": false
@@ -1006,7 +1006,7 @@
       },
       "datasource": {
         "type": "loki",
-        "uid": "Loki"
+        "uid": "loki"
       },
       "targets": [
         {
@@ -1038,7 +1038,7 @@
       },
       "datasource": {
         "type": "loki",
-        "uid": "Loki"
+        "uid": "loki"
       },
       "targets": [
         {

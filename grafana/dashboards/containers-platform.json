@@ -3,7 +3,7 @@
   "title": "Containers and Platform",
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "refresh": "15s",
   "tags": [
     "flashsale",
@@ -727,7 +727,7 @@
       },
       "targets": [
         {
-          "expr": "up{job=~\"prometheus|cadvisor|blackbox_exporter|loki|promtail|grafana|redis|postgres|rabbitmq\"}",
+          "expr": "up{job=~\"prometheus|cadvisor|blackbox_exporter|loki|promtail|grafana|redis|postgres|rabbitmq|rabbitmq_detailed\"}",
           "refId": "A",
           "legendFormat": "{{job}} / {{instance}}"
         }
@@ -784,7 +784,7 @@
       },
       "datasource": {
         "type": "loki",
-        "uid": "Loki"
+        "uid": "loki"
       },
       "targets": [
         {

@@ -3,7 +3,7 @@
   "title": "Product Parsers",
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "refresh": "15s",
   "tags": [
     "flashsale",
@@ -317,7 +317,7 @@
       },
       "targets": [
         {
-          "expr": "ozon_browser_queue_size or vector(0)",
+          "expr": "max(ozon_browser_queue_size{job=\"ozon_browser_fetcher\"}) or vector(0)",
           "refId": "A",
           "instant": true,
           "range": false
@@ -1234,7 +1234,7 @@
       },
       "datasource": {
         "type": "loki",
-        "uid": "Loki"
+        "uid": "loki"
       },
       "targets": [
         {
@@ -1266,7 +1266,7 @@
       },
       "datasource": {
         "type": "loki",
-        "uid": "Loki"
+        "uid": "loki"
       },
       "targets": [
         {

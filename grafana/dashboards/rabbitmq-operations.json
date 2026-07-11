@@ -3,7 +3,7 @@
   "title": "RabbitMQ Operations",
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 2,
+  "version": 3,
   "refresh": "15s",
   "tags": [
     "flashsale",
@@ -31,7 +31,7 @@
       },
       "targets": [
         {
-          "expr": "max(up{job=\"rabbitmq\"}) or vector(0)",
+          "expr": "min(up{job=~\"rabbitmq|rabbitmq_detailed\"}) or vector(0)",
           "refId": "A",
           "instant": true,
           "range": false
@@ -145,7 +145,7 @@
       },
       "targets": [
         {
-          "expr": "sum(rabbitmq_queue_messages_ready) or vector(0)",
+          "expr": "sum(rabbitmq_detailed_queue_messages_ready{job=\"rabbitmq_detailed\"}) or vector(0)",
           "refId": "A",
           "instant": true,
           "range": false
@@ -206,7 +206,7 @@
       },
       "targets": [
         {
-          "expr": "sum(rabbitmq_queue_messages_unacked) or vector(0)",
+          "expr": "sum(rabbitmq_detailed_queue_messages_unacked{job=\"rabbitmq_detailed\"}) or vector(0)",
           "refId": "A",
           "instant": true,
           "range": false
@@ -267,7 +267,7 @@
       },
       "targets": [
         {
-          "expr": "sum(rabbitmq_queue_consumers) or vector(0)",
+          "expr": "max(rabbitmq_detailed_queue_consumers{job=\"rabbitmq_detailed\",queue=\"flashsale.notifications\",vhost=\"/\"}) or vector(0)",
           "refId": "A",
           "instant": true,
           "range": false
@@ -320,7 +320,7 @@
       },
       "targets": [
         {
-          "expr": "sum(rabbitmq_queue_messages_ready{queue=\"flashsale.notifications.dlq\"}) or vector(0)",
+          "expr": "max(rabbitmq_detailed_queue_messages_ready{job=\"rabbitmq_detailed\",queue=\"flashsale.notifications.dlq\",vhost=\"/\"}) or vector(0)",
           "refId": "A",
           "instant": true,
           "range": false
@@ -381,7 +381,7 @@
       },
       "targets": [
         {
-          "expr": "sum by(queue) (rabbitmq_queue_messages_ready)",
+          "expr": "max by(queue) (rabbitmq_detailed_queue_messages_ready{job=\"rabbitmq_detailed\",vhost=\"/\"})",
           "refId": "A",
           "legendFormat": "{{queue}}"
         }
@@ -442,7 +442,7 @@
       },
       "targets": [
         {
-          "expr": "sum by(queue) (rabbitmq_queue_messages_unacked)",
+          "expr": "max by(queue) (rabbitmq_detailed_queue_messages_unacked{job=\"rabbitmq_detailed\",vhost=\"/\"})",
           "refId": "A",
           "legendFormat": "{{queue}}"
         }
@@ -574,7 +574,7 @@
       },
       "targets": [
         {
-          "expr": "sum by(queue) (rabbitmq_queue_consumers)",
+          "expr": "max by(queue) (rabbitmq_detailed_queue_consumers{job=\"rabbitmq_detailed\",vhost=\"/\"})",
           "refId": "A",
           "legendFormat": "{{queue}}"
         }
@@ -635,17 +635,17 @@
       },
       "targets": [
         {
-          "expr": "rabbitmq_queue_messages_ready{queue=\"flashsale.notifications\"}",
+          "expr": "rabbitmq_detailed_queue_messages_ready{job=\"rabbitmq_detailed\",queue=\"flashsale.notifications\",vhost=\"/\"}",
           "refId": "A",
           "legendFormat": "notifications ready"
         },
         {
-          "expr": "rabbitmq_queue_messages_unacked{queue=\"flashsale.notifications\"}",
+          "expr": "rabbitmq_detailed_queue_messages_unacked{job=\"rabbitmq_detailed\",queue=\"flashsale.notifications\",vhost=\"/\"}",
           "refId": "B",
           "legendFormat": "notifications unacked"
         },
         {
-          "expr": "rabbitmq_queue_messages_ready{queue=\"flashsale.notifications.dlq\"}",
+          "expr": "rabbitmq_detailed_queue_messages_ready{job=\"rabbitmq_detailed\",queue=\"flashsale.notifications.dlq\",vhost=\"/\"}",
           "refId": "C",
           "legendFormat": "DLQ ready"
         }
@@ -693,7 +693,7 @@
     {
       "id": 12,
       "type": "timeseries",
-      "title": "Queue Memory",
+      "title": "Queue Total Depth",
       "gridPos": {
         "x": 12,
         "y": 20,
@@ -706,14 +706,14 @@
       },
       "targets": [
         {
-          "expr": "sum by(queue) (rabbitmq_queue_memory)",
+          "expr": "max by(queue) (rabbitmq_detailed_queue_messages{job=\"rabbitmq_detailed\",vhost=\"/\"})",
           "refId": "A",
           "legendFormat": "{{queue}}"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "bytes",
+          "unit": "short",
           "decimals": 2,
           "custom": {
             "drawStyle": "line",
@@ -763,7 +763,7 @@
       },
       "datasource": {
         "type": "loki",
-        "uid": "Loki"
+        "uid": "loki"
       },
       "targets": [
         {
