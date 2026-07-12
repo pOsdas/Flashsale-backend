@@ -59,6 +59,7 @@ INSTALLED_APPS = [
     "app.api.v1.payments.apps.V1PaymentsConfig",
     "app.api.v1.monitoring.apps.V1MonitoringConfig",
     "app.api.v1.notifications.apps.V1NotificationsConfig",
+    "app.api.v1.load_testing.apps.V1LoadTestingConfig",
 ]
 
 # Middleware
@@ -116,10 +117,18 @@ WSGI_APPLICATION = "app_project.wsgi.application"
 DATABASES = {
     "default": dj_database_url.parse(
         s.database_url,
-        conn_max_age=60,
+        conn_max_age=s.db_conn_max_age,
         ssl_require=False,
     )
 }
+
+DATABASES["default"]["CONN_MAX_AGE"] = 0
+DATABASES["default"]["CONN_HEALTH_CHECKS"] = True
+
+DATABASES["default"]["DISABLE_SERVER_SIDE_CURSORS"] = True
+
+DATABASES["default"].setdefault("OPTIONS", {})
+DATABASES["default"]["OPTIONS"]["prepare_threshold"] = None
 
 # Static
 STATIC_URL = "/static/"
@@ -171,6 +180,22 @@ GO_FETCHER_TIMEOUT_SECONDS = int(
     )
 )
 
+# Load testing
+LOAD_TESTING_ENABLED = (
+    os.getenv("LOAD_TESTING_ENABLED", "False")
+    .strip()
+    .lower()
+    in {"1", "true", "yes", "on"}
+)
+LOAD_TESTING_API_KEY = os.getenv(
+    "LOAD_TESTING_API_KEY",
+    "",
+).strip()
+LOAD_TESTING_USER_HEADER = os.getenv(
+    "LOAD_TESTING_USER_HEADER",
+    "HTTP_X_LOAD_TEST_USER_ID",
+).strip()
+
 # Notifications
 NOTIF_TELEGRAM_BOT_TOKEN = os.getenv(
     "NOTIF_TELEGRAM_BOT_TOKEN",
@@ -181,6 +206,10 @@ NOTIF_TELEGRAM_BOT_USERNAME = os.getenv(
     "NOTIF_TELEGRAM_BOT_USERNAME",
     "",
 )
+NOTIF_TELEGRAM_API_BASE_URL = os.getenv(
+    "NOTIF_TELEGRAM_API_BASE_URL",
+    "https://api.telegram.org",
+).rstrip("/")
 
 NOTIF_TELEGRAM_CONNECT_TOKEN_MAX_AGE_SECONDS = int(
     os.getenv(
@@ -377,16 +406,26 @@ AUTH_PASSWORD_VALIDATORS = [
 ]
 
 # Django REST Framework
+_rest_authentication_classes = [
+    (
+        "rest_framework.authentication."
+        "SessionAuthentication"
+    ),
+]
+
+if LOAD_TESTING_ENABLED:
+    _rest_authentication_classes.append(
+        "app.api.v1.load_testing.authentication."
+        "LoadTestHeaderAuthentication"
+    )
+
 REST_FRAMEWORK = {
     "DEFAULT_SCHEMA_CLASS": (
         "drf_spectacular.openapi.AutoSchema"
     ),
-    "DEFAULT_AUTHENTICATION_CLASSES": [
-        (
-            "rest_framework.authentication."
-            "SessionAuthentication"
-        ),
-    ],
+    "DEFAULT_AUTHENTICATION_CLASSES": (
+        _rest_authentication_classes
+    ),
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.AllowAny",
     ],

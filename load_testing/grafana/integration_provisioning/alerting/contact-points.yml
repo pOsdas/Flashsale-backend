@@ -1,0 +1,12 @@
+apiVersion: 1
+
+contactPoints:
+  - orgId: 1
+    name: load-lab-webhook
+    receivers:
+      - uid: load_lab_webhook
+        type: webhook
+        disableResolveMessage: false
+        settings:
+          url: http://load_simulator:8099/__control/grafana-alerts
+          httpMethod: POST

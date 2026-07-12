@@ -13,3 +13,10 @@
 **/.idea/
 *.iml
 /grafana/provisioning/alerting/contact-points.yml
+
+# Load Lab runtime artifacts
+/load_testing/results/*
+!/load_testing/results/.gitkeep
+/load_testing/data/users.json
+/load_testing/data/integration-products.json
+/load_testing/.env.load

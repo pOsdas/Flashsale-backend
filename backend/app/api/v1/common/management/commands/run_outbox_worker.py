@@ -2,6 +2,7 @@ import os
 import time
 import signal
 
+from django.db import close_old_connections
 from django.core.management.base import BaseCommand
 from prometheus_client import start_http_server
 
@@ -87,14 +88,19 @@ class Command(BaseCommand):
 
         try:
             while self.running:
-                processed_count = worker.run_once()
+                close_old_connections()
 
-                if processed_count:
-                    self.stdout.write(
-                        self.style.SUCCESS(
-                            f"Processed outbox events: {processed_count}"
+                try:
+                    processed_count = worker.run_once()
+
+                    if processed_count:
+                        self.stdout.write(
+                            self.style.SUCCESS(
+                                f"Processed outbox events: {processed_count}"
+                            )
                         )
-                    )
+                finally:
+                    close_old_connections()
 
                 if once:
                     break

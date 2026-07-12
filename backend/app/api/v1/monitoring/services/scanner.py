@@ -79,19 +79,43 @@ class MonitoringScanner:
 
             targets = self._get_due_targets()
             processed_count = 0
+            processing_crashes = 0
 
             for target in targets:
-                self._process_target(target=target)
-                processed_count += 1
+                try:
+                    self._process_target(target=target)
+                except Exception as exc:
+                    processing_crashes += 1
+                    logger.exception(
+                        "monitoring target processing crashed; scanner will continue",
+                        extra={
+                            "service": "monitoring_scanner",
+                            "target_id": str(target.id),
+                            "marketplace": target.marketplace,
+                            "error": str(exc),
+                            "trigger": "scanner",
+                        },
+                    )
+                finally:
+                    processed_count += 1
 
             MONITORING_SCANNER_LAST_PROCESSED_TARGETS.set(
                 processed_count
             )
-            MONITORING_SCANNER_LAST_SUCCESS_TIMESTAMP_SECONDS.set(
-                timezone.now().timestamp()
+
+            iteration_status = (
+                "partial_error"
+                if processing_crashes
+                else "success"
             )
+
+            if not processing_crashes:
+                MONITORING_SCANNER_LAST_SUCCESS_TIMESTAMP_SECONDS.set(
+                    timezone.now().timestamp()
+                )
+
             MONITORING_SCANNER_ITERATIONS_TOTAL.labels(
-                status="success",
+                status=iteration_status,
             ).inc()
 
             if processed_count:
@@ -100,6 +124,8 @@ class MonitoringScanner:
                     extra={
                         "service": "monitoring_scanner",
                         "processed_count": processed_count,
+                        "processing_crashes": processing_crashes,
+                        "status": iteration_status,
                     },
                 )
 
@@ -279,9 +305,18 @@ class MonitoringScanner:
                 raw_data=cache_result.build_snapshot_raw_data(),
             )
 
-            self._restore_target_after_success(
+            target_still_exists = self._restore_target_after_success(
                 target=target,
             )
+
+            if not target_still_exists:
+                return self._target_disappeared_result(
+                    target=target,
+                    trigger=trigger,
+                    error=(
+                        "Monitoring target was deleted after snapshot creation."
+                    ),
+                )
 
             alerts_count = snapshot.alerts.count()
 
@@ -339,13 +374,6 @@ class MonitoringScanner:
             )
 
         except ProductCacheBusyError as exc:
-
-            MONITORING_TARGET_PROCESSING_TOTAL.labels(
-                marketplace=marketplace_label,
-                trigger=trigger_label,
-                result="busy",
-            ).inc()
-
             logger.warning(
                 "monitoring target processing postponed because product cache refresh is busy",
                 extra={
@@ -359,10 +387,23 @@ class MonitoringScanner:
             )
 
             if postpone_on_busy:
-                self._postpone_target_after_cache_busy(
+                target_still_exists = self._postpone_target_after_cache_busy(
                     target=target,
                     error=str(exc),
                 )
+
+                if not target_still_exists:
+                    return self._target_disappeared_result(
+                        target=target,
+                        trigger=trigger,
+                        error=str(exc),
+                    )
+
+            MONITORING_TARGET_PROCESSING_TOTAL.labels(
+                marketplace=marketplace_label,
+                trigger=trigger_label,
+                result="busy",
+            ).inc()
 
             return MonitoringTargetProcessResult(
                 success=False,
@@ -370,7 +411,24 @@ class MonitoringScanner:
                 busy=True,
             )
 
+        except (
+            MonitoringTarget.DoesNotExist,
+            MonitoringTarget.NotUpdated,
+        ) as exc:
+            return self._target_disappeared_result(
+                target=target,
+                trigger=trigger,
+                error=str(exc),
+            )
+
         except Exception as exc:
+            if not MonitoringTarget.objects.filter(id=target.id).exists():
+                return self._target_disappeared_result(
+                    target=target,
+                    trigger=trigger,
+                    error=str(exc),
+                )
+
             logger.exception(
                 "monitoring target processing failed",
                 extra={
@@ -387,6 +445,13 @@ class MonitoringScanner:
                 target=target,
                 error=str(exc),
             )
+
+            if snapshot is None:
+                return self._target_disappeared_result(
+                    target=target,
+                    trigger=trigger,
+                    error=str(exc),
+                )
 
             MONITORING_TARGET_PROCESSING_TOTAL.labels(
                 marketplace=marketplace_label,
@@ -414,11 +479,42 @@ class MonitoringScanner:
                 trigger=trigger_label,
             ).observe(duration)
 
+    def _target_disappeared_result(
+        self,
+        *,
+        target: MonitoringTarget,
+        trigger: str,
+        error: str,
+    ) -> MonitoringTargetProcessResult:
+        trigger_label = trigger or "unknown"
+
+        MONITORING_TARGET_PROCESSING_TOTAL.labels(
+            marketplace=str(target.marketplace),
+            trigger=trigger_label,
+            result="deleted",
+        ).inc()
+
+        logger.info(
+            "monitoring target disappeared during processing",
+            extra={
+                "service": "monitoring_scanner",
+                "target_id": str(target.id),
+                "marketplace": target.marketplace,
+                "error": error,
+                "trigger": trigger,
+            },
+        )
+
+        return MonitoringTargetProcessResult(
+            success=False,
+            error="Monitoring target no longer exists.",
+        )
+
     def _restore_target_after_success(
         self,
         *,
         target: MonitoringTarget,
-    ) -> None:
+    ) -> bool:
         """
         Restore an active target from FAILED after a successful manual retry.
 
@@ -429,8 +525,12 @@ class MonitoringScanner:
             locked_target = (
                 MonitoringTarget.objects
                 .select_for_update()
-                .get(id=target.id)
+                .filter(id=target.id)
+                .first()
             )
+
+            if locked_target is None:
+                return False
 
             if (
                 locked_target.is_active
@@ -445,18 +545,24 @@ class MonitoringScanner:
                     ]
                 )
 
+        return True
+
     def _postpone_target_after_cache_busy(
         self,
         *,
         target: MonitoringTarget,
         error: str,
-    ) -> None:
+    ) -> bool:
         with transaction.atomic():
             locked_target = (
                 MonitoringTarget.objects
                 .select_for_update()
-                .get(id=target.id)
+                .filter(id=target.id)
+                .first()
             )
+
+            if locked_target is None:
+                return False
 
             locked_target.next_check_at = (
                 timezone.now() + timedelta(minutes=5)
@@ -470,12 +576,14 @@ class MonitoringScanner:
                 ]
             )
 
+        return True
+
     def _mark_target_failed(
         self,
         *,
         target: MonitoringTarget,
         error: str,
-    ) -> ProductSnapshot:
+    ) -> ProductSnapshot | None:
         """
         Save a failed snapshot.
 
@@ -487,8 +595,12 @@ class MonitoringScanner:
             locked_target = (
                 MonitoringTarget.objects
                 .select_for_update()
-                .get(id=target.id)
+                .filter(id=target.id)
+                .first()
             )
+
+            if locked_target is None:
+                return None
 
             if locked_target.is_active:
                 locked_target.status = MonitoringTargetStatus.FAILED

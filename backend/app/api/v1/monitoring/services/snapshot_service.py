@@ -40,8 +40,20 @@ def create_product_snapshot(
     checked_at = checked_at or timezone.now()
 
     with transaction.atomic():
+        locked_target = (
+            MonitoringTarget.objects
+            .select_for_update()
+            .filter(id=target.id)
+            .first()
+        )
+
+        if locked_target is None:
+            raise MonitoringTarget.DoesNotExist(
+                "Monitoring target was deleted before snapshot creation."
+            )
+
         snapshot = ProductSnapshot.objects.create(
-            target=target,
+            target=locked_target,
             parse_status=parse_status,
             source=source,
             price=_to_decimal_or_none(price),
@@ -59,7 +71,7 @@ def create_product_snapshot(
         )
 
         _update_target_from_snapshot(
-            target=target,
+            target=locked_target,
             snapshot=snapshot,
             external_id=external_id,
         )

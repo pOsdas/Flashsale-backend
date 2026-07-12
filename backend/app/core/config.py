@@ -45,6 +45,8 @@ class Settings(BaseSettings):
     postgres_host: str = "localhost"
     postgres_port: int = 5432
 
+    db_conn_max_age: int = 0
+
     database_url_raw: str | None = Field(
         default=None,
         alias="DATABASE_URL",

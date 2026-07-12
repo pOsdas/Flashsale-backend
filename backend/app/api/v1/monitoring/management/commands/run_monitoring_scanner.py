@@ -5,6 +5,7 @@ import time
 from prometheus_client import start_http_server
 from prometheus_client import start_http_server
 from django.core.management.base import BaseCommand
+from django.db import close_old_connections
 
 from app.api.v1.monitoring.services.scanner import MonitoringScanner
 from app.core.logging import get_logger
@@ -98,14 +99,20 @@ class Command(BaseCommand):
         )
 
         while self.running:
-            processed_count = scanner.run_once()
+            close_old_connections()
 
-            if processed_count:
-                self.stdout.write(
-                    self.style.SUCCESS(
-                        f"Processed monitoring targets: {processed_count}"
+            try:
+                processed_count = scanner.run_once()
+
+                if processed_count:
+                    self.stdout.write(
+                        self.style.SUCCESS(
+                            f"Processed monitoring targets: {processed_count}"
+                        )
                     )
-                )
+
+            finally:
+                close_old_connections()
 
             if once:
                 break

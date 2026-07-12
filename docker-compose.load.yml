@@ -1,0 +1,289 @@
+x-pgbouncer-app-environment: &pgbouncer-app-environment
+  DATABASE_URL: ${PGBOUNCER_APP_DATABASE_URL}
+  DB_CONN_MAX_AGE: "0"
+
+x-pgbouncer-dependency: &pgbouncer-dependency
+  pgbouncer:
+    condition: service_healthy
+
+services:
+  postgres:
+    volumes:
+      - flashsale_load_postgres_data:/var/lib/postgresql/data
+
+  pgbouncer:
+    image: edoburu/pgbouncer:v1.25.2-p0
+    container_name: flashsale_pgbouncer
+    restart: unless-stopped
+
+    environment:
+      DATABASE_URLS: ${PGBOUNCER_UPSTREAM_DATABASE_URLS}
+      DB_USER: ${PGBOUNCER_DB_USER}
+      DB_PASSWORD: ${PGBOUNCER_DB_PASSWORD}
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: ${PGBOUNCER_DB_NAME}
+
+      AUTH_TYPE: scram-sha-256
+      POOL_MODE: transaction
+
+      MAX_CLIENT_CONN: "1200"
+      DEFAULT_POOL_SIZE: "40"
+      RESERVE_POOL_SIZE: "10"
+      RESERVE_POOL_TIMEOUT: "3"
+
+      MAX_DB_CONNECTIONS: "50"
+      MAX_USER_CONNECTIONS: "50"
+
+      QUERY_WAIT_TIMEOUT: "60"
+      SERVER_CONNECT_TIMEOUT: "5"
+      SERVER_LOGIN_RETRY: "2"
+      SERVER_IDLE_TIMEOUT: "60"
+      SERVER_LIFETIME: "3600"
+
+      TCP_KEEPALIVE: "1"
+
+      ADMIN_USERS: ${PGBOUNCER_DB_USER}
+      STATS_USERS: ${PGBOUNCER_DB_USER}
+
+      LOG_CONNECTIONS: "0"
+      LOG_DISCONNECTIONS: "0"
+      LOG_POOLER_ERRORS: "1"
+      LOG_STATS: "1"
+      STATS_PERIOD: "60"
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    ports:
+      - "127.0.0.1:6432:5432"
+
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          PGPASSWORD="$${DB_PASSWORD}" psql
+          -h 127.0.0.1
+          -p 5432
+          -U "$${DB_USER}"
+          -d "$${DB_NAME}"
+          -tAc "SELECT 1" | grep -qx 1
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 5s
+
+  go_fetcher:
+    profiles: ["real-integrations"]
+
+  ozon_browser_fetcher:
+    profiles: ["real-integrations"]
+
+  telegram_bot:
+    environment:
+      <<: *pgbouncer-app-environment
+
+      APP_ENV: docker
+      LOAD_TESTING_ENABLED: "true"
+      LOAD_TESTING_API_KEY: ${LOAD_TESTING_API_KEY:-flashsale-local-load-key-change-me-123456789}
+      NOTIF_TELEGRAM_API_BASE_URL: http://load_simulator:8099
+      NOTIF_TELEGRAM_BOT_TOKEN: load-lab-token
+      NOTIF_TELEGRAM_BOT_USERNAME: load_lab_bot
+
+    depends_on:
+      <<: *pgbouncer-dependency
+
+      backend:
+        condition: service_started
+      load_simulator:
+        condition: service_healthy
+
+  migrate:
+    environment:
+      APP_ENV: docker
+      LOAD_TESTING_ENABLED: "true"
+      LOAD_TESTING_API_KEY: ${LOAD_TESTING_API_KEY:-flashsale-local-load-key-change-me-123456789}
+
+  backend:
+    command:
+      - sh
+      - -c
+      - >-
+        uvicorn app_project.asgi:application
+        --host 0.0.0.0
+        --port 8000
+        --workers ${LOAD_BACKEND_WORKERS:-4}
+        --timeout-keep-alive 10
+
+    environment:
+      <<: *pgbouncer-app-environment
+
+      APP_ENV: docker
+      LOAD_TESTING_ENABLED: "true"
+      LOAD_TESTING_API_KEY: ${LOAD_TESTING_API_KEY:-flashsale-local-load-key-change-me-123456789}
+      GO_FETCHER_BASE_URL: http://load_simulator:8099
+      GO_FETCHER_PRODUCT_ENDPOINT: /api/v1/fetch/product/
+      GO_FETCHER_TIMEOUT_SECONDS: ${LOAD_FETCHER_TIMEOUT_SECONDS:-10}
+      NOTIF_TELEGRAM_API_BASE_URL: http://load_simulator:8099
+      NOTIF_TELEGRAM_BOT_TOKEN: load-lab-token
+      NOTIF_TELEGRAM_BOT_USERNAME: load_lab_bot
+
+    volumes:
+      - ./load_testing/results:/load-results
+
+    depends_on:
+      <<: *pgbouncer-dependency
+
+      load_simulator:
+        condition: service_healthy
+
+  outbox_worker:
+    command:
+      - sh
+      - -c
+      - >-
+        python manage.py run_outbox_worker
+        --batch-size ${LOAD_OUTBOX_BATCH_SIZE:-250}
+        --sleep ${LOAD_OUTBOX_SLEEP_SECONDS:-1}
+
+    environment:
+      <<: *pgbouncer-app-environment
+
+      APP_ENV: docker
+      LOAD_TESTING_ENABLED: "true"
+      LOAD_TESTING_API_KEY: ${LOAD_TESTING_API_KEY:-flashsale-local-load-key-change-me-123456789}
+      NOTIF_TELEGRAM_API_BASE_URL: http://load_simulator:8099
+      NOTIF_TELEGRAM_BOT_TOKEN: load-lab-token
+
+    depends_on:
+      <<: *pgbouncer-dependency
+
+  monitoring_scanner:
+    environment:
+      <<: *pgbouncer-app-environment
+
+      APP_ENV: docker
+      LOAD_TESTING_ENABLED: "true"
+      LOAD_TESTING_API_KEY: ${LOAD_TESTING_API_KEY:-flashsale-local-load-key-change-me-123456789}
+      GO_FETCHER_BASE_URL: http://load_simulator:8099
+      GO_FETCHER_PRODUCT_ENDPOINT: /api/v1/fetch/product/
+      GO_FETCHER_TIMEOUT_SECONDS: ${LOAD_FETCHER_TIMEOUT_SECONDS:-10}
+      MONITORING_SCANNER_BATCH_SIZE: ${LOAD_SCANNER_BATCH_SIZE:-500}
+      MONITORING_SCANNER_SLEEP_SECONDS: ${LOAD_SCANNER_SLEEP_SECONDS:-1}
+      MONITORING_SCANNER_OVERDUE_AFTER_SECONDS: ${LOAD_SCANNER_OVERDUE_AFTER_SECONDS:-60}
+
+    depends_on:
+      <<: *pgbouncer-dependency
+
+      load_simulator:
+        condition: service_healthy
+      go_fetcher:
+        condition: service_started
+        required: false
+
+  notification_consumer:
+    environment:
+      <<: *pgbouncer-app-environment
+
+      APP_ENV: docker
+      LOAD_TESTING_ENABLED: "true"
+      LOAD_TESTING_API_KEY: ${LOAD_TESTING_API_KEY:-flashsale-local-load-key-change-me-123456789}
+      NOTIF_TELEGRAM_API_BASE_URL: http://load_simulator:8099
+      NOTIF_TELEGRAM_BOT_TOKEN: load-lab-token
+      NOTIFICATION_RABBITMQ_PREFETCH_COUNT: ${LOAD_NOTIFICATION_PREFETCH:-100}
+
+    depends_on:
+      <<: *pgbouncer-dependency
+
+  load_simulator:
+    build:
+      context: ./load_testing/simulator
+      dockerfile: Dockerfile
+    container_name: flashsale_load_simulator
+    environment:
+      LOAD_SIMULATOR_ADDRESS: :8099
+      LOAD_SIMULATOR_CONTROL_KEY: ${LOAD_SIMULATOR_CONTROL_KEY:-flashsale-load-control-key}
+      LOAD_SIMULATOR_TIMEOUT_DURATION: ${LOAD_SIMULATOR_TIMEOUT_DURATION:-12s}
+    ports:
+      - "127.0.0.1:8099:8099"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:8099/health >/dev/null"]
+      interval: 3s
+      timeout: 2s
+      retries: 20
+    restart: unless-stopped
+
+  prometheus:
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=3d
+      - --web.enable-lifecycle
+      - --web.enable-remote-write-receiver
+    volumes:
+      - ./load_testing/prometheus/prometheus.load.yml:/etc/prometheus/prometheus.yml:ro
+      - flashsale_load_prometheus_data:/prometheus
+    depends_on:
+      load_simulator:
+        condition: service_healthy
+
+  loki:
+    volumes:
+      - ./loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - flashsale_load_loki_data:/loki
+
+  grafana:
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_SERVER_ROOT_URL: http://localhost:3000
+    volumes:
+      - flashsale_load_grafana_data:/var/lib/grafana
+      - ./load_testing/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+
+  k6:
+    image: grafana/k6:2.1.0
+    container_name: flashsale_k6
+    profiles: ["load-tools"]
+    working_dir: /scripts
+    environment:
+      BASE_URL: http://backend:8000
+      SIMULATOR_URL: http://load_simulator:8099
+      LOAD_TEST_KEY: ${LOAD_TESTING_API_KEY:-flashsale-local-load-key-change-me-123456789}
+      LOAD_CONTROL_KEY: ${LOAD_SIMULATOR_CONTROL_KEY:-flashsale-load-control-key}
+      USERS_FILE: /results/users.json
+      PRODUCTS_FILE: /data/integration-products.json
+      K6_OUT: experimental-prometheus-rw
+      K6_PROMETHEUS_RW_SERVER_URL: http://prometheus:9090/api/v1/write
+      K6_PROMETHEUS_RW_TREND_STATS: p(90),p(95),p(99),max
+      K6_PROMETHEUS_RW_STALE_MARKERS: "true"
+      K6_WEB_DASHBOARD: "true"
+      K6_WEB_DASHBOARD_HOST: 0.0.0.0
+      K6_WEB_DASHBOARD_PORT: 5665
+      K6_WEB_DASHBOARD_PERIOD: 2s
+      K6_WEB_DASHBOARD_EXPORT: /results/k6-web-report.html
+    volumes:
+      - ./load_testing/k6:/scripts:ro
+      - ./load_testing/data:/data:ro
+      - ./load_testing/results:/results
+    ports:
+      - "127.0.0.1:5665:5665"
+    depends_on:
+      backend:
+        condition: service_started
+      prometheus:
+        condition: service_started
+      load_simulator:
+        condition: service_healthy
+
+volumes:
+  flashsale_load_postgres_data:
+    name: flashsale_load_postgres_data
+  flashsale_load_grafana_data:
+    name: flashsale_load_grafana_data
+  flashsale_load_loki_data:
+    name: flashsale_load_loki_data
+  flashsale_load_prometheus_data:
+    name: flashsale_load_prometheus_data

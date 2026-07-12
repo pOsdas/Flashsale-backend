@@ -1,0 +1,131 @@
+services:
+  postgres:
+    volumes:
+      - flashsale_integration_postgres_data:/var/lib/postgresql/data
+
+  migrate:
+    environment:
+      APP_ENV: docker
+      LOAD_TESTING_ENABLED: "true"
+      LOAD_TESTING_API_KEY: ${LOAD_TESTING_API_KEY:-flashsale-local-load-key-change-me-123456789}
+
+  go_fetcher:
+    volumes:
+      - ./go_fetcher/secrets:/app/secrets:ro
+      - ./load_testing/data:/load-data
+
+  backend:
+    command:
+      - sh
+      - -c
+      - >-
+        uvicorn app_project.asgi:application
+        --host 0.0.0.0
+        --port 8000
+        --workers ${INTEGRATION_BACKEND_WORKERS:-2}
+    environment:
+      APP_ENV: docker
+      LOAD_TESTING_ENABLED: "true"
+      LOAD_TESTING_API_KEY: ${LOAD_TESTING_API_KEY:-flashsale-local-load-key-change-me-123456789}
+    volumes:
+      - ./load_testing/results:/load-results
+      - ./load_testing/data:/load-data:ro
+
+  outbox_worker:
+    environment:
+      APP_ENV: docker
+      LOAD_TESTING_ENABLED: "true"
+      LOAD_TESTING_API_KEY: ${LOAD_TESTING_API_KEY:-flashsale-local-load-key-change-me-123456789}
+
+  monitoring_scanner:
+    environment:
+      APP_ENV: docker
+      LOAD_TESTING_ENABLED: "true"
+      LOAD_TESTING_API_KEY: ${LOAD_TESTING_API_KEY:-flashsale-local-load-key-change-me-123456789}
+      MONITORING_SCANNER_BATCH_SIZE: ${INTEGRATION_SCANNER_BATCH_SIZE:-25}
+      MONITORING_SCANNER_SLEEP_SECONDS: ${INTEGRATION_SCANNER_SLEEP_SECONDS:-15}
+
+  notification_consumer:
+    environment:
+      APP_ENV: docker
+      LOAD_TESTING_ENABLED: "true"
+      LOAD_TESTING_API_KEY: ${LOAD_TESTING_API_KEY:-flashsale-local-load-key-change-me-123456789}
+
+  load_simulator:
+    build:
+      context: ./load_testing/simulator
+      dockerfile: Dockerfile
+    container_name: flashsale_integration_alert_sink
+    environment:
+      LOAD_SIMULATOR_ADDRESS: :8099
+      LOAD_SIMULATOR_CONTROL_KEY: ${LOAD_SIMULATOR_CONTROL_KEY:-flashsale-load-control-key}
+    ports:
+      - "127.0.0.1:8099:8099"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:8099/health >/dev/null"]
+      interval: 3s
+      timeout: 2s
+      retries: 20
+    restart: unless-stopped
+
+  prometheus:
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=3d
+      - --web.enable-lifecycle
+      - --web.enable-remote-write-receiver
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - flashsale_integration_prometheus_data:/prometheus
+
+  loki:
+    volumes:
+      - ./loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - flashsale_integration_loki_data:/loki
+
+  grafana:
+    volumes:
+      - flashsale_integration_grafana_data:/var/lib/grafana
+      - ./load_testing/grafana/integration_provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+
+  k6:
+    image: grafana/k6:2.1.0
+    container_name: flashsale_k6_integration
+    profiles: ["load-tools"]
+    working_dir: /scripts
+    environment:
+      BASE_URL: http://backend:8000
+      LOAD_TEST_KEY: ${LOAD_TESTING_API_KEY:-flashsale-local-load-key-change-me-123456789}
+      USERS_FILE: /results/users.json
+      PRODUCTS_FILE: /data/integration-products.json
+      K6_OUT: experimental-prometheus-rw
+      K6_PROMETHEUS_RW_SERVER_URL: http://prometheus:9090/api/v1/write
+      K6_PROMETHEUS_RW_TREND_STATS: p(90),p(95),p(99),max
+      K6_PROMETHEUS_RW_STALE_MARKERS: "true"
+      K6_WEB_DASHBOARD: "true"
+      K6_WEB_DASHBOARD_HOST: 0.0.0.0
+      K6_WEB_DASHBOARD_PORT: 5665
+      K6_WEB_DASHBOARD_EXPORT: /results/k6-integration-report.html
+    volumes:
+      - ./load_testing/k6:/scripts:ro
+      - ./load_testing/data:/data:ro
+      - ./load_testing/results:/results
+    ports:
+      - "127.0.0.1:5665:5665"
+    depends_on:
+      backend:
+        condition: service_started
+      prometheus:
+        condition: service_started
+
+volumes:
+  flashsale_integration_postgres_data:
+    name: flashsale_integration_postgres_data
+  flashsale_integration_grafana_data:
+    name: flashsale_integration_grafana_data
+  flashsale_integration_loki_data:
+    name: flashsale_integration_loki_data
+  flashsale_integration_prometheus_data:
+    name: flashsale_integration_prometheus_data

@@ -18,7 +18,7 @@ class TelegramDeliveryError(Exception):
 
 
 class TelegramDeliveryAdapter:
-    TELEGRAM_API_URL = "https://api.telegram.org/bot{token}/sendMessage"
+    TELEGRAM_API_URL = "{base_url}/bot{token}/sendMessage"
 
     def __init__(
         self,
@@ -27,6 +27,13 @@ class TelegramDeliveryAdapter:
     ) -> None:
         self.bot_token = bot_token or settings.NOTIF_TELEGRAM_BOT_TOKEN
         self.timeout_seconds = timeout_seconds
+        self.api_base_url = str(
+            getattr(
+                settings,
+                "NOTIF_TELEGRAM_API_BASE_URL",
+                "https://api.telegram.org",
+            )
+        ).rstrip("/")
 
     def send_message(self, chat_id: int | str, text: str) -> None:
         started_at = time.monotonic()
@@ -51,7 +58,10 @@ class TelegramDeliveryAdapter:
         if not text:
             raise TelegramDeliveryError("Telegram message text is empty")
 
-        url = self.TELEGRAM_API_URL.format(token=self.bot_token)
+        url = self.TELEGRAM_API_URL.format(
+            base_url=self.api_base_url,
+            token=self.bot_token,
+        )
 
         payload = {
             "chat_id": normalized_chat_id,

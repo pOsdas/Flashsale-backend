@@ -3,6 +3,7 @@ from collections.abc import Mapping
 from typing import Any
 
 import httpx
+from django.conf import settings
 
 
 class TelegramApiError(RuntimeError):
@@ -15,6 +16,7 @@ class TelegramBotClient:
         *,
         token: str,
         timeout_seconds: int = 30,
+        base_url: str | None = None,
         client: httpx.Client | None = None,
     ) -> None:
         normalized_token = token.strip()
@@ -24,8 +26,16 @@ class TelegramBotClient:
 
         self.token = normalized_token
         self.timeout_seconds = timeout_seconds
+        telegram_api_base_url = (
+            base_url
+            or getattr(
+                settings,
+                "NOTIF_TELEGRAM_API_BASE_URL",
+                "https://api.telegram.org",
+            )
+        ).rstrip("/")
         self.base_url = (
-            f"https://api.telegram.org/bot{normalized_token}"
+            f"{telegram_api_base_url}/bot{normalized_token}"
         )
         self._owns_client = client is None
         self.client = client or httpx.Client(

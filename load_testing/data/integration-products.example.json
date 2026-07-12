@@ -1,0 +1,21 @@
+{
+  "generated_at": "2026-01-01T00:00:00Z",
+  "products": [
+    {
+      "marketplace": "wb",
+      "external_id": "123456789",
+      "url": "https://www.wildberries.ru/catalog/123456789/detail.aspx",
+      "title": "Validated Wildberries product",
+      "category": "example",
+      "validated_at": "2026-01-01T00:00:00Z"
+    },
+    {
+      "marketplace": "ozon",
+      "external_id": "987654321",
+      "url": "https://www.ozon.ru/product/example-product-987654321/",
+      "title": "Validated Ozon product",
+      "category": "example",
+      "validated_at": "2026-01-01T00:00:00Z"
+    }
+  ]
+}

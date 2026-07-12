@@ -8,6 +8,7 @@ RUN go mod download
 COPY . .
 
 RUN CGO_ENABLED=0 GOOS=linux go build -o /app/fetcher ./cmd/fetcher
+RUN CGO_ENABLED=0 GOOS=linux go build -o /app/loadcatalog ./cmd/loadcatalog
 
 FROM alpine:3.23
 
@@ -16,5 +17,6 @@ WORKDIR /app
 RUN apk add --no-cache ca-certificates tzdata
 
 COPY --from=builder /app/fetcher /app/fetcher
+COPY --from=builder /app/loadcatalog /app/loadcatalog
 
 ENTRYPOINT ["/app/fetcher"]

@@ -1,0 +1,1470 @@
+apiVersion: 1
+groups:
+- orgId: 1
+  name: Flashsale availability alerts
+  folder: Flashsale
+  interval: 30s
+  rules:
+  - uid: flashsale_core_scrape_target_down
+    title: Core Prometheus Target Down
+    condition: C
+    data:
+    - refId: A
+      datasourceUid: Prometheus
+      relativeTimeRange:
+        from: 300
+        to: 0
+      model:
+        expr: "(up{job=\"prometheus\"} == bool 0)\n  or absent(up{job=\"prometheus\"})\n  or (up{job=\"backend\"} == bool 0)\n  or absent(up{job=\"backend\"})\n  or (up{job=\"outbox_worker\"} == bool 0)\n  or absent(up{job=\"outbox_worker\"})\n  or (up{job=\"monitoring_scanner\"} == bool 0)\n  or absent(up{job=\"monitoring_scanner\"})\n  or (up{job=\"notification_consumer\"} == bool 0)\n  or absent(up{job=\"notification_consumer\"})\n  or (up{job=\"postgres\"} == bool 0)\n  or absent(up{job=\"postgres\"})\n  or (up{job=\"redis\"} == bool 0)\n  or absent(up{job=\"redis\"})\n  or (up{job=\"rabbitmq\"} == bool 0)\n  or absent(up{job=\"rabbitmq\"})\n  or (up{job=\"rabbitmq_detailed\"} == bool 0)\n  or absent(up{job=\"rabbitmq_detailed\"})\n  or (up{job=\"cadvisor\"} == bool 0)\n  or absent(up{job=\"cadvisor\"})\n  or (up{job=\"blackbox_exporter\"} == bool 0)\n  or absent(up{job=\"blackbox_exporter\"})\n  or (up{job=\"loki\"} == bool 0)\n  or absent(up{job=\"loki\"})\n  or (up{job=\"promtail\"\
+          } == bool 0)\n  or absent(up{job=\"promtail\"})\n  or (up{job=\"grafana\"} == bool 0)\n  or absent(up{job=\"grafana\"})\n  or (up{job=\"load_simulator\"} == bool 0)\n  or absent(up{job=\"load_simulator\"})\n  or (up{job=\"telegram_bot\"} == bool 0)\n  or absent(up{job=\"telegram_bot\"})"
+        refId: A
+        instant: true
+        range: false
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        type: reduce
+        expression: A
+        reducer: last
+        refId: B
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0.5
+          operator:
+            type: and
+          query:
+            params:
+            - C
+          reducer:
+            type: last
+          type: query
+        refId: C
+    noDataState: OK
+    execErrState: Error
+    for: 2m
+    annotations:
+      summary: Недоступен компонент мониторинга
+      description: 'Prometheus не получает метрики от job={{ $labels.job }}. Экземпляр: {{ $labels.instance }}.'
+    labels:
+      severity: critical
+      service: observability
+      category: availability
+    isPaused: false
+  - uid: flashsale_http_probe_failed
+    title: HTTP Health Probe Failed
+    condition: C
+    data:
+    - refId: A
+      datasourceUid: Prometheus
+      relativeTimeRange:
+        from: 300
+        to: 0
+      model:
+        expr: "(probe_success{job=\"blackbox_http\",instance=\"http://backend:8000/api/v1/prometheus/metrics\"} == bool 0)\n  or absent(probe_success{job=\"blackbox_http\",instance=\"http://backend:8000/api/v1/prometheus/metrics\"})\n  or (probe_success{job=\"blackbox_http\",instance=\"http://outbox_worker:9100/metrics\"} == bool 0)\n  or absent(probe_success{job=\"blackbox_http\",instance=\"http://outbox_worker:9100/metrics\"})\n  or (probe_success{job=\"blackbox_http\",instance=\"http://notification_consumer:8011/metrics\"} == bool 0)\n  or absent(probe_success{job=\"blackbox_http\",instance=\"http://notification_consumer:8011/metrics\"})\n  or (probe_success{job=\"blackbox_http\",instance=\"http://prometheus:9090/-/ready\"} == bool 0)\n  or absent(probe_success{job=\"blackbox_http\",instance=\"http://prometheus:9090/-/ready\"})\n  or (probe_success{job=\"blackbox_http\",instance=\"http://loki:3100/ready\"} == bool 0)\n  or absent(probe_success{job=\"blackbox_http\",instance=\"http://loki:3100/ready\"\
+          })\n  or (probe_success{job=\"blackbox_http\",instance=\"http://grafana:3000/api/health\"} == bool 0)\n  or absent(probe_success{job=\"blackbox_http\",instance=\"http://grafana:3000/api/health\"})\n  or (probe_success{job=\"blackbox_http\",instance=\"http://telegram_bot:8013/metrics\"} == bool 0)\n  or absent(probe_success{job=\"blackbox_http\",instance=\"http://telegram_bot:8013/metrics\"})"
+        refId: A
+        instant: true
+        range: false
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        type: reduce
+        expression: A
+        reducer: last
+        refId: B
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0.5
+          operator:
+            type: and
+          query:
+            params:
+            - C
+          reducer:
+            type: last
+          type: query
+        refId: C
+    noDataState: OK
+    execErrState: Error
+    for: 2m
+    annotations:
+      summary: HTTP-проверка сервиса завершилась ошибкой
+      description: Blackbox не смог успешно проверить {{ $labels.instance }}.
+    labels:
+      severity: critical
+      service: blackbox
+      category: availability
+    isPaused: false
+  - uid: flashsale_tcp_probe_failed
+    title: TCP Dependency Probe Failed
+    condition: C
+    data:
+    - refId: A
+      datasourceUid: Prometheus
+      relativeTimeRange:
+        from: 300
+        to: 0
+      model:
+        expr: "(probe_success{job=\"blackbox_tcp\",instance=\"postgres:5432\"} == bool 0)\n  or absent(probe_success{job=\"blackbox_tcp\",instance=\"postgres:5432\"})\n  or (probe_success{job=\"blackbox_tcp\",instance=\"redis:6379\"} == bool 0)\n  or absent(probe_success{job=\"blackbox_tcp\",instance=\"redis:6379\"})\n  or (probe_success{job=\"blackbox_tcp\",instance=\"rabbitmq:5672\"} == bool 0)\n  or absent(probe_success{job=\"blackbox_tcp\",instance=\"rabbitmq:5672\"})"
+        refId: A
+        instant: true
+        range: false
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        type: reduce
+        expression: A
+        reducer: last
+        refId: B
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0.5
+          operator:
+            type: and
+          query:
+            params:
+            - C
+          reducer:
+            type: last
+          type: query
+        refId: C
+    noDataState: OK
+    execErrState: Error
+    for: 2m
+    annotations:
+      summary: Недоступна TCP-зависимость
+      description: Blackbox не смог подключиться к {{ $labels.instance }}.
+    labels:
+      severity: critical
+      service: blackbox
+      category: availability
+    isPaused: false
+- orgId: 1
+  name: Flashsale backend and outbox alerts
+  folder: Flashsale
+  interval: 1m
+  rules:
+  - uid: flashsale_backend_high_5xx_ratio
+    title: Backend High 5xx Ratio
+    condition: C
+    data:
+    - refId: A
+      datasourceUid: Prometheus
+      relativeTimeRange:
+        from: 600
+        to: 0
+      model:
+        expr: "(\n  (\n    sum(increase(django_http_responses_total_by_status_total{job=\"backend\",status=~\"5..\"}[5m]))\n    /\n    clamp_min(sum(increase(django_http_responses_total_by_status_total{job=\"backend\"}[5m])), 1)\n  ) > bool 0.05\n)\n*\n(\n  sum(increase(django_http_responses_total_by_status_total{job=\"backend\"}[5m])) >= bool 20\n)"
+        refId: A
+        instant: true
+        range: false
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        type: reduce
+        expression: A
+        reducer: last
+        refId: B
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0.5
+          operator:
+            type: and
+          query:
+            params:
+            - C
+          reducer:
+            type: last
+          type: query
+        refId: C
+    noDataState: OK
+    execErrState: Error
+    for: 5m
+    annotations:
+      summary: Слишком много ошибок 5xx в backend
+      description: Более 5% ответов backend имеют статус 5xx при минимум 20 запросах за 5 минут.
+    labels:
+      severity: critical
+      service: backend
+      category: application
+    isPaused: false
+  - uid: flashsale_backend_high_p95_latency
+    title: Backend High P95 Latency
+    condition: C
+    data:
+    - refId: A
+      datasourceUid: Prometheus
+      relativeTimeRange:
+        from: 600
+        to: 0
+      model:
+        expr: "histogram_quantile(\n  0.95,\n  sum(rate(django_http_requests_latency_seconds_by_view_method_bucket{job=\"backend\"}[5m])) by (le)\n) or vector(0)"
+        refId: A
+        instant: true
+        range: false
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        type: reduce
+        expression: A
+        reducer: last
+        refId: B
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 2
+          operator:
+            type: and
+          query:
+            params:
+            - C
+          reducer:
+            type: last
+          type: query
+        refId: C
+    noDataState: OK
+    execErrState: Error
+    for: 5m
+    annotations:
+      summary: Backend отвечает слишком медленно
+      description: P95 времени ответа backend превышает 2 секунды в течение 5 минут.
+    labels:
+      severity: warning
+      service: backend
+      category: application
+    isPaused: false
+  - uid: flashsale_outbox_failed_events
+    title: Failed Outbox Events
+    condition: C
+    data:
+    - refId: A
+      datasourceUid: Prometheus
+      relativeTimeRange:
+        from: 600
+        to: 0
+      model:
+        expr: sum(increase(outbox_events_failed_total{job="outbox_worker"}[5m])) or vector(0)
+        refId: A
+        instant: true
+        range: false
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        type: reduce
+        expression: A
+        reducer: last
+        refId: B
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0
+          operator:
+            type: and
+          query:
+            params:
+            - C
+          reducer:
+            type: last
+          type: query
+        refId: C
+    noDataState: OK
+    execErrState: Error
+    for: 1m
+    annotations:
+      summary: Ошибки обработки Outbox
+      description: За последние 5 минут появились неуспешно обработанные Outbox-события.
+    labels:
+      severity: warning
+      service: outbox_worker
+      category: application
+    isPaused: false
+  - uid: flashsale_outbox_pending_high
+    title: Pending Outbox Events High
+    condition: C
+    data:
+    - refId: A
+      datasourceUid: Prometheus
+      relativeTimeRange:
+        from: 600
+        to: 0
+      model:
+        expr: max(outbox_pending_events{job="outbox_worker"}) or vector(0)
+        refId: A
+        instant: true
+        range: false
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        type: reduce
+        expression: A
+        reducer: last
+        refId: B
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 50
+          operator:
+            type: and
+          query:
+            params:
+            - C
+          reducer:
+            type: last
+          type: query
+        refId: C
+    noDataState: OK
+    execErrState: Error
+    for: 5m
+    annotations:
+      summary: Большая очередь Outbox
+      description: Количество ожидающих Outbox-событий превышает 50 в течение 5 минут.
+    labels:
+      severity: warning
+      service: outbox_worker
+      category: application
+    isPaused: false
+- orgId: 1
+  name: Flashsale scanner alerts
+  folder: Flashsale
+  interval: 1m
+  rules:
+  - uid: flashsale_scanner_heartbeat_stale
+    title: Monitoring Scanner Heartbeat Stale
+    condition: C
+    data:
+    - refId: A
+      datasourceUid: Prometheus
+      relativeTimeRange:
+        from: 300
+        to: 0
+      model:
+        expr: "(\n  time()\n  -\n  max(monitoring_scanner_last_success_timestamp_seconds{job=\"monitoring_scanner\"} > 0)\n)\nor\n(\n  absent(monitoring_scanner_last_success_timestamp_seconds{job=\"monitoring_scanner\"} > 0) * 999999\n)"
+        refId: A
+        instant: true
+        range: false
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        type: reduce
+        expression: A
+        reducer: last
+        refId: B
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 120
+          operator:
+            type: and
+          query:
+            params:
+            - C
+          reducer:
+            type: last
+          type: query
+        refId: C
+    noDataState: OK
+    execErrState: Error
+    for: 2m
+    annotations:
+      summary: Сканер мониторинга перестал завершать итерации
+      description: Последняя успешная итерация scanner была более 120 секунд назад.
+    labels:
+      severity: critical
+      service: monitoring_scanner
+      category: application
+    isPaused: false
+  - uid: flashsale_scanner_overdue_targets
+    title: Monitoring Targets Overdue
+    condition: C
+    data:
+    - refId: A
+      datasourceUid: Prometheus
+      relativeTimeRange:
+        from: 600
+        to: 0
+      model:
+        expr: max(monitoring_scanner_overdue_targets{job="monitoring_scanner"}) or vector(0)
+        refId: A
+        instant: true
+        range: false
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        type: reduce
+        expression: A
+        reducer: last
+        refId: B
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0
+          operator:
+            type: and
+          query:
+            params:
+            - C
+          reducer:
+            type: last
+          type: query
+        refId: C
+    noDataState: OK
+    execErrState: Error
+    for: 5m
+    annotations:
+      summary: Есть просроченные цели мониторинга
+      description: Минимум одна активная цель остаётся просроченной более 5 минут.
+    labels:
+      severity: warning
+      service: monitoring_scanner
+      category: application
+    isPaused: false
+  - uid: flashsale_scanner_overdue_age_crit
+    title: Monitoring Target Severely Overdue
+    condition: C
+    data:
+    - refId: A
+      datasourceUid: Prometheus
+      relativeTimeRange:
+        from: 600
+        to: 0
+      model:
+        expr: max(monitoring_scanner_oldest_overdue_age_seconds{job="monitoring_scanner"}) or vector(0)
+        refId: A
+        instant: true
+        range: false
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        type: reduce
+        expression: A
+        reducer: last
+        refId: B
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 900
+          operator:
+            type: and
+          query:
+            params:
+            - C
+          reducer:
+            type: last
+          type: query
+        refId: C
+    noDataState: OK
+    execErrState: Error
+    for: 2m
+    annotations:
+      summary: Цель мониторинга сильно просрочена
+      description: Самая старая просроченная цель не проверялась более 15 минут.
+    labels:
+      severity: critical
+      service: monitoring_scanner
+      category: application
+    isPaused: false
+  - uid: flashsale_scanner_processing_errors
+    title: Monitoring Scanner Processing Errors
+    condition: C
+    data:
+    - refId: A
+      datasourceUid: Prometheus
+      relativeTimeRange:
+        from: 600
+        to: 0
+      model:
+        expr: sum(increase(monitoring_target_processing_total{job="monitoring_scanner",result="error"}[10m])) or vector(0)
+        refId: A
+        instant: true
+        range: false
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        type: reduce
+        expression: A
+        reducer: last
+        refId: B
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 2
+          operator:
+            type: and
+          query:
+            params:
+            - C
+          reducer:
+            type: last
+          type: query
+        refId: C
+    noDataState: OK
+    execErrState: Error
+    for: 1m
+    annotations:
+      summary: Повторяющиеся ошибки scanner
+      description: За последние 10 минут scanner получил более двух ошибок обработки целей.
+    labels:
+      severity: warning
+      service: monitoring_scanner
+      category: application
+    isPaused: false
+- orgId: 1
+  name: Flashsale notification alerts
+  folder: Flashsale
+  interval: 1m
+  rules:
+  - uid: flashsale_notif_consumer_down
+    title: Notification Consumer Not Running
+    condition: C
+    data:
+    - refId: A
+      datasourceUid: Prometheus
+      relativeTimeRange:
+        from: 300
+        to: 0
+      model:
+        expr: '(max(notification_consumer_running{job="notification_consumer"}) == bool 0)
+
+          or absent(notification_consumer_running{job="notification_consumer"})'
+        refId: A
+        instant: true
+        range: false
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        type: reduce
+        expression: A
+        reducer: last
+        refId: B
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0.5
+          operator:
+            type: and
+          query:
+            params:
+            - C
+          reducer:
+            type: last
+          type: query
+        refId: C
+    noDataState: OK
+    execErrState: Error
+    for: 2m
+    annotations:
+      summary: Notification consumer не работает
+      description: Endpoint метрик доступен, но цикл RabbitMQ consumer остановлен либо рабочая метрика отсутствует.
+    labels:
+      severity: critical
+      service: notification_consumer
+      category: application
+    isPaused: false
+  - uid: flashsale_notif_heartbeat_stale
+    title: Notification Consumer Heartbeat Stale
+    condition: C
+    data:
+    - refId: A
+      datasourceUid: Prometheus
+      relativeTimeRange:
+        from: 300
+        to: 0
+      model:
+        expr: "(\n  time()\n  -\n  max(notification_consumer_heartbeat_timestamp_seconds{job=\"notification_consumer\"} > 0)\n)\nor\n(\n  absent(notification_consumer_heartbeat_timestamp_seconds{job=\"notification_consumer\"} > 0) * 999999\n)"
+        refId: A
+        instant: true
+        range: false
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        type: reduce
+        expression: A
+        reducer: last
+        refId: B
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 60
+          operator:
+            type: and
+          query:
+            params:
+            - C
+          reducer:
+            type: last
+          type: query
+        refId: C
+    noDataState: OK
+    execErrState: Error
+    for: 2m
+    annotations:
+      summary: Heartbeat notification consumer устарел
+      description: Heartbeat notification consumer не обновлялся более 60 секунд.
+    labels:
+      severity: critical
+      service: notification_consumer
+      category: application
+    isPaused: false
+  - uid: flashsale_notif_pending_old
+    title: Notification Delivery Stuck Pending
+    condition: C
+    data:
+    - refId: A
+      datasourceUid: Prometheus
+      relativeTimeRange:
+        from: 600
+        to: 0
+      model:
+        expr: max(notification_oldest_pending_delivery_age_seconds{job="notification_consumer"}) or vector(0)
+        refId: A
+        instant: true
+        range: false
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        type: reduce
+        expression: A
+        reducer: last
+        refId: B
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 120
+          operator:
+            type: and
+          query:
+            params:
+            - C
+          reducer:
+            type: last
+          type: query
+        refId: C
+    noDataState: OK
+    execErrState: Error
+    for: 5m
+    annotations:
+      summary: Уведомление зависло в pending
+      description: Самая старая доставка уведомления остаётся pending более 120 секунд.
+    labels:
+      severity: warning
+      service: notification_consumer
+      category: application
+    isPaused: false
+  - uid: flashsale_notification_message_failures
+    title: Notification Message Processing Failures
+    condition: C
+    data:
+    - refId: A
+      datasourceUid: Prometheus
+      relativeTimeRange:
+        from: 600
+        to: 0
+      model:
+        expr: sum(increase(notification_rabbitmq_messages_total{job="notification_consumer",status="failed"}[5m])) or vector(0)
+        refId: A
+        instant: true
+        range: false
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        type: reduce
+        expression: A
+        reducer: last
+        refId: B
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0
+          operator:
+            type: and
+          query:
+            params:
+            - C
+          reducer:
+            type: last
+          type: query
+        refId: C
+    noDataState: OK
+    execErrState: Error
+    for: 1m
+    annotations:
+      summary: Ошибка обработки сообщения RabbitMQ
+      description: За последние 5 минут notification consumer не смог обработать минимум одно сообщение.
+    labels:
+      severity: warning
+      service: notification_consumer
+      category: application
+    isPaused: false
+  - uid: flashsale_telegram_delivery_failures
+    title: Telegram Delivery Failures
+    condition: C
+    data:
+    - refId: A
+      datasourceUid: Prometheus
+      relativeTimeRange:
+        from: 600
+        to: 0
+      model:
+        expr: sum(increase(telegram_notifications_total{job="notification_consumer",status="failed"}[5m])) or vector(0)
+        refId: A
+        instant: true
+        range: false
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        type: reduce
+        expression: A
+        reducer: last
+        refId: B
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0
+          operator:
+            type: and
+          query:
+            params:
+            - C
+          reducer:
+            type: last
+          type: query
+        refId: C
+    noDataState: OK
+    execErrState: Error
+    for: 1m
+    annotations:
+      summary: Ошибка отправки уведомления в Telegram
+      description: За последние 5 минут не удалось отправить минимум одно Telegram-уведомление.
+    labels:
+      severity: warning
+      service: notification_consumer
+      category: application
+    isPaused: false
+- orgId: 1
+  name: Flashsale Telegram alerts
+  folder: Flashsale
+  interval: 1m
+  rules:
+  - uid: flashsale_telegram_bot_not_running
+    title: Telegram Bot Polling Not Running
+    condition: C
+    data:
+    - refId: A
+      datasourceUid: Prometheus
+      relativeTimeRange:
+        from: 300
+        to: 0
+      model:
+        expr: '(max(telegram_bot_running{job="telegram_bot"}) == bool 0)
+
+          or absent(telegram_bot_running{job="telegram_bot"})'
+        refId: A
+        instant: true
+        range: false
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        type: reduce
+        expression: A
+        reducer: last
+        refId: B
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0.5
+          operator:
+            type: and
+          query:
+            params:
+            - C
+          reducer:
+            type: last
+          type: query
+        refId: C
+    noDataState: OK
+    execErrState: Error
+    for: 2m
+    annotations:
+      summary: Polling Telegram-бота остановлен
+      description: Endpoint метрик доступен, но polling loop Telegram-бота не работает.
+    labels:
+      severity: critical
+      service: telegram_bot
+      category: application
+    isPaused: false
+  - uid: flashsale_tg_poll_heartbeat_stale
+    title: Telegram Polling Heartbeat Stale
+    condition: C
+    data:
+    - refId: A
+      datasourceUid: Prometheus
+      relativeTimeRange:
+        from: 300
+        to: 0
+      model:
+        expr: "(\n  time()\n  -\n  max(telegram_polling_heartbeat_timestamp_seconds{job=\"telegram_bot\"} > 0)\n)\nor\n(\n  absent(telegram_polling_heartbeat_timestamp_seconds{job=\"telegram_bot\"} > 0) * 999999\n)"
+        refId: A
+        instant: true
+        range: false
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        type: reduce
+        expression: A
+        reducer: last
+        refId: B
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 90
+          operator:
+            type: and
+          query:
+            params:
+            - C
+          reducer:
+            type: last
+          type: query
+        refId: C
+    noDataState: OK
+    execErrState: Error
+    for: 2m
+    annotations:
+      summary: Heartbeat Telegram polling устарел
+      description: Успешный Telegram getUpdates не выполнялся более 90 секунд.
+    labels:
+      severity: critical
+      service: telegram_bot
+      category: application
+    isPaused: false
+  - uid: flashsale_telegram_handler_errors
+    title: Telegram Handler Errors
+    condition: C
+    data:
+    - refId: A
+      datasourceUid: Prometheus
+      relativeTimeRange:
+        from: 600
+        to: 0
+      model:
+        expr: sum(increase(telegram_handler_errors_total{job="telegram_bot"}[5m])) or vector(0)
+        refId: A
+        instant: true
+        range: false
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        type: reduce
+        expression: A
+        reducer: last
+        refId: B
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 2
+          operator:
+            type: and
+          query:
+            params:
+            - C
+          reducer:
+            type: last
+          type: query
+        refId: C
+    noDataState: OK
+    execErrState: Error
+    for: 1m
+    annotations:
+      summary: Повторяющиеся ошибки Telegram-бота
+      description: За последние 5 минут зарегистрировано более двух ошибок handler или polling.
+    labels:
+      severity: warning
+      service: telegram_bot
+      category: application
+    isPaused: false
+  - uid: flashsale_telegram_rate_limit_fail_open
+    title: Telegram Rate Limiter Fail-Open
+    condition: C
+    data:
+    - refId: A
+      datasourceUid: Prometheus
+      relativeTimeRange:
+        from: 600
+        to: 0
+      model:
+        expr: sum(increase(telegram_rate_limit_decisions_total{job="telegram_bot",result="error_fail_open"}[5m])) or vector(0)
+        refId: A
+        instant: true
+        range: false
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        type: reduce
+        expression: A
+        reducer: last
+        refId: B
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0
+          operator:
+            type: and
+          query:
+            params:
+            - C
+          reducer:
+            type: last
+          type: query
+        refId: C
+    noDataState: OK
+    execErrState: Error
+    for: 1m
+    annotations:
+      summary: Rate limiter Telegram работает в fail-open
+      description: Проверка лимитов в Redis завершилась ошибкой, поэтому действия были разрешены без ограничения.
+    labels:
+      severity: warning
+      service: telegram_bot
+      category: application
+    isPaused: false
+- orgId: 1
+  name: Flashsale infrastructure alerts
+  folder: Flashsale
+  interval: 1m
+  rules:
+  - uid: flashsale_rmq_notif_dlq_nonempty
+    title: Notification DLQ Is Not Empty
+    condition: C
+    data:
+    - refId: A
+      datasourceUid: Prometheus
+      relativeTimeRange:
+        from: 600
+        to: 0
+      model:
+        expr: "max(\n  rabbitmq_detailed_queue_messages_ready{\n    job=\"rabbitmq_detailed\",\n    queue=\"flashsale.notifications.dlq\",\n    vhost=\"/\"\n  }\n) or vector(0)"
+        refId: A
+        instant: true
+        range: false
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        type: reduce
+        expression: A
+        reducer: last
+        refId: B
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0
+          operator:
+            type: and
+          query:
+            params:
+            - C
+          reducer:
+            type: last
+          type: query
+        refId: C
+    noDataState: OK
+    execErrState: Error
+    for: 1m
+    annotations:
+      summary: В notification DLQ появились сообщения
+      description: В dead-letter queue находятся необработанные notification-сообщения.
+    labels:
+      severity: critical
+      service: rabbitmq
+      category: application
+    isPaused: false
+  - uid: flashsale_rabbitmq_notification_backlog
+    title: Notification Queue Backlog High
+    condition: C
+    data:
+    - refId: A
+      datasourceUid: Prometheus
+      relativeTimeRange:
+        from: 600
+        to: 0
+      model:
+        expr: "max(\n  rabbitmq_detailed_queue_messages_ready{\n    job=\"rabbitmq_detailed\",\n    queue=\"flashsale.notifications\",\n    vhost=\"/\"\n  }\n) or vector(0)"
+        refId: A
+        instant: true
+        range: false
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        type: reduce
+        expression: A
+        reducer: last
+        refId: B
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 50
+          operator:
+            type: and
+          query:
+            params:
+            - C
+          reducer:
+            type: last
+          type: query
+        refId: C
+    noDataState: OK
+    execErrState: Error
+    for: 5m
+    annotations:
+      summary: Большая очередь notification-сообщений
+      description: Более 50 сообщений остаются готовыми к обработке в течение 5 минут.
+    labels:
+      severity: warning
+      service: rabbitmq
+      category: application
+    isPaused: false
+  - uid: flashsale_rmq_notif_no_consumer
+    title: Notification Queue Has No Consumers
+    condition: C
+    data:
+    - refId: A
+      datasourceUid: Prometheus
+      relativeTimeRange:
+        from: 300
+        to: 0
+      model:
+        expr: "(\n  max(\n    rabbitmq_detailed_queue_consumers{\n      job=\"rabbitmq_detailed\",\n      queue=\"flashsale.notifications\",\n      vhost=\"/\"\n    }\n  ) == bool 0\n)\n*\n(\n  max(up{job=\"rabbitmq_detailed\"}) == bool 1\n)\n*\n(\n  max(\n    notification_consumer_running{\n      job=\"notification_consumer\"\n    }\n  ) == bool 1\n)"
+        refId: A
+        instant: true
+        range: false
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        type: reduce
+        expression: A
+        reducer: last
+        refId: B
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0.5
+          operator:
+            type: and
+          query:
+            params:
+            - C
+          reducer:
+            type: last
+          type: query
+        refId: C
+    noDataState: OK
+    execErrState: Error
+    for: 2m
+    annotations:
+      summary: У notification-очереди нет consumer
+      description: RabbitMQ сообщает 0 активных consumer для flashsale.notifications, хотя metrics endpoint notification_consumer доступен.
+    labels:
+      severity: critical
+      service: rabbitmq
+      category: application
+    isPaused: false
+  - uid: flashsale_redis_unavailable
+    title: Redis Exporter Cannot Reach Redis
+    condition: C
+    data:
+    - refId: A
+      datasourceUid: Prometheus
+      relativeTimeRange:
+        from: 300
+        to: 0
+      model:
+        expr: '(max(redis_up{job="redis"}) == bool 0)
+
+          or absent(redis_up{job="redis"})'
+        refId: A
+        instant: true
+        range: false
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        type: reduce
+        expression: A
+        reducer: last
+        refId: B
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0.5
+          operator:
+            type: and
+          query:
+            params:
+            - C
+          reducer:
+            type: last
+          type: query
+        refId: C
+    noDataState: OK
+    execErrState: Error
+    for: 2m
+    annotations:
+      summary: Redis недоступен exporter
+      description: Redis exporter не может успешно выполнить запрос к Redis.
+    labels:
+      severity: critical
+      service: redis
+      category: application
+    isPaused: false
+  - uid: flashsale_redis_blocked_clients
+    title: Redis Has Blocked Clients
+    condition: C
+    data:
+    - refId: A
+      datasourceUid: Prometheus
+      relativeTimeRange:
+        from: 600
+        to: 0
+      model:
+        expr: max(redis_blocked_clients{job="redis"}) or vector(0)
+        refId: A
+        instant: true
+        range: false
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        type: reduce
+        expression: A
+        reducer: last
+        refId: B
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0
+          operator:
+            type: and
+          query:
+            params:
+            - C
+          reducer:
+            type: last
+          type: query
+        refId: C
+    noDataState: OK
+    execErrState: Error
+    for: 5m
+    annotations:
+      summary: В Redis есть заблокированные клиенты
+      description: Redis сообщает о заблокированных клиентах не менее 5 минут.
+    labels:
+      severity: warning
+      service: redis
+      category: application
+    isPaused: false
+  - uid: flashsale_redis_evictions
+    title: Redis Key Evictions Detected
+    condition: C
+    data:
+    - refId: A
+      datasourceUid: Prometheus
+      relativeTimeRange:
+        from: 600
+        to: 0
+      model:
+        expr: sum(increase(redis_evicted_keys_total{job="redis"}[10m])) or vector(0)
+        refId: A
+        instant: true
+        range: false
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        type: reduce
+        expression: A
+        reducer: last
+        refId: B
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0
+          operator:
+            type: and
+          query:
+            params:
+            - C
+          reducer:
+            type: last
+          type: query
+        refId: C
+    noDataState: OK
+    execErrState: Error
+    for: 1m
+    annotations:
+      summary: Redis удаляет ключи из-за нехватки памяти
+      description: За последние 10 минут Redis зарегистрировал evictions.
+    labels:
+      severity: warning
+      service: redis
+      category: application
+    isPaused: false
+  - uid: flashsale_postgres_unavailable
+    title: PostgreSQL Exporter Cannot Reach Database
+    condition: C
+    data:
+    - refId: A
+      datasourceUid: Prometheus
+      relativeTimeRange:
+        from: 300
+        to: 0
+      model:
+        expr: '(max(pg_up{job="postgres"}) == bool 0)
+
+          or absent(pg_up{job="postgres"})'
+        refId: A
+        instant: true
+        range: false
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        type: reduce
+        expression: A
+        reducer: last
+        refId: B
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0.5
+          operator:
+            type: and
+          query:
+            params:
+            - C
+          reducer:
+            type: last
+          type: query
+        refId: C
+    noDataState: OK
+    execErrState: Error
+    for: 2m
+    annotations:
+      summary: PostgreSQL недоступен exporter
+      description: PostgreSQL exporter не может успешно выполнить запрос к базе данных.
+    labels:
+      severity: critical
+      service: postgres
+      category: application
+    isPaused: false
+  - uid: flashsale_postgres_deadlocks
+    title: PostgreSQL Deadlocks Detected
+    condition: C
+    data:
+    - refId: A
+      datasourceUid: Prometheus
+      relativeTimeRange:
+        from: 600
+        to: 0
+      model:
+        expr: sum(increase(pg_stat_database_deadlocks{job="postgres",datname="flashsale"}[15m])) or vector(0)
+        refId: A
+        instant: true
+        range: false
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        type: reduce
+        expression: A
+        reducer: last
+        refId: B
+    - refId: C
+      datasourceUid: __expr__
+      model:
+        type: threshold
+        expression: B
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0
+          operator:
+            type: and
+          query:
+            params:
+            - C
+          reducer:
+            type: last
+          type: query
+        refId: C
+    noDataState: OK
+    execErrState: Error
+    for: 1m
+    annotations:
+      summary: В PostgreSQL обнаружены deadlock
+      description: За последние 15 минут база flashsale зарегистрировала минимум один deadlock.
+    labels:
+      severity: warning
+      service: postgres
+      category: application
+    isPaused: false
