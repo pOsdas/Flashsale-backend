@@ -13,9 +13,12 @@ type Config struct {
 
 	Timeout time.Duration
 
-	WBRequestDelay   time.Duration
-	WBMaxRetries     int
-	WBRetryBaseDelay time.Duration
+	WBRequestDelay                 time.Duration
+	WBMaxRetries                   int
+	WBRetryBaseDelay               time.Duration
+	WBBrowserFetcherURL            string
+	WBBrowserFetcherEnabled        bool
+	WBBrowserFetcherTimeoutSeconds int
 
 	OzonRequestDelay             time.Duration
 	OzonMaxRetries               int
@@ -34,9 +37,12 @@ func Load() (*Config, error) {
 
 		Timeout: 30 * time.Second,
 
-		WBRequestDelay:   getEnvDurationMS("WB_REQUEST_DELAY_MS", 700*time.Millisecond),
-		WBMaxRetries:     getEnvInt("WB_MAX_RETRIES", 3),
-		WBRetryBaseDelay: getEnvDurationMS("WB_RETRY_BASE_DELAY_MS", 1*time.Second),
+		WBRequestDelay:                 getEnvDurationMS("WB_REQUEST_DELAY_MS", 700*time.Millisecond),
+		WBMaxRetries:                   getEnvInt("WB_MAX_RETRIES", 3),
+		WBRetryBaseDelay:               getEnvDurationMS("WB_RETRY_BASE_DELAY_MS", 1*time.Second),
+		WBBrowserFetcherURL:            os.Getenv("WB_BROWSER_FETCHER_URL"),
+		WBBrowserFetcherEnabled:        getEnvBool("WB_BROWSER_FETCHER_ENABLED", false),
+		WBBrowserFetcherTimeoutSeconds: getEnvInt("WB_BROWSER_FETCHER_TIMEOUT_SECONDS", 35),
 
 		OzonRequestDelay:             getEnvDurationMS("OZON_REQUEST_DELAY_MS", 700*time.Millisecond),
 		OzonMaxRetries:               getEnvInt("OZON_MAX_RETRIES", 3),
@@ -58,6 +64,10 @@ func Load() (*Config, error) {
 
 	if cfg.WBMaxRetries < 0 {
 		return nil, fmt.Errorf("WB_MAX_RETRIES must be greater than or equal to zero")
+	}
+
+	if cfg.WBBrowserFetcherTimeoutSeconds <= 0 {
+		return nil, fmt.Errorf("WB_BROWSER_FETCHER_TIMEOUT_SECONDS must be greater than zero")
 	}
 
 	if cfg.OzonBrowserFetcherTimeoutSeconds <= 0 {

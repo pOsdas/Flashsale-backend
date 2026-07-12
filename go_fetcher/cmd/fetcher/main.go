@@ -139,11 +139,14 @@ func runHTTPServer(
 
 	wbParser := wildberries.NewParser(
 		wildberries.ParserConfig{
-			CookieProvider: wbCookieProvider,
-			Timeout:        cfg.Timeout,
-			RequestDelay:   cfg.WBRequestDelay,
-			MaxRetries:     cfg.WBMaxRetries,
-			RetryBaseDelay: cfg.WBRetryBaseDelay,
+			CookieProvider:        wbCookieProvider,
+			Timeout:               cfg.Timeout,
+			RequestDelay:          cfg.WBRequestDelay,
+			MaxRetries:            cfg.WBMaxRetries,
+			RetryBaseDelay:        cfg.WBRetryBaseDelay,
+			BrowserFetcherURL:     cfg.WBBrowserFetcherURL,
+			BrowserFetcherEnabled: cfg.WBBrowserFetcherEnabled,
+			BrowserFetcherTimeout: time.Duration(cfg.WBBrowserFetcherTimeoutSeconds) * time.Second,
 		},
 		logger,
 	)
@@ -224,11 +227,14 @@ func runWBCommand(
 
 	wbParser := wildberries.NewParser(
 		wildberries.ParserConfig{
-			CookieProvider: wbCookieProvider,
-			Timeout:        cfg.Timeout,
-			RequestDelay:   cfg.WBRequestDelay,
-			MaxRetries:     cfg.WBMaxRetries,
-			RetryBaseDelay: cfg.WBRetryBaseDelay,
+			CookieProvider:        wbCookieProvider,
+			Timeout:               cfg.Timeout,
+			RequestDelay:          cfg.WBRequestDelay,
+			MaxRetries:            cfg.WBMaxRetries,
+			RetryBaseDelay:        cfg.WBRetryBaseDelay,
+			BrowserFetcherURL:     cfg.WBBrowserFetcherURL,
+			BrowserFetcherEnabled: cfg.WBBrowserFetcherEnabled,
+			BrowserFetcherTimeout: time.Duration(cfg.WBBrowserFetcherTimeoutSeconds) * time.Second,
 		},
 		logger,
 	)

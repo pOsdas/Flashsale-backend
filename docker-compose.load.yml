@@ -80,6 +80,9 @@ services:
   ozon_browser_fetcher:
     profiles: ["real-integrations"]
 
+  wb_browser_fetcher:
+    profiles: ["real-integrations"]
+
   telegram_bot:
     environment:
       <<: *pgbouncer-app-environment

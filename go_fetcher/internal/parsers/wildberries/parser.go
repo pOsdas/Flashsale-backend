@@ -20,7 +20,8 @@ const (
 	detailURL  = "https://www.wildberries.ru/__internal/card/cards/v4/detail"
 	catalogURL = "https://www.wildberries.ru/__internal/search/exactmatch/ru/common/v18/search"
 
-	defaultPageSize = 100
+	defaultPageSize                = 100
+	defaultWBBrowserFetcherTimeout = 35 * time.Second
 
 	wbRequestProfile        = "go_http_client_browser_headers"
 	wbBlockedRecommendation = "pause requests and refresh marketplace session cookies"
@@ -28,6 +29,7 @@ const (
 
 type Parser struct {
 	client         *http.Client
+	browserClient  *BrowserClient
 	logger         *slog.Logger
 	cookie         string
 	cookieProvider cookies.Provider
@@ -40,12 +42,15 @@ type Parser struct {
 }
 
 type ParserConfig struct {
-	Cookie         string
-	CookieProvider cookies.Provider
-	Timeout        time.Duration
-	RequestDelay   time.Duration
-	MaxRetries     int
-	RetryBaseDelay time.Duration
+	Cookie                string
+	CookieProvider        cookies.Provider
+	Timeout               time.Duration
+	RequestDelay          time.Duration
+	MaxRetries            int
+	RetryBaseDelay        time.Duration
+	BrowserFetcherURL     string
+	BrowserFetcherEnabled bool
+	BrowserFetcherTimeout time.Duration
 }
 
 type parserRequestError struct {
@@ -100,10 +105,15 @@ func NewParser(cfg ParserConfig, logger *slog.Logger) *Parser {
 		cfg.RetryBaseDelay = 1 * time.Second
 	}
 
+	if cfg.BrowserFetcherTimeout <= 0 {
+		cfg.BrowserFetcherTimeout = defaultWBBrowserFetcherTimeout
+	}
+
 	return &Parser{
 		client: &http.Client{
 			Timeout: cfg.Timeout,
 		},
+		browserClient:  NewBrowserClient(cfg.BrowserFetcherEnabled, cfg.BrowserFetcherURL, cfg.BrowserFetcherTimeout),
 		logger:         logger,
 		cookie:         cfg.Cookie,
 		cookieProvider: cfg.CookieProvider,

@@ -54,11 +54,14 @@ func main() {
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	wb := wildberries.NewParser(wildberries.ParserConfig{
-		CookieProvider: cookies.NewFileCookieProvider("secrets/wb_cookie.txt", 30*time.Second),
-		Timeout:        cfg.Timeout,
-		RequestDelay:   cfg.WBRequestDelay,
-		MaxRetries:     cfg.WBMaxRetries,
-		RetryBaseDelay: cfg.WBRetryBaseDelay,
+		CookieProvider:        cookies.NewFileCookieProvider("secrets/wb_cookie.txt", 30*time.Second),
+		Timeout:               cfg.Timeout,
+		RequestDelay:          cfg.WBRequestDelay,
+		MaxRetries:            cfg.WBMaxRetries,
+		RetryBaseDelay:        cfg.WBRetryBaseDelay,
+		BrowserFetcherURL:     cfg.WBBrowserFetcherURL,
+		BrowserFetcherEnabled: cfg.WBBrowserFetcherEnabled,
+		BrowserFetcherTimeout: time.Duration(cfg.WBBrowserFetcherTimeoutSeconds) * time.Second,
 	}, logger)
 	oz := ozon.NewParser(ozon.ParserConfig{
 		CookieProvider:        cookies.NewFileCookieProvider("secrets/ozon_cookie.txt", 30*time.Second),

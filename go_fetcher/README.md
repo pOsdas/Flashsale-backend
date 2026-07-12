@@ -1,5 +1,25 @@
 # Important
 
+Wildberries uses the regular Go HTTP parser first and can fall back to a real
+Chromium session when WB returns 403, 498, or an antibot response:
+
+Local:
+```shell
+WB_BROWSER_FETCHER_ENABLED=true
+WB_BROWSER_FETCHER_URL=http://127.0.0.1:8096
+WB_BROWSER_FETCHER_TIMEOUT_SECONDS=35
+```
+
+Docker:
+```shell
+WB_BROWSER_FETCHER_ENABLED=true
+WB_BROWSER_FETCHER_URL=http://wb_browser_fetcher:8096
+WB_BROWSER_FETCHER_TIMEOUT_SECONDS=35
+```
+
+The WB browser fetcher uses `secrets/wb_cookie.txt` and exposes health at
+`GET /api/v1/health` on port `8096`.
+
 Ozon parser may return 403 Antibot Challenge when running inside Docker.
 For Ozon, we have a fallback scenario with Playwright parser:
 
