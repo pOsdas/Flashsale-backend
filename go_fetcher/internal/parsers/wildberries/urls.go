@@ -12,11 +12,11 @@ func buildDetailURL(nmID string) string {
 
 	values.Set("appType", "1")
 	values.Set("curr", "rub")
-	values.Set("dest", "123589323")
+	values.Set("dest", "-1257786")
 	values.Set("spp", "30")
 	values.Set("hide_vflags", "4294967296")
 	values.Set("hide_dtype", "15")
-	values.Set("mdg", "110")
+	values.Set("mtype", "257")
 	values.Set("lang", "ru")
 	values.Set("ab_testing", "false")
 	values.Set("nm", strings.TrimSpace(nmID))

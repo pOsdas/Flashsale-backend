@@ -44,6 +44,7 @@ def fetch():
         return jsonify({"error": "url must be an allowed Wildberries HTTPS URL"}), 400
 
     try:
+        print(f"WB browser fetch requested: url={url}", flush=True)
         result = browser.fetch(url)
         body_text = str(result.get("body") or "")
         try:
@@ -58,6 +59,7 @@ def fetch():
             }
         )
     except Exception as exc:
+        print(f"WB browser fetch failed: error={exc}", flush=True)
         return jsonify({"error": str(exc)}), 500
 
 

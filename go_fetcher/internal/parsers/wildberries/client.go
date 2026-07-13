@@ -207,7 +207,7 @@ func wbInternalReferer(requestURL *url.URL) string {
 
 	query := requestURL.Query()
 
-	if strings.Contains(requestURL.Path, "/card/") {
+	if strings.Contains(requestURL.Path, "/card/") || strings.Contains(requestURL.Path, "/u-card/") {
 		if nmID := strings.TrimSpace(query.Get("nm")); nmID != "" {
 			return "https://www.wildberries.ru/catalog/" + url.PathEscape(nmID) + "/detail.aspx"
 		}

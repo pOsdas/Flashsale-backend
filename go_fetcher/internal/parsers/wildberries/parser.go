@@ -17,7 +17,7 @@ import (
 const (
 	defaultCurrency = "RUB"
 
-	detailURL  = "https://www.wildberries.ru/__internal/card/cards/v4/detail"
+	detailURL  = "https://www.wildberries.ru/__internal/u-card/cards/v4/detail"
 	catalogURL = "https://www.wildberries.ru/__internal/search/exactmatch/ru/common/v18/search"
 
 	defaultPageSize                = 100
