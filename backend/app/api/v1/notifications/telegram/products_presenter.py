@@ -13,17 +13,17 @@ from app.api.v1.monitoring.services.target_query_service import (
     MonitoringTargetListItem,
     MonitoringTargetPage,
 )
+from app.api.v1.monitoring.services.monitoring_state import (
+    MONITORING_STATE_ACTIVE,
+    MONITORING_STATE_PAUSED,
+    MONITORING_STATE_STOPPED_BY_ERROR,
+    get_monitoring_state,
+)
 
 
 MARKETPLACE_TITLES = {
     Marketplace.WILDBERRIES: "Wildberries",
     Marketplace.OZON: "Ozon",
-}
-
-STATUS_TITLES = {
-    MonitoringTargetStatus.ACTIVE: "активно",
-    MonitoringTargetStatus.PAUSED: "приостановлено",
-    MonitoringTargetStatus.FAILED: "ошибка",
 }
 
 
@@ -85,7 +85,7 @@ def build_target_delete_confirmation_text(
         "⚠️ Удалить товар из отслеживания?\n\n"
         f"{title}\n"
         f"Маркетплейс: {_format_marketplace(target.marketplace)}\n\n"
-        "Будут удалены история проверок, alerts и индивидуальные "
+        "Будут удалены история проверок, уведомления и индивидуальные "
         "настройки этого товара. Действие нельзя отменить."
     )
 
@@ -152,28 +152,34 @@ def _build_target_lines(
             f"{_format_parse_status(item.latest_parse_status)}"
         )
 
+    if (
+        get_monitoring_state(target)
+        == MONITORING_STATE_STOPPED_BY_ERROR
+    ):
+        lines.append(
+            "Нажмите «Возобновить», чтобы снова запустить проверки."
+        )
+
     return lines
 
 
-def _format_target_status(target: MonitoringTarget) -> str:
-    status_title = STATUS_TITLES.get(
-        target.status,
-        target.status,
+def _format_target_status(
+    target: MonitoringTarget,
+) -> str:
+    monitoring_state = get_monitoring_state(target)
+
+    titles = {
+        MONITORING_STATE_ACTIVE: "✅ отслеживание активно",
+        MONITORING_STATE_PAUSED: "⏸ отслеживание приостановлено",
+        MONITORING_STATE_STOPPED_BY_ERROR: (
+            "⚠️ проверки остановлены из-за ошибки"
+        ),
+    }
+
+    return titles.get(
+        monitoring_state,
+        "⏹ отслеживание отключено",
     )
-
-    if (
-        target.status == MonitoringTargetStatus.ACTIVE
-        and target.is_active
-    ):
-        return "✅ активно"
-
-    if target.status == MonitoringTargetStatus.PAUSED:
-        return "⏸ приостановлено"
-
-    if target.status == MonitoringTargetStatus.FAILED:
-        return "⚠️ ошибка"
-
-    return status_title
 
 
 def _format_parse_status(parse_status: str) -> str:

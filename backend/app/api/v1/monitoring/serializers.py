@@ -18,8 +18,16 @@ from app.api.v1.monitoring.services.alert_rule_constants import (
     SUPPORTED_TARGET_ALERT_TYPES,
 )
 
+from app.api.v1.monitoring.services.monitoring_state import (
+    get_monitoring_state,
+    get_monitoring_state_title,
+)
+
 
 class MonitoringTargetSerializer(serializers.ModelSerializer):
+    monitoring_state = serializers.SerializerMethodField()
+    monitoring_state_display = serializers.SerializerMethodField()
+
     external_id = serializers.CharField(
         required=False,
         allow_blank=False,
@@ -53,6 +61,8 @@ class MonitoringTargetSerializer(serializers.ModelSerializer):
             "next_check_at",
             "last_error",
             "is_active",
+            "monitoring_state",
+            "monitoring_state_display",
             "latest_price",
             "latest_rating",
             "latest_reviews_count",
@@ -70,6 +80,8 @@ class MonitoringTargetSerializer(serializers.ModelSerializer):
             "last_checked_at",
             "next_check_at",
             "last_error",
+            "monitoring_state",
+            "monitoring_state_display",
             "is_active",
             "latest_price",
             "latest_rating",
@@ -79,6 +91,18 @@ class MonitoringTargetSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         )
+
+    def get_monitoring_state(
+            self,
+            obj: MonitoringTarget,
+    ) -> str:
+        return get_monitoring_state(obj)
+
+    def get_monitoring_state_display(
+            self,
+            obj: MonitoringTarget,
+    ) -> str:
+        return get_monitoring_state_title(obj)
 
     def validate_marketplace(self, value: str) -> str:
         allowed_values = {
