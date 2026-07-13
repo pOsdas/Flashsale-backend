@@ -33,6 +33,10 @@ class ProductPreviewError(Exception):
     pass
 
 
+class ProductPreviewBusyError(ProductPreviewError):
+    pass
+
+
 class ProductPreviewService:
     def __init__(
             self,
@@ -65,7 +69,7 @@ class ProductPreviewService:
                     "error": str(exc),
                 },
             )
-            raise ProductPreviewError(
+            raise ProductPreviewBusyError(
                 "Товар уже обновляется. Попробуйте еще раз через несколько секунд."
             ) from exc
 

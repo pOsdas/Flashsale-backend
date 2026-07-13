@@ -819,16 +819,25 @@ class ProductPreviewView(APIView):
                 url=serializer.validated_data["url"],
             )
 
+        except ProductPreviewBusyError as exc:
+            raise APIError(
+                error_code="product_refresh_busy",
+                message=str(exc),
+                status_code=status.HTTP_409_CONFLICT,
+                details={
+                    "marketplace": marketplace,
+                    "url": url,
+                },
+            ) from exc
+
         except ProductPreviewError as exc:
             raise APIError(
                 error_code="product_preview_failed",
                 message=str(exc),
                 status_code=status.HTTP_400_BAD_REQUEST,
                 details={
-                    "marketplace": (
-                        serializer.validated_data["marketplace"]
-                    ),
-                    "url": serializer.validated_data["url"],
+                    "marketplace": marketplace,
+                    "url": url,
                 },
             ) from exc
 
