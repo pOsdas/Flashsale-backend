@@ -20,3 +20,5 @@
 /load_testing/data/users.json
 /load_testing/data/integration-products.json
 /load_testing/.env.load
+/docker-compose.prod.yml
+/update-server-cookies.ps1
