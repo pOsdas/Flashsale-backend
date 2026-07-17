@@ -42,7 +42,7 @@ func Load() (*Config, error) {
 		WBRetryBaseDelay:               getEnvDurationMS("WB_RETRY_BASE_DELAY_MS", 1*time.Second),
 		WBBrowserFetcherURL:            os.Getenv("WB_BROWSER_FETCHER_URL"),
 		WBBrowserFetcherEnabled:        getEnvBool("WB_BROWSER_FETCHER_ENABLED", false),
-		WBBrowserFetcherTimeoutSeconds: getEnvInt("WB_BROWSER_FETCHER_TIMEOUT_SECONDS", 35),
+		WBBrowserFetcherTimeoutSeconds: getEnvInt("WB_BROWSER_FETCHER_TIMEOUT_SECONDS", 60),
 
 		OzonRequestDelay:             getEnvDurationMS("OZON_REQUEST_DELAY_MS", 700*time.Millisecond),
 		OzonMaxRetries:               getEnvInt("OZON_MAX_RETRIES", 3),
@@ -51,7 +51,7 @@ func Load() (*Config, error) {
 
 		OzonBrowserFetcherURL:            os.Getenv("OZON_BROWSER_FETCHER_URL"),
 		OzonBrowserFetcherEnabled:        getEnvBool("OZON_BROWSER_FETCHER_ENABLED", false),
-		OzonBrowserFetcherTimeoutSeconds: getEnvInt("OZON_BROWSER_FETCHER_TIMEOUT_SECONDS", 35),
+		OzonBrowserFetcherTimeoutSeconds: getEnvInt("OZON_BROWSER_FETCHER_TIMEOUT_SECONDS", 75),
 	}
 
 	if cfg.DjangoURL == "" {

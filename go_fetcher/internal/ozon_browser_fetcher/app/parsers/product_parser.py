@@ -5,6 +5,9 @@ from typing import Any, Dict, List, Optional
 
 from playwright.sync_api import Page, TimeoutError as PlaywrightTimeoutError
 
+from ozon_browser_fetcher.app.browser.challenge import (
+    wait_for_ozon_page_ready,
+)
 from ozon_browser_fetcher.app.models.product import Product
 
 
@@ -221,6 +224,8 @@ def is_antibot_page(page: Page, body_text: str) -> bool:
         "доступ ограничен",
         "проверяем ваш браузер",
         "security check",
+        "antibot challenge page",
+        "похоже, нет соединения",
     ]
 
     for marker in markers:
@@ -654,13 +659,15 @@ def wait_page_loaded(page: Page, url: str) -> None:
     page.goto(
         url,
         wait_until="domcontentloaded",
-        timeout=30_000,
+        timeout=45_000,
     )
+
+    wait_for_ozon_page_ready(page)
 
     try:
         page.wait_for_selector(
             'script[type="application/ld+json"], h1, meta[property="og:title"]',
-            timeout=2_000,
+            timeout=4_000,
         )
     except PlaywrightTimeoutError:
         pass

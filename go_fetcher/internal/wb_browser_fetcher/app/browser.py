@@ -1,3 +1,4 @@
+import os
 import threading
 import time
 import re
@@ -45,49 +46,174 @@ class WBBrowser:
         self.page: Page | None = None
         self.cookie_mtime_ns = -1
         self.lock = threading.Lock()
+        cdp_host = os.getenv(
+            "BROWSER_CDP_HOST",
+            "127.0.0.1",
+        ).strip() or "127.0.0.1"
+        cdp_port = os.getenv(
+            "BROWSER_CDP_PORT",
+            "9222",
+        ).strip() or "9222"
+        default_cdp_url = f"http://{cdp_host}:{cdp_port}"
+        self.cdp_url = (
+            os.getenv("WB_BROWSER_CDP_URL", "").strip()
+            or default_cdp_url
+        )
+        self.connect_timeout_ms = self._get_positive_int(
+            "WB_BROWSER_CDP_CONNECT_TIMEOUT_MS",
+            15_000,
+        )
+        self.start_timeout_seconds = self._get_positive_int(
+            "WB_BROWSER_CDP_START_TIMEOUT_SECONDS",
+            90,
+        )
+        self.retry_delay_seconds = max(
+            0.1,
+            float(
+                os.getenv(
+                    "WB_BROWSER_CDP_RETRY_DELAY_SECONDS",
+                    "1",
+                )
+            ),
+        )
+
+    @staticmethod
+    def _get_positive_int(name: str, default: int) -> int:
+        raw_value = os.getenv(name)
+
+        if raw_value is None:
+            return default
+
+        try:
+            value = int(raw_value)
+        except (TypeError, ValueError):
+            return default
+
+        return value if value > 0 else default
 
     def start(self) -> None:
-        self.playwright = sync_playwright().start()
-        self.browser = self.playwright.chromium.launch(headless=True)
-        self.context = self.browser.new_context(
-            viewport={"width": 1400, "height": 900},
-            locale="ru-RU",
-            timezone_id="Europe/Moscow",
-        )
+        if self.is_ready():
+            return
+
+        self._connect_with_retry()
         self._reload_cookies(force=True)
         self.page = self.context.new_page()
         self.page.set_default_timeout(30_000)
-        self.page.set_default_navigation_timeout(30_000)
+        self.page.set_default_navigation_timeout(45_000)
+
         response = self.page.goto(
             "https://www.wildberries.ru/",
             wait_until="domcontentloaded",
         )
         print(
-            "WB browser started: "
+            "WB browser connected over CDP: "
+            f"cdp_url={self.cdp_url}, "
+            f"version={self.browser.version if self.browser else 'unknown'!r}, "
             f"homepage_status={response.status if response else 0}, "
             f"url={self.page.url}, "
             f"cookies={self._cookie_names()}",
             flush=True,
         )
 
+    def _connect_with_retry(self) -> None:
+        if not self.cdp_url:
+            raise RuntimeError("WB_BROWSER_CDP_URL is empty")
+
+        self._disconnect()
+        self.playwright = sync_playwright().start()
+        deadline = time.monotonic() + self.start_timeout_seconds
+        last_error: BaseException | None = None
+
+        while time.monotonic() < deadline:
+            try:
+                browser = self.playwright.chromium.connect_over_cdp(
+                    self.cdp_url,
+                    timeout=self.connect_timeout_ms,
+                )
+
+                if not browser.contexts:
+                    raise RuntimeError(
+                        "CDP browser has no persistent context"
+                    )
+
+                self.browser = browser
+                self.context = browser.contexts[0]
+                return
+
+            except Exception as exc:
+                last_error = exc
+                time.sleep(self.retry_delay_seconds)
+
+        raise RuntimeError(
+            "Failed to connect to external WB Chrome over CDP: "
+            f"url={self.cdp_url}, "
+            f"timeout={self.start_timeout_seconds}s, "
+            f"last_error={last_error}"
+        )
+
+    def _reconnect(self) -> None:
+        print(
+            "WB CDP connection is unavailable; reconnecting",
+            flush=True,
+        )
+
+        try:
+            self._connect_with_retry()
+            self._reload_cookies(force=True)
+            self.page = self.context.new_page()
+            self.page.set_default_timeout(30_000)
+            self.page.set_default_navigation_timeout(45_000)
+        except Exception:
+            self.page = None
+            self._disconnect()
+            raise
+
     def _reload_cookies(self, force: bool = False) -> None:
         if self.context is None:
-            raise RuntimeError("browser context is not started")
+            raise RuntimeError("browser context is not connected")
+
+        import_enabled = (
+            os.getenv(
+                "WB_BROWSER_IMPORT_COOKIE_FILE",
+                "true",
+            ).strip().lower()
+            in {"1", "true", "yes", "on"}
+        )
+
+        if not import_enabled:
+            return
+
+        if not self.cookie_path.exists():
+            print(
+                "WB cookie file does not exist; "
+                "persistent Chrome profile will be used: "
+                f"path={self.cookie_path}",
+                flush=True,
+            )
+            return
 
         stat = self.cookie_path.stat()
         if not force and stat.st_mtime_ns == self.cookie_mtime_ns:
             return
 
-        cookie_header = self.cookie_path.read_text(encoding="utf-8").strip()
+        cookie_header = self.cookie_path.read_text(
+            encoding="utf-8"
+        ).strip()
         cookies = parse_cookie_header(cookie_header)
-        if not cookies:
-            raise RuntimeError("WB cookie file is empty or invalid")
 
-        self.context.clear_cookies()
+        if not cookies:
+            print(
+                "WB cookie file is empty; "
+                "persistent Chrome profile will be used",
+                flush=True,
+            )
+            self.cookie_mtime_ns = stat.st_mtime_ns
+            return
+
         self.context.add_cookies(cookies)
         self.cookie_mtime_ns = stat.st_mtime_ns
         print(
-            "WB cookies loaded from file: "
+            "WB cookies imported without clearing profile: "
             f"count={len(cookies)}, "
             f"names={sorted(cookie['name'] for cookie in cookies)}",
             flush=True,
@@ -445,6 +571,9 @@ class WBBrowser:
 
     def fetch(self, url: str) -> Dict:
         with self.lock:
+            if not self.is_ready():
+                self._reconnect()
+
             if self.page is None or self.context is None:
                 raise RuntimeError("WB browser is not ready")
 
@@ -474,12 +603,66 @@ class WBBrowser:
             return result
 
     def is_ready(self) -> bool:
-        return bool(self.browser and self.browser.is_connected() and self.page)
+        try:
+            return bool(
+                self.browser
+                and self.browser.is_connected()
+                and self.context
+                and self.page
+                and not self.page.is_closed()
+            )
+        except Exception:
+            return False
+
+    def get_health_snapshot(self) -> Dict:
+        browser_version = ""
+        pages_count = 0
+
+        try:
+            if self.browser is not None:
+                browser_version = self.browser.version
+        except Exception:
+            browser_version = ""
+
+        try:
+            if self.context is not None:
+                pages_count = len(self.context.pages)
+        except Exception:
+            pages_count = 0
+
+        ready = self.is_ready()
+
+        return {
+            "status": "ok" if ready else "error",
+            "browser_ready": ready,
+            "cdp_connected": ready,
+            "cdp_url": self.cdp_url,
+            "browser_version": browser_version,
+            "pages_count": pages_count,
+        }
 
     def stop(self) -> None:
-        if self.context is not None:
-            self.context.close()
-        if self.browser is not None:
-            self.browser.close()
+        if self.page is not None:
+            try:
+                self.page.close()
+            except Exception:
+                pass
+            finally:
+                self.page = None
+
+        self._disconnect()
+
+    def _disconnect(self) -> None:
+        # Chrome is owned by the container startup script. Do not close the
+        # persistent context or Browser here, otherwise Playwright would stop
+        # the external browser process.
+        self.context = None
+        self.browser = None
+
         if self.playwright is not None:
-            self.playwright.stop()
+            try:
+                self.playwright.stop()
+            except Exception:
+                pass
+            finally:
+                self.playwright = None

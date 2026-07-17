@@ -22,3 +22,8 @@
 /load_testing/.env.load
 /docker-compose.prod.yml
 /update-server-cookies.ps1
+/go_fetcher/internal/.dockerignore
+/backend/artifacts/
+/backend/compare_ozon_fingerprints.py
+/backend/ozon_browser_probe.py
+/backend/ozon_fingerprint_probe.py

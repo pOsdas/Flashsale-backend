@@ -166,6 +166,8 @@ def classify_error(error: BaseException | str) -> str:
         "проверяем ваш браузер",
         "security check",
         "antibot",
+        "rejected browser fingerprint",
+        "browser challenge",
     }
 
     if any(marker in text for marker in antibot_markers):

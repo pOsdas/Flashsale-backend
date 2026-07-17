@@ -69,42 +69,62 @@ services:
     restart: unless-stopped
 
   ozon_browser_fetcher:
+    platform: linux/amd64
     build:
       context: ./go_fetcher/internal
       dockerfile: ozon_browser_fetcher/Dockerfile
     container_name: flashsale_ozon_browser_fetcher
     environment:
       OZON_COOKIE_PATH: /app/secrets/ozon_cookie.txt
-      OZON_BROWSER_HEADLESS: "true"
+      OZON_BROWSER_CHALLENGE_TIMEOUT_MS: 25000
+      BROWSER_CDP_HOST: 127.0.0.1
+      BROWSER_CDP_PORT: 9222
+      BROWSER_PROFILE_DIR: /data/browser-profile
+      BROWSER_WINDOW_SIZE: 1400,900
+      BROWSER_LANGUAGE: ru-RU
+      BROWSER_DISABLE_SANDBOX: "true"
       PYTHONUNBUFFERED: "1"
     volumes:
+      - ozon_browser_profile:/data/browser-profile
       - ./go_fetcher/secrets:/app/secrets:ro
     ports:
-      - "8095:8095"
+      - "127.0.0.1:8095:8095"
+    shm_size: "1gb"
     restart: unless-stopped
     healthcheck:
       test: [ "CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8095/api/v1/health', timeout=5)\"" ]
       interval: 30s
       timeout: 10s
+      start_period: 90s
       retries: 3
 
   wb_browser_fetcher:
+    platform: linux/amd64
     build:
       context: ./go_fetcher/internal
       dockerfile: wb_browser_fetcher/Dockerfile
     container_name: flashsale_wb_browser_fetcher
     environment:
       WB_COOKIE_PATH: /app/secrets/wb_cookie.txt
+      BROWSER_CDP_HOST: 127.0.0.1
+      BROWSER_CDP_PORT: 9222
+      BROWSER_PROFILE_DIR: /data/browser-profile
+      BROWSER_WINDOW_SIZE: 1400,900
+      BROWSER_LANGUAGE: ru-RU
+      BROWSER_DISABLE_SANDBOX: "true"
       PYTHONUNBUFFERED: "1"
     volumes:
+      - wb_browser_profile:/data/browser-profile
       - ./go_fetcher/secrets:/app/secrets:ro
     ports:
-      - "8096:8096"
+      - "127.0.0.1:8096:8096"
+    shm_size: "1gb"
     restart: unless-stopped
     healthcheck:
       test: [ "CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8096/api/v1/health', timeout=5)\"" ]
       interval: 30s
       timeout: 10s
+      start_period: 90s
       retries: 3
 
   migrate:
@@ -312,3 +332,5 @@ volumes:
   flashsale_grafana_data:
   flashsale_loki_data:
   flashsale_prometheus_data:
+  ozon_browser_profile:
+  wb_browser_profile:

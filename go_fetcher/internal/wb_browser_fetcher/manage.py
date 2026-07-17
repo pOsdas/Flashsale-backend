@@ -65,8 +65,9 @@ def fetch():
 
 @app.get("/api/v1/health")
 def health():
-    ready = browser.is_ready()
-    return jsonify({"status": "ok" if ready else "error"}), 200 if ready else 503
+    health_data = browser.get_health_snapshot()
+    status_code = 200 if health_data["status"] == "ok" else 503
+    return jsonify(health_data), status_code
 
 
 if __name__ == "__main__":

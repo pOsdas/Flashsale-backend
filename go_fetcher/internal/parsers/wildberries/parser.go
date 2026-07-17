@@ -21,7 +21,7 @@ const (
 	catalogURL = "https://www.wildberries.ru/__internal/search/exactmatch/ru/common/v18/search"
 
 	defaultPageSize                = 100
-	defaultWBBrowserFetcherTimeout = 35 * time.Second
+	defaultWBBrowserFetcherTimeout = 60 * time.Second
 
 	wbRequestProfile        = "go_http_client_browser_headers"
 	wbBlockedRecommendation = "pause requests and refresh marketplace session cookies"
