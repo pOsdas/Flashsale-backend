@@ -1,0 +1,10 @@
+# Локальные deployment-файлы
+/update-server-cookies.ps1
+
+# Локальные нагрузочные окружения
+/docker-compose.integration.yml
+/docker-compose.load.yml
+load_testing/
+loki/
+promtail/
+go_fetcher/tools/
