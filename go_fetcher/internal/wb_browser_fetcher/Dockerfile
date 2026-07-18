@@ -48,7 +48,9 @@ COPY wb_browser_fetcher/requirements.txt ./wb_browser_fetcher/requirements.txt
 RUN pip install --no-cache-dir -r ./wb_browser_fetcher/requirements.txt
 
 COPY wb_browser_fetcher ./wb_browser_fetcher
-COPY browser_runtime/start_browser_fetcher.sh /usr/local/bin/start-browser-fetcher
+COPY --chmod=0755 browser_runtime/start_browser_fetcher.sh /usr/local/bin/start-browser-fetcher
+
+RUN sed -i 's/\r$//' /usr/local/bin/start-browser-fetcher && chmod 0755 /usr/local/bin/start-browser-fetcher
 
 RUN useradd --create-home --uid 10001 --shell /bin/bash browser \
     && mkdir -p /data/browser-profile /tmp/browser-runtime \

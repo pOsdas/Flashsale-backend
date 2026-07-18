@@ -8,6 +8,7 @@
 /go_fetcher/tools/diagnostics/
 /go_fetcher/tools/playwright/user_data/
 /go_fetcher/tools/playwright/edge_profiles/
+/go_fetcher/tools/playwright/chrome_profiles/
 
 .idea/
 **/.idea/
