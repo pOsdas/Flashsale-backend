@@ -1,11 +1,9 @@
 import os
 import threading
 import time
-import re
 import json
-from collections import Counter
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List
 from urllib.parse import parse_qs, quote_plus, urlparse
 
 from playwright.sync_api import Browser, BrowserContext, Page, Playwright, sync_playwright
@@ -226,358 +224,286 @@ class WBBrowser:
             return []
         return sorted(cookie["name"] for cookie in self.context.cookies())
 
-    def _fetch_once(self, url: str) -> Dict:
-        if self.page is None:
-            raise RuntimeError("WB browser page is not ready")
+    @staticmethod
+    def _request_kind(requested_url: str) -> str:
+        parsed = urlparse(requested_url)
+        if "/card/" in parsed.path or "/u-card/" in parsed.path:
+            return "detail"
+        if "/search/" in parsed.path:
+            return "search"
+        return ""
 
-        return self.page.evaluate(
-            r"""
-            async (url) => {
-                const response = await fetch(url, {
-                    method: "GET",
-                    credentials: "include",
-                    headers: {"Accept": "application/json, text/plain, */*"}
-                });
-                return {
-                    status_code: response.status,
-                    body: await response.text(),
-                    final_url: response.url,
-                    content_type: response.headers.get("content-type") || ""
-                };
-            }
-            """,
-            url,
+    @staticmethod
+    def _frontend_page_url(requested_url: str) -> str:
+        parsed = urlparse(requested_url)
+        query = parse_qs(parsed.query)
+        nm_id = str((query.get("nm") or [""])[0]).strip()
+        if ("/card/" in parsed.path or "/u-card/" in parsed.path) and nm_id.isdigit():
+            return f"https://www.wildberries.ru/catalog/{nm_id}/detail.aspx"
+
+        search_query = str((query.get("query") or [""])[0]).strip()
+        if "/search/" in parsed.path and search_query:
+            return (
+                "https://www.wildberries.ru/catalog/0/search.aspx?search="
+                f"{quote_plus(search_query)}"
+            )
+
+        raise RuntimeError(f"unsupported WB browser fallback URL: {requested_url}")
+
+    @staticmethod
+    def _is_search_response_url(response_url: str) -> bool:
+        parsed = urlparse(response_url)
+        path = parsed.path.lower()
+        host = (parsed.hostname or "").lower()
+        if path.endswith("/search.aspx"):
+            return False
+        return (
+            "/__internal/search/" in path
+            or (
+                (host == "search.wb.ru" or host.endswith(".search.wb.ru"))
+                and path.endswith("/search")
+            )
+            or ("/exactmatch/" in path and path.endswith("/search"))
         )
 
     @staticmethod
-    def _referer_for_api_url(url: str) -> str:
-        parsed = urlparse(url)
-        query = parse_qs(parsed.query)
+    def _is_detail_response_url(response_url: str) -> bool:
+        path = urlparse(response_url).path.lower()
+        return (
+            path.endswith("/detail")
+            and (
+                "/__internal/card/cards/" in path
+                or "/__internal/u-card/cards/" in path
+                or "/cards/" in path
+            )
+        )
 
-        nm_values = query.get("nm") or []
-        if ("/card/" in parsed.path or "/u-card/" in parsed.path) and nm_values:
-            nm_id = str(nm_values[0]).strip()
-            if nm_id.isdigit():
-                return f"https://www.wildberries.ru/catalog/{nm_id}/detail.aspx"
+    @classmethod
+    def _is_candidate_response(cls, kind: str, response_url: str) -> bool:
+        if kind == "search":
+            return cls._is_search_response_url(response_url)
+        if kind == "detail":
+            return cls._is_detail_response_url(response_url)
+        return False
 
-        search_values = query.get("query") or []
-        if "/search/" in parsed.path and search_values:
-            search_query = str(search_values[0]).strip()
-            if search_query and not search_query.startswith("menu_redirect_subject_v2_"):
-                return (
-                    "https://www.wildberries.ru/catalog/0/search.aspx?search="
-                    f"{quote_plus(search_query)}"
-                )
+    @staticmethod
+    def _matches_requested_resource(
+        kind: str,
+        requested_url: str,
+        response_url: str,
+    ) -> bool:
+        requested_query = parse_qs(urlparse(requested_url).query)
+        response_query = parse_qs(urlparse(response_url).query)
+        if kind == "detail":
+            requested_nm = str((requested_query.get("nm") or [""])[0]).strip()
+            response_nm = str((response_query.get("nm") or [""])[0]).strip()
+            return bool(
+                requested_nm
+                and requested_nm in response_nm.replace(",", ";").split(";")
+            )
+        if kind == "search":
+            requested_search = str(
+                (requested_query.get("query") or [""])[0]
+            ).strip().casefold()
+            response_search = str(
+                (
+                    response_query.get("query")
+                    or response_query.get("search")
+                    or [""]
+                )[0]
+            ).strip().casefold()
+            return bool(requested_search and requested_search == response_search)
+        return False
 
-        return "https://www.wildberries.ru/"
+    @staticmethod
+    def _is_json_content_type(content_type: str) -> bool:
+        media_type = str(content_type or "").split(";", 1)[0].strip().lower()
+        return media_type == "application/json" or media_type.endswith("+json")
 
-    def _prepare_page_for_request(self, url: str) -> Optional[Dict]:
-        if self.page is None:
-            raise RuntimeError("WB browser page is not ready")
+    @staticmethod
+    def _payload_has_products_or_cards(body: str) -> bool:
+        try:
+            payload = json.loads(body)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return False
+        if not isinstance(payload, dict):
+            return False
+        for container in (payload, payload.get("data")):
+            if not isinstance(container, dict):
+                continue
+            for key in ("products", "cards"):
+                if isinstance(container.get(key), list) and container[key]:
+                    return True
+        return False
 
-        referer = self._referer_for_api_url(url)
-        original_query = parse_qs(urlparse(url).query)
-        target_nm = str((original_query.get("nm") or [""])[0]).strip()
-        captured_responses: List[Dict] = []
+    def _read_intercepted_response(self, requested_url: str, response) -> Dict:
+        content_type = str(response.headers.get("content-type", ""))
+        body = ""
+        body_error = ""
+        try:
+            body = response.text()
+        except Exception as exc:
+            body_error = str(exc)
+
+        body_size = len(body.encode("utf-8"))
+        print(
+            "WB browser intercepted response: "
+            f"intercepted_url={response.url}, "
+            f"status={response.status}, "
+            f"content_type={content_type!r}, "
+            f"body_size={body_size}, "
+            f"body_error={body_error!r}",
+            flush=True,
+        )
+
+        result = {
+            "status_code": int(response.status),
+            "body": body,
+            "final_url": str(response.url),
+            "content_type": content_type,
+        }
+        if response.status != 200:
+            result["interception_error"] = (
+                f"intercepted response status is {response.status}, expected 200"
+            )
+        elif not self._is_json_content_type(content_type):
+            result["interception_error"] = "intercepted response Content-Type is not JSON"
+        elif body_error:
+            result["interception_error"] = (
+                f"cannot read intercepted response body: {body_error}"
+            )
+        elif not self._payload_has_products_or_cards(body):
+            result["interception_error"] = (
+                "intercepted JSON does not contain products/cards"
+            )
+        return self._decorate_result(requested_url, result)
+
+    def _capture_frontend_json(self, requested_url: str) -> Dict:
+        if self.context is None:
+            raise RuntimeError("WB browser context is not ready")
+
+        kind = self._request_kind(requested_url)
+        frontend_url = self._frontend_page_url(requested_url)
+        temporary_page = self.context.new_page()
+        temporary_page.set_default_timeout(30_000)
+        temporary_page.set_default_navigation_timeout(45_000)
+        captured: List[Dict] = []
+        seen_responses = set()
 
         def capture_response(response) -> None:
-            if "/__internal/u-card/cards/v4/detail" not in response.url:
+            if (
+                not self._is_candidate_response(kind, response.url)
+                or not self._matches_requested_resource(
+                    kind,
+                    requested_url,
+                    response.url,
+                )
+            ):
                 return
-
-            response_nm = str(
-                (parse_qs(urlparse(response.url).query).get("nm") or [""])[0]
-            )
-            if target_nm not in response_nm.split(";"):
+            response_key = id(response)
+            if response_key in seen_responses:
                 return
-
-            print(
-                "WB browser observed frontend API response: "
-                f"status={response.status}, url={response.url}",
-                flush=True,
-            )
-            if not target_nm or response.status < 200 or response.status >= 300:
-                return
-
+            seen_responses.add(response_key)
             try:
-                captured_responses.append(
-                    {
-                        "status_code": response.status,
-                        "body": response.text(),
-                        "final_url": response.url,
-                        "content_type": response.headers.get("content-type", ""),
-                    }
+                captured.append(
+                    self._read_intercepted_response(requested_url, response)
                 )
             except Exception as exc:
                 print(
-                    "WB browser response capture failed: "
-                    f"url={response.url}, error={exc}",
+                    "WB browser intercepted response processing failed: "
+                    f"intercepted_url={response.url}, "
+                    f"status={response.status}, "
+                    f"content_type={response.headers.get('content-type', '')!r}, "
+                    "body_size=0, "
+                    f"error={exc}",
                     flush=True,
                 )
 
-        self.page.on("response", capture_response)
-        response = self.page.goto(referer, wait_until="domcontentloaded")
-        time.sleep(2)
-        self.page.remove_listener("response", capture_response)
-        title = self.page.title()
-        dom_candidates: Dict[str, List[str]] = {}
-        for name, selector in {
-            "headings": "h1",
-            "prices": '[class*="price"]',
-            "sellers": 'a[href*="seller"], [class*="seller"]',
-            "ratings": '[class*="rating"], [class*="review"]',
-            "brands": 'a[href*="brand"], [class*="brand"]',
-        }.items():
+        # Register both mechanisms before navigation. expect_response provides
+        # an exact network wait; the listener records every matching endpoint.
+        temporary_page.on("response", capture_response)
+        try:
+            response_info = None
+            wait_error = ""
+            navigation = None
             try:
-                dom_candidates[name] = [
-                    " ".join(value.split())[:200]
-                    for value in self.page.locator(selector).all_inner_texts()
-                    if value.strip()
-                ][:20]
-            except Exception:
-                dom_candidates[name] = []
-        print(
-            "WB browser request page prepared: "
-            f"status={response.status if response else 0}, "
-            f"url={self.page.url}, title={title!r}",
-            flush=True,
-        )
+                with temporary_page.expect_response(
+                    lambda response: (
+                        self._is_candidate_response(kind, response.url)
+                        and self._matches_requested_resource(
+                            kind,
+                            requested_url,
+                            response.url,
+                        )
+                        and response.status == 200
+                        and self._is_json_content_type(
+                            response.headers.get("content-type", "")
+                        )
+                    ),
+                    timeout=45_000,
+                ) as response_info:
+                    navigation = temporary_page.goto(
+                        frontend_url,
+                        wait_until="domcontentloaded",
+                    )
+            except Exception as exc:
+                wait_error = str(exc)
 
-        if captured_responses:
-            captured = captured_responses[-1]
+            if (
+                not wait_error
+                and response_info is not None
+                and response_info.value is not None
+            ):
+                expected_response = response_info.value
+                if id(expected_response) not in seen_responses:
+                    capture_response(expected_response)
+
+            document_title = temporary_page.title()
+            navigation_status = navigation.status if navigation else 0
             print(
-                "WB browser captured frontend API response: "
-                f"status={captured['status_code']}, nm={target_nm}",
+                "WB browser frontend page loaded: "
+                f"url={temporary_page.url}, "
+                f"status={navigation_status}, "
+                f"title={document_title!r}, "
+                f"candidates={len(captured)}",
                 flush=True,
             )
-            return captured
 
-        if target_nm:
-            product = self._extract_dom_product(
-                nm_id=target_nm,
-                page_title=title,
-                candidates=dom_candidates,
-            )
-            if product is not None:
-                print(
-                    "WB browser product extracted from DOM: "
-                    f"nm={target_nm}, title={product['name']!r}, "
-                    f"price_u={product['salePriceU']}",
-                    flush=True,
+            for result in captured:
+                result["document_title"] = document_title
+                if (
+                    not result.get("interception_error")
+                    and self._is_acceptable_result(result)
+                ):
+                    return result
+
+            errors = [
+                str(
+                    result.get("interception_error")
+                    or result.get("validation_error")
+                    or "invalid candidate"
                 )
-                return {
-                    "status_code": 200,
-                    "body": '{"products":[' + json.dumps(
-                        product,
-                        ensure_ascii=False,
-                    ) + "]}",
-                    "final_url": self.page.url,
-                    "content_type": "application/json",
-                }
-
-        search_query = str((original_query.get("query") or [""])[0]).strip()
-        if "/search/" in urlparse(url).path and search_query:
-            products = self._extract_search_products()
-            if products:
-                print(
-                    "WB browser search products extracted from DOM: "
-                    f"query={search_query!r}, products={len(products)}",
-                    flush=True,
-                )
-                return {
-                    "status_code": 200,
-                    "body": json.dumps(
-                        {"products": products},
-                        ensure_ascii=False,
-                    ),
-                    "final_url": self.page.url,
-                    "content_type": "application/json",
-                }
-
-        return None
-
-    def _extract_search_products(self) -> List[Dict]:
-        if self.page is None:
-            return []
-
-        return self.page.evaluate(
-            r"""
-            () => {
-                const products = new Map();
-                const anchors = document.querySelectorAll(
-                    'a[href*="/catalog/"][href*="/detail.aspx"]'
-                );
-
-                for (const anchor of anchors) {
-                    const match = anchor.href.match(/\/catalog\/(\d+)\/detail\.aspx/);
-                    if (!match || products.has(match[1])) {
-                        continue;
-                    }
-
-                    const card = anchor.closest('article')
-                        || anchor.closest('[class*="product-card"]')
-                        || anchor.closest('li')
-                        || anchor.parentElement;
-                    if (!card) {
-                        continue;
-                    }
-
-                    const image = card.querySelector('img[alt]');
-                    const titleElement = card.querySelector(
-                        '[class*="name"], [class*="title"]'
-                    );
-                    const name = (
-                        anchor.getAttribute('aria-label')
-                        || anchor.getAttribute('title')
-                        || (image && image.getAttribute('alt'))
-                        || (titleElement && titleElement.textContent)
-                        || ''
-                    ).trim();
-                    if (!name) {
-                        continue;
-                    }
-
-                    const text = (card.innerText || '').replace(/\u00a0/g, ' ');
-                    const amounts = [...text.matchAll(/([\d\s]+)\s*₽/g)]
-                        .map(item => Number(item[1].replace(/\D/g, '')) * 100)
-                        .filter(value => Number.isFinite(value) && value > 0);
-                    const ratingMatch = text.match(/(\d(?:[,.]\d)?)\s*[·•]?\s*(\d+)\s+(?:оцен|отзыв)/i);
-
-                    products.set(match[1], {
-                        id: Number(match[1]),
-                        brand: '',
-                        supplier: '',
-                        reviewRating: ratingMatch
-                            ? Number(ratingMatch[1].replace(',', '.'))
-                            : 0,
-                        feedbacks: ratingMatch ? Number(ratingMatch[2]) : 0,
-                        name: name,
-                        priceU: amounts.length > 1 ? amounts[1] : (amounts[0] || 0),
-                        salePriceU: amounts[0] || 0,
-                        totalQuantity: 1,
-                        sizes: []
-                    });
-                }
-
-                return [...products.values()];
-            }
-            """
-        )
-
-    def _extract_dom_product(
-        self,
-        *,
-        nm_id: str,
-        page_title: str,
-        candidates: Dict[str, List[str]],
-    ) -> Optional[Dict]:
-        if self.page is None:
-            return None
-
-        brands = [
-            value
-            for value in candidates.get("brands", [])
-            if value not in {"Бренды", "Купить сейчас", "В корзину", "В избранное"}
-            and "каталог бренда" not in value.lower()
-            and len(value) <= 80
-        ]
-        brand_counts = Counter(brands)
-        brand = next(
-            (value for value in brands if brand_counts[value] >= 2),
-            brands[0] if brands else "",
-        )
-
-        sellers = [
-            value
-            for value in candidates.get("sellers", [])
-            if value not in {"Стать продавцом", "Продавать товары", "Находки из Китая", "РИВ ГОШ"}
-            and not re.search(r"\d[,.]\d", value)
-            and len(value.split()) <= 5
-        ]
-        seller = sellers[0] if sellers else ""
-
-        name = page_title
-        title_suffix = re.compile(
-            rf"\s+{re.escape(brand)}\s+{re.escape(nm_id)}\s+купить.*$",
-            re.IGNORECASE,
-        ) if brand else re.compile(
-            rf"\s+{re.escape(nm_id)}\s+купить.*$",
-            re.IGNORECASE,
-        )
-        name = title_suffix.sub("", name).strip()
-
-        price_values: List[int] = []
-        for value in candidates.get("prices", []):
-            amounts = re.findall(r"([\d\s\u00a0]+)\s*₽", value)
-            if not amounts:
-                continue
-            price_values = [
-                int(re.sub(r"\D", "", amount)) * 100
-                for amount in amounts
-                if re.sub(r"\D", "", amount)
+                for result in captured
             ]
-            if price_values:
-                break
-
-        rating = 0.0
-        feedbacks = 0
-        for value in candidates.get("ratings", []):
-            match = re.search(r"(\d(?:[,.]\d)?)\s*·\s*(\d+)\s+оцен", value)
-            if match:
-                rating = float(match.group(1).replace(",", "."))
-                feedbacks = int(match.group(2))
-                break
-
-        body_text = self.page.locator("body").inner_text()
-        available = "В корзину" in body_text or "Купить сейчас" in body_text
-
-        if not name or not nm_id.isdigit():
-            return None
-
-        current_price = price_values[0] if price_values else 0
-        old_price = price_values[1] if len(price_values) > 1 else current_price
-        return {
-            "id": int(nm_id),
-            "brand": brand,
-            "supplier": seller,
-            "reviewRating": rating,
-            "feedbacks": feedbacks,
-            "name": name,
-            "priceU": old_price,
-            "salePriceU": current_price,
-            "totalQuantity": 1 if available else 0,
-            "sizes": [],
-        }
-
-    def _recover_antibot_session(self) -> None:
-        if self.context is None or self.page is None:
-            raise RuntimeError("WB browser is not ready")
-
-        cookies = [
-            cookie
-            for cookie in self.context.cookies()
-            if cookie.get("name") != "x_wbaas_token"
-        ]
-        self.context.clear_cookies()
-        if cookies:
-            self.context.add_cookies(cookies)
-
-        print(
-            "WB browser session recovery started: "
-            "removed_cookie=x_wbaas_token",
-            flush=True,
-        )
-        response = self.page.goto(
-            "https://www.wildberries.ru/",
-            wait_until="domcontentloaded",
-        )
-        time.sleep(5)
-        print(
-            "WB browser session recovery finished: "
-            f"homepage_status={response.status if response else 0}, "
-            f"url={self.page.url}, "
-            f"cookies={self._cookie_names()}",
-            flush=True,
-        )
+            if wait_error:
+                errors.append(f"network response wait failed: {wait_error}")
+            raise RuntimeError(
+                "WB frontend page did not produce valid search/detail JSON: "
+                + ("; ".join(errors) if errors else "no matching network response")
+            )
+        finally:
+            try:
+                temporary_page.remove_listener("response", capture_response)
+            except Exception:
+                pass
+            try:
+                temporary_page.close()
+            finally:
+                print(
+                    "WB browser temporary page closed: "
+                    f"frontend_url={frontend_url}",
+                    flush=True,
+                )
 
     def fetch(self, url: str) -> Dict:
         with self.lock:
@@ -588,35 +514,9 @@ class WBBrowser:
                 raise RuntimeError("WB browser is not ready")
 
             self._reload_cookies()
-            result = self._fetch_once(url)
-            result = self._decorate_result(url, result)
-            self._log_result("browser_context_api", result)
-
-            if self._is_acceptable_result(result):
-                return result
-
-            if int(result.get("status_code") or 0) in {403, 498}:
-                self._recover_antibot_session()
-                result = self._fetch_once(url)
-                result = self._decorate_result(url, result)
-                self._log_result("browser_context_api_after_recovery", result)
-                if self._is_acceptable_result(result):
-                    return result
-
-            captured_result = self._prepare_page_for_request(url)
-            if captured_result is not None:
-                captured_result = self._decorate_result(url, captured_result)
-                self._log_result("product_page_alternative", captured_result)
-                if self._is_acceptable_result(captured_result):
-                    return captured_result
-
-            errors = [str(result.get("validation_error") or "invalid response")]
-            if captured_result is not None:
-                errors.append(str(captured_result.get("validation_error") or "invalid alternative response"))
-            raise RuntimeError(
-                "WB browser fallback did not return valid marketplace data: "
-                + "; ".join(errors)
-            )
+            result = self._capture_frontend_json(url)
+            self._log_result("frontend_network_interception", result)
+            return result
 
     def _decorate_result(self, requested_url: str, result: Dict) -> Dict:
         decorated = dict(result or {})
@@ -626,10 +526,12 @@ class WBBrowser:
             str(decorated.get("content_type") or ""),
             requested_url,
         )
-        try:
-            document_title = self.page.title() if self.page is not None else ""
-        except Exception:
-            document_title = ""
+        document_title = str(decorated.get("document_title") or "")
+        if not document_title:
+            try:
+                document_title = self.page.title() if self.page is not None else ""
+            except Exception:
+                document_title = ""
         decorated.update(
             {
                 "requested_url": requested_url,

@@ -32,12 +32,16 @@ def requested_nm_id(requested_url: str) -> str:
 
 
 def _products(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
-    products = payload.get("products")
-    if isinstance(products, list):
-        return [item for item in products if isinstance(item, dict)]
+    for key in ("products", "cards"):
+        products = payload.get(key)
+        if isinstance(products, list):
+            return [item for item in products if isinstance(item, dict)]
     data = payload.get("data")
-    if isinstance(data, dict) and isinstance(data.get("products"), list):
-        return [item for item in data["products"] if isinstance(item, dict)]
+    if isinstance(data, dict):
+        for key in ("products", "cards"):
+            products = data.get(key)
+            if isinstance(products, list):
+                return [item for item in products if isinstance(item, dict)]
     return []
 
 
@@ -102,6 +106,16 @@ def analyze_response(
             "parsed_nm_id": "",
         }
 
+    products = _products(payload)
+    if not products:
+        return {
+            "valid": False,
+            "error": "Wildberries JSON payload does not contain products/cards",
+            "response_kind": response_kind,
+            "requested_nm_id": requested_nm,
+            "parsed_nm_id": "",
+        }
+
     if not requested_nm:
         return {
             "valid": True,
@@ -111,7 +125,6 @@ def analyze_response(
             "parsed_nm_id": "",
         }
 
-    products = _products(payload)
     parsed_nm = str(products[0].get("id") or "").strip() if products else ""
     matching = next(
         (product for product in products if str(product.get("id") or "").strip() == requested_nm),

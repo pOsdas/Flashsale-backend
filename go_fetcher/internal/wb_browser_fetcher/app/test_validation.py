@@ -37,6 +37,11 @@ class WBResponseValidationTests(unittest.TestCase):
         result = analyze_response(json.dumps({"state": "ok"}), "application/json", DETAIL_URL)
         self.assertFalse(result["valid"])
 
+    def test_accepts_cards_container(self):
+        body = json.dumps({"cards": json.loads(product_body())["products"]})
+        result = analyze_response(body, "application/json", DETAIL_URL)
+        self.assertTrue(result["valid"])
+
     def test_rejects_different_nm_id(self):
         result = analyze_response(product_body(id=123), "application/json", DETAIL_URL)
         self.assertFalse(result["valid"])
