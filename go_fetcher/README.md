@@ -181,6 +181,23 @@ count.
 
 ## Go commands
 
+### Update cookie scripts
+
+```shell
+poetry run python ..\go_fetcher\tools\playwright\update_marketplace_cookie.py --marketplace wb
+```
+```shell
+poetry run python ..\go_fetcher\tools\playwright\update_marketplace_cookie.py --marketplace ozon
+```
+
+And then:
+```shell
+powershell.exe `
+   -NoProfile `
+   -ExecutionPolicy Bypass `
+   -File .\update-server-cookies.ps1
+```
+
 ### Wildberries search
 
 ```shell
