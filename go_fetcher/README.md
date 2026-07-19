@@ -3,6 +3,23 @@
 The Go fetcher uses regular HTTP parsers first and can fall back to browser
 fetchers for Ozon and Wildberries.
 
+## Parser health timeouts
+
+`GET /api/v1/parser/health` runs the Wildberries and Ozon scenarios in
+parallel. Each scenario gets the full marketplace timeout; the slightly larger
+handler timeout is the common upper bound and also covers result collection and
+JSON encoding:
+
+```shell
+PARSER_HEALTH_MARKETPLACE_TIMEOUT_SECONDS=90
+PARSER_HEALTH_HANDLER_TIMEOUT_SECONDS=100
+```
+
+The marketplace timeout must cover the complete `search -> product` scenario,
+including HTTP attempts and browser fallbacks. The handler timeout must be
+greater than the marketplace timeout. Docker Compose already passes these
+variables through `go_fetcher/.env` via the service's `env_file` setting.
+
 ## Browser architecture
 
 The browser fetchers no longer call `playwright.chromium.launch()`.

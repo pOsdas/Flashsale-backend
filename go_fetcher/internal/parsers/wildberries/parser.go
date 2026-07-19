@@ -113,7 +113,7 @@ func NewParser(cfg ParserConfig, logger *slog.Logger) *Parser {
 		client: &http.Client{
 			Timeout: cfg.Timeout,
 		},
-		browserClient:  NewBrowserClient(cfg.BrowserFetcherEnabled, cfg.BrowserFetcherURL, cfg.BrowserFetcherTimeout),
+		browserClient:  NewBrowserClient(cfg.BrowserFetcherEnabled, cfg.BrowserFetcherURL, cfg.BrowserFetcherTimeout, logger),
 		logger:         logger,
 		cookie:         cfg.Cookie,
 		cookieProvider: cfg.CookieProvider,
@@ -137,8 +137,10 @@ func (p *Parser) ParseProduct(ctx context.Context, nmID string) ([]models.Produc
 		return nil, fmt.Errorf("parse WB product %s: %w", nmID, p.withRequestDetails(err, requestURL))
 	}
 
-	products := normalizeWBProducts(response.productList())
-	products = deduplicateProductsBySKU(products)
+	products, err := validateWBProductResponse(response, nmID)
+	if err != nil {
+		return nil, fmt.Errorf("validate WB product %s: %w", nmID, err)
+	}
 
 	p.logger.Info(
 		"wildberries product parsed",

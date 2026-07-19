@@ -10,6 +10,8 @@ from urllib.parse import parse_qs, quote_plus, urlparse
 
 from playwright.sync_api import Browser, BrowserContext, Page, Playwright, sync_playwright
 
+from wb_browser_fetcher.app.validation import analyze_response
+
 
 def parse_cookie_header(cookie_header: str) -> List[Dict]:
     cookies: List[Dict] = []
@@ -238,7 +240,9 @@ class WBBrowser:
                 });
                 return {
                     status_code: response.status,
-                    body: await response.text()
+                    body: await response.text(),
+                    final_url: response.url,
+                    content_type: response.headers.get("content-type") || ""
                 };
             }
             """,
@@ -299,6 +303,8 @@ class WBBrowser:
                     {
                         "status_code": response.status,
                         "body": response.text(),
+                        "final_url": response.url,
+                        "content_type": response.headers.get("content-type", ""),
                     }
                 )
             except Exception as exc:
@@ -364,6 +370,8 @@ class WBBrowser:
                         product,
                         ensure_ascii=False,
                     ) + "]}",
+                    "final_url": self.page.url,
+                    "content_type": "application/json",
                 }
 
         search_query = str((original_query.get("query") or [""])[0]).strip()
@@ -381,6 +389,8 @@ class WBBrowser:
                         {"products": products},
                         ensure_ascii=False,
                     ),
+                    "final_url": self.page.url,
+                    "content_type": "application/json",
                 }
 
         return None
@@ -578,29 +588,86 @@ class WBBrowser:
                 raise RuntimeError("WB browser is not ready")
 
             self._reload_cookies()
-            captured_result = self._prepare_page_for_request(url)
-            if captured_result is not None:
-                return captured_result
-
             result = self._fetch_once(url)
-            status_code = int(result.get("status_code") or 0)
-            print(
-                "WB browser fetch completed: "
-                f"status={status_code}, url={url}",
-                flush=True,
-            )
+            result = self._decorate_result(url, result)
+            self._log_result("browser_context_api", result)
 
-            if status_code in {403, 498}:
+            if self._is_acceptable_result(result):
+                return result
+
+            if int(result.get("status_code") or 0) in {403, 498}:
                 self._recover_antibot_session()
                 result = self._fetch_once(url)
-                print(
-                    "WB browser fetch after recovery completed: "
-                    f"status={int(result.get('status_code') or 0)}, "
-                    f"url={url}",
-                    flush=True,
-                )
+                result = self._decorate_result(url, result)
+                self._log_result("browser_context_api_after_recovery", result)
+                if self._is_acceptable_result(result):
+                    return result
 
-            return result
+            captured_result = self._prepare_page_for_request(url)
+            if captured_result is not None:
+                captured_result = self._decorate_result(url, captured_result)
+                self._log_result("product_page_alternative", captured_result)
+                if self._is_acceptable_result(captured_result):
+                    return captured_result
+
+            errors = [str(result.get("validation_error") or "invalid response")]
+            if captured_result is not None:
+                errors.append(str(captured_result.get("validation_error") or "invalid alternative response"))
+            raise RuntimeError(
+                "WB browser fallback did not return valid marketplace data: "
+                + "; ".join(errors)
+            )
+
+    def _decorate_result(self, requested_url: str, result: Dict) -> Dict:
+        decorated = dict(result or {})
+        body = str(decorated.get("body") or "")
+        analysis = analyze_response(
+            body,
+            str(decorated.get("content_type") or ""),
+            requested_url,
+        )
+        try:
+            document_title = self.page.title() if self.page is not None else ""
+        except Exception:
+            document_title = ""
+        decorated.update(
+            {
+                "requested_url": requested_url,
+                "final_url": str(decorated.get("final_url") or requested_url),
+                "response_size": len(body.encode("utf-8")),
+                "document_title": document_title,
+                "response_kind": analysis["response_kind"],
+                "requested_nm_id": analysis["requested_nm_id"],
+                "parsed_nm_id": analysis["parsed_nm_id"],
+                "valid": bool(analysis["valid"]),
+                "validation_error": str(analysis["error"] or ""),
+            }
+        )
+        return decorated
+
+    @staticmethod
+    def _is_acceptable_result(result: Dict) -> bool:
+        status_code = int(result.get("status_code") or 0)
+        return 200 <= status_code < 300 and bool(result.get("valid"))
+
+    @staticmethod
+    def _log_result(strategy: str, result: Dict) -> None:
+        print(
+            "WB browser fallback response: "
+            f"strategy={strategy}, "
+            f"requested_url={result.get('requested_url', '')}, "
+            f"final_url={result.get('final_url', '')}, "
+            f"status={int(result.get('status_code') or 0)}, "
+            f"content_type={result.get('content_type', '')!r}, "
+            f"response_size={int(result.get('response_size') or 0)}, "
+            f"document_title={result.get('document_title', '')!r}, "
+            f"response_kind={result.get('response_kind', '')}, "
+            f"requested_nm_id={result.get('requested_nm_id', '')}, "
+            f"parsed_nm_id={result.get('parsed_nm_id', '')}, "
+            f"valid={bool(result.get('valid'))}, "
+            f"validation_error={result.get('validation_error', '')!r}",
+            flush=True,
+        )
 
     def is_ready(self) -> bool:
         try:

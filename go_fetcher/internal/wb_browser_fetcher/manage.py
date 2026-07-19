@@ -56,6 +56,14 @@ def fetch():
             {
                 "status_code": int(result.get("status_code") or 0),
                 "body": body,
+                "requested_url": str(result.get("requested_url") or url),
+                "final_url": str(result.get("final_url") or ""),
+                "content_type": str(result.get("content_type") or ""),
+                "response_size": int(result.get("response_size") or 0),
+                "document_title": str(result.get("document_title") or ""),
+                "response_kind": str(result.get("response_kind") or ""),
+                "requested_nm_id": str(result.get("requested_nm_id") or ""),
+                "parsed_nm_id": str(result.get("parsed_nm_id") or ""),
             }
         )
     except Exception as exc:
