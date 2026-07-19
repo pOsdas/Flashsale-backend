@@ -5,6 +5,7 @@ from wb_browser_fetcher.app.validation import analyze_response, is_generic_title
 
 
 DETAIL_URL = "https://www.wildberries.ru/__internal/u-card/cards/v4/detail?nm=881219291"
+SEARCH_URL = "https://www.wildberries.ru/__internal/search/exactmatch/ru/common/v18/search?query=iphone&resultset=catalog"
 
 
 def product_body(**overrides):
@@ -24,6 +25,16 @@ class WBResponseValidationTests(unittest.TestCase):
         self.assertTrue(result["valid"])
         self.assertEqual(result["parsed_nm_id"], "881219291")
 
+    def test_accepts_json_served_as_text_plain(self):
+        result = analyze_response(
+            product_body(),
+            "text/plain; charset=UTF-8",
+            DETAIL_URL,
+            DETAIL_URL,
+        )
+        self.assertTrue(result["valid"])
+        self.assertTrue(result["json_decode_success"])
+
     def test_rejects_generic_homepage_html(self):
         result = analyze_response(
             "<html><title>Интернет-магазин Wildberries: широкий ассортимент товаров - скидки каждый день!</title></html>",
@@ -36,6 +47,26 @@ class WBResponseValidationTests(unittest.TestCase):
     def test_rejects_http_200_non_product_json(self):
         result = analyze_response(json.dumps({"state": "ok"}), "application/json", DETAIL_URL)
         self.assertFalse(result["valid"])
+
+    def test_rejects_filters_resultset_for_search(self):
+        result = analyze_response(
+            product_body(),
+            "text/plain",
+            SEARCH_URL,
+            SEARCH_URL.replace("resultset=catalog", "resultset=filters"),
+        )
+        self.assertFalse(result["valid"])
+        self.assertEqual(result["response_kind"], "search_filters")
+
+    def test_accepts_catalog_resultset_for_search(self):
+        result = analyze_response(
+            product_body(),
+            "text/plain",
+            SEARCH_URL,
+            SEARCH_URL,
+        )
+        self.assertTrue(result["valid"])
+        self.assertEqual(result["response_kind"], "search_catalog")
 
     def test_accepts_cards_container(self):
         body = json.dumps({"cards": json.loads(product_body())["products"]})

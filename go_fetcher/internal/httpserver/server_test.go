@@ -20,6 +20,14 @@ type fakeHealthParser struct {
 	parse  func(context.Context, string) ([]models.Product, error)
 }
 
+type detailedParserError struct {
+	message string
+	details map[string]interface{}
+}
+
+func (e detailedParserError) Error() string                         { return e.message }
+func (e detailedParserError) ParserDetails() map[string]interface{} { return e.details }
+
 func (p fakeHealthParser) SearchProducts(ctx context.Context, query string, limit int) ([]models.Product, error) {
 	return p.search(ctx, query, limit)
 }
@@ -193,5 +201,39 @@ func TestParserHealthRequestCancellationCancelsBothChecks(t *testing.T) {
 	case <-done:
 	case <-time.After(time.Second):
 		t.Fatal("request cancellation did not cancel both checks")
+	}
+}
+
+func TestClassifyParserErrorPrefersBrowserFallbackFailure(t *testing.T) {
+	tests := []struct {
+		name     string
+		kind     string
+		wantType string
+	}{
+		{name: "http 200 validation", kind: "parser_response_invalid", wantType: "parser_response_invalid"},
+		{name: "fallback timeout", kind: "browser_fallback_timeout", wantType: "browser_fallback_timeout"},
+		{name: "fallback antibot", kind: "blocked_by_antibot", wantType: "blocked_by_antibot"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			err := detailedParserError{
+				message: "direct HTTP status code: 403; browser fallback failed later",
+				details: map[string]interface{}{
+					"http_parser_error":           "unexpected WB status code: 403",
+					"browser_fallback_error":      "fallback-specific failure",
+					"browser_fallback_error_type": test.kind,
+					"final_error_source":          "browser_fallback",
+				},
+			}
+
+			classified := classifyParserError(err)
+			if classified.ErrorType != test.wantType {
+				t.Fatalf("ErrorType = %q, want %q", classified.ErrorType, test.wantType)
+			}
+			if classified.Details["http_parser_error"] == nil || classified.Details["browser_fallback_error"] == nil {
+				t.Fatalf("both errors must remain in details: %#v", classified.Details)
+			}
+		})
 	}
 }

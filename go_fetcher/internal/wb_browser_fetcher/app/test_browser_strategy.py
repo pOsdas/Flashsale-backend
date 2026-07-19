@@ -6,7 +6,17 @@ from wb_browser_fetcher.app.browser import WBBrowser
 
 
 DETAIL_URL = "https://www.wildberries.ru/__internal/u-card/cards/v4/detail?nm=881219291"
-SEARCH_URL = "https://www.wildberries.ru/__internal/search/exactmatch/ru/common/v18/search?query=iphone"
+SEARCH_URL = (
+    "https://www.wildberries.ru/__internal/search/exactmatch/ru/common/v18/search"
+    "?query=iphone&resultset=catalog"
+)
+
+
+def search_endpoint(resultset="catalog"):
+    return (
+        "https://www.wildberries.ru/__internal/u-search/exactmatch/ru/common/v18/search"
+        f"?query=iphone&resultset={resultset}"
+    )
 
 
 class FakeResponse:
@@ -15,8 +25,10 @@ class FakeResponse:
         self.status = status
         self.headers = {"content-type": content_type}
         self._body = body
+        self.text_calls = 0
 
     def text(self):
+        self.text_calls += 1
         return self._body
 
 
@@ -32,7 +44,7 @@ class FakeExpectedResponse:
 
     def __exit__(self, exc_type, exc_value, traceback):
         if exc_type is None and self.value is None:
-            raise TimeoutError("no matching response")
+            raise TimeoutError("no valid matching response")
 
 
 class FakeNavigation:
@@ -60,6 +72,8 @@ class FakeTemporaryPage:
         self.listeners.append(callback)
 
     def remove_listener(self, event, callback):
+        if event != "response":
+            raise AssertionError(f"unexpected event: {event}")
         if callback in self.listeners:
             self.listeners.remove(callback)
 
@@ -74,8 +88,8 @@ class FakeTemporaryPage:
             for listener in list(self.listeners):
                 listener(response)
             if self.expectation and self.expectation.predicate(response):
-                if self.expectation.value is None:
-                    self.expectation.value = response
+                self.expectation.value = response
+                break
         return FakeNavigation()
 
     def title(self):
@@ -104,6 +118,10 @@ class StrategyBrowser(WBBrowser):
         self.page = FakeMainPage()
         self.temporary_page = FakeTemporaryPage(responses)
         self.context = FakeContext(self.temporary_page)
+        self.default_request_timeout_ms = 60_000
+        self.network_wait_safety_margin_ms = 5_000
+        self.network_wait_min_ms = 1_000
+        self.network_wait_max_ms = 40_000
 
     def is_ready(self):
         return True
@@ -112,12 +130,12 @@ class StrategyBrowser(WBBrowser):
         return None
 
 
-def product_body(container="products"):
+def product_body(product_id=881219291, container="products"):
     return json.dumps(
         {
             container: [
                 {
-                    "id": 881219291,
+                    "id": product_id,
                     "name": "iPhone 17 Pro 512 GB",
                     "salePriceU": 14999000,
                     "totalQuantity": 1,
@@ -128,44 +146,127 @@ def product_body(container="products"):
 
 
 class WBBrowserStrategyTests(unittest.TestCase):
-    def test_search_opens_real_page_and_returns_intercepted_json(self):
-        endpoint = "https://search.wb.ru/exactmatch/ru/common/v18/search?query=iphone"
-        browser = StrategyBrowser([FakeResponse(endpoint, product_body())])
-
-        result = browser.fetch(SEARCH_URL)
-
-        self.assertEqual(
-            browser.temporary_page.url,
-            "https://www.wildberries.ru/catalog/0/search.aspx?search=iphone",
+    def test_text_plain_catalog_json_is_accepted(self):
+        response = FakeResponse(
+            search_endpoint(),
+            product_body(),
+            "text/plain; charset=UTF-8",
         )
-        self.assertTrue(browser.temporary_page.listener_was_registered_before_goto)
-        self.assertTrue(browser.temporary_page.closed)
-        self.assertEqual(result["final_url"], endpoint)
-        self.assertEqual(json.loads(result["body"])["products"][0]["id"], 881219291)
+        browser = StrategyBrowser([response])
 
-    def test_detail_opens_product_page_and_accepts_cards_json(self):
-        endpoint = "https://www.wildberries.ru/__internal/card/cards/v4/detail?nm=881219291"
-        browser = StrategyBrowser([FakeResponse(endpoint, product_body("cards"))])
+        result = browser.fetch(SEARCH_URL, request_timeout_ms=35_000)
 
-        result = browser.fetch(DETAIL_URL)
-
-        self.assertEqual(
-            browser.temporary_page.url,
-            "https://www.wildberries.ru/catalog/881219291/detail.aspx",
-        )
         self.assertTrue(result["valid"])
-        self.assertEqual(result["parsed_nm_id"], "881219291")
+        self.assertTrue(result["json_decode_success"])
+        self.assertEqual(result["response_kind"], "search_catalog")
+        self.assertEqual(result["resultset"], "catalog")
+        self.assertEqual(result["products_count"], 1)
+        self.assertEqual(result["content_type"], "text/plain; charset=UTF-8")
+        self.assertEqual(browser.temporary_page.listeners, [])
         self.assertTrue(browser.temporary_page.closed)
 
-    def test_html_candidate_is_rejected_and_temporary_page_is_closed(self):
-        endpoint = "https://www.wildberries.ru/__internal/search/catalog/search?query=iphone"
+    def test_html_body_is_rejected(self):
         browser = StrategyBrowser(
-            [FakeResponse(endpoint, "<html>blocked</html>", "text/html")]
+            [FakeResponse(search_endpoint(), "<html>Angie</html>", "text/html")]
         )
 
-        with self.assertRaisesRegex(RuntimeError, "Content-Type is not JSON"):
-            browser.fetch(SEARCH_URL)
+        with self.assertRaisesRegex(RuntimeError, "HTML"):
+            browser.fetch(SEARCH_URL, 35_000)
 
+    def test_text_plain_non_json_is_rejected(self):
+        browser = StrategyBrowser(
+            [FakeResponse(search_endpoint(), "not json", "text/plain")]
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "not Wildberries JSON"):
+            browser.fetch(SEARCH_URL, 35_000)
+
+    def test_filters_resultset_is_not_accepted(self):
+        browser = StrategyBrowser(
+            [FakeResponse(search_endpoint("filters"), product_body(), "text/plain")]
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "resultset=filters"):
+            browser.fetch(SEARCH_URL, 35_000)
+
+    def test_catalog_resultset_with_products_is_accepted(self):
+        browser = StrategyBrowser(
+            [FakeResponse(search_endpoint("catalog"), product_body(), "text/plain")]
+        )
+
+        result = browser.fetch(SEARCH_URL, 35_000)
+
+        self.assertTrue(result["valid"])
+        self.assertEqual(result["resultset"], "catalog")
+
+    def test_first_invalid_second_valid_returns_second(self):
+        invalid = FakeResponse(search_endpoint("filters"), product_body(), "text/plain")
+        valid = FakeResponse(search_endpoint("catalog"), product_body(), "text/plain")
+        browser = StrategyBrowser([invalid, valid])
+
+        result = browser.fetch(SEARCH_URL, 35_000)
+
+        self.assertEqual(result["final_url"], valid.url)
+        self.assertEqual(invalid.text_calls, 1)
+        self.assertEqual(valid.text_calls, 1)
+
+    def test_wait_stops_after_first_valid_response(self):
+        valid = FakeResponse(search_endpoint(), product_body(), "text/plain")
+        later = FakeResponse(search_endpoint(), product_body(product_id=999), "text/plain")
+        browser = StrategyBrowser([valid, later])
+
+        result = browser.fetch(SEARCH_URL, 35_000)
+
+        self.assertTrue(result["valid"])
+        self.assertEqual(valid.text_calls, 1)
+        self.assertEqual(later.text_calls, 0)
+
+    def test_internal_wait_is_less_than_request_timeout(self):
+        browser = StrategyBrowser(
+            [FakeResponse(search_endpoint(), product_body(), "text/plain")]
+        )
+
+        browser.fetch(SEARCH_URL, request_timeout_ms=35_000)
+
+        self.assertEqual(browser.temporary_page.expect_timeout, 30_000)
+        self.assertLess(browser.temporary_page.expect_timeout, 35_000)
+
+    def test_detail_requires_matching_nm_id(self):
+        mismatch = FakeResponse(
+            "https://www.wildberries.ru/__internal/u-card/cards/v4/detail?nm=123",
+            product_body(product_id=123),
+            "text/plain",
+        )
+        browser = StrategyBrowser([mismatch])
+
+        with self.assertRaisesRegex(RuntimeError, "no valid matching response"):
+            browser.fetch(DETAIL_URL, 35_000)
+
+    def test_detail_text_plain_json_is_accepted_for_matching_nm_id(self):
+        response = FakeResponse(
+            "https://www.wildberries.ru/__internal/u-card/cards/v4/detail?nm=881219291",
+            product_body(),
+            "text/plain; charset=UTF-8",
+        )
+        browser = StrategyBrowser([response])
+
+        result = browser.fetch(DETAIL_URL, 35_000)
+
+        self.assertTrue(result["valid"])
+        self.assertEqual(result["response_kind"], "detail")
+        self.assertEqual(result["requested_nm_id"], "881219291")
+        self.assertEqual(result["parsed_nm_id"], "881219291")
+
+    def test_listener_and_page_are_cleaned_in_finally(self):
+        browser = StrategyBrowser(
+            [FakeResponse(search_endpoint(), "not json", "text/plain")]
+        )
+
+        with self.assertRaises(RuntimeError):
+            browser.fetch(SEARCH_URL, 35_000)
+
+        self.assertTrue(browser.temporary_page.listener_was_registered_before_goto)
+        self.assertEqual(browser.temporary_page.listeners, [])
         self.assertTrue(browser.temporary_page.closed)
 
 

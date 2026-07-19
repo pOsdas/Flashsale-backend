@@ -1,7 +1,6 @@
 import os
 import threading
 import time
-import json
 from pathlib import Path
 from typing import Dict, List
 from urllib.parse import parse_qs, quote_plus, urlparse
@@ -75,6 +74,22 @@ class WBBrowser:
                     "1",
                 )
             ),
+        )
+        self.default_request_timeout_ms = self._get_positive_int(
+            "WB_BROWSER_REQUEST_TIMEOUT_MS",
+            60_000,
+        )
+        self.network_wait_safety_margin_ms = self._get_positive_int(
+            "WB_BROWSER_NETWORK_WAIT_SAFETY_MARGIN_MS",
+            5_000,
+        )
+        self.network_wait_min_ms = self._get_positive_int(
+            "WB_BROWSER_NETWORK_WAIT_MIN_MS",
+            1_000,
+        )
+        self.network_wait_max_ms = self._get_positive_int(
+            "WB_BROWSER_NETWORK_WAIT_MAX_MS",
+            40_000,
         )
 
     @staticmethod
@@ -315,26 +330,27 @@ class WBBrowser:
             return bool(requested_search and requested_search == response_search)
         return False
 
-    @staticmethod
-    def _is_json_content_type(content_type: str) -> bool:
-        media_type = str(content_type or "").split(";", 1)[0].strip().lower()
-        return media_type == "application/json" or media_type.endswith("+json")
-
-    @staticmethod
-    def _payload_has_products_or_cards(body: str) -> bool:
+    def _network_wait_timeout_ms(self, request_timeout_ms: int | None) -> int:
         try:
-            payload = json.loads(body)
-        except (TypeError, ValueError, json.JSONDecodeError):
-            return False
-        if not isinstance(payload, dict):
-            return False
-        for container in (payload, payload.get("data")):
-            if not isinstance(container, dict):
-                continue
-            for key in ("products", "cards"):
-                if isinstance(container.get(key), list) and container[key]:
-                    return True
-        return False
+            outer_timeout_ms = int(request_timeout_ms or 0)
+        except (TypeError, ValueError):
+            outer_timeout_ms = 0
+        if outer_timeout_ms <= 0:
+            outer_timeout_ms = self.default_request_timeout_ms
+
+        safety_margin_ms = min(
+            self.network_wait_safety_margin_ms,
+            max(3_000, outer_timeout_ms // 3),
+        )
+        wait_timeout_ms = outer_timeout_ms - safety_margin_ms
+        wait_timeout_ms = min(wait_timeout_ms, self.network_wait_max_ms)
+        wait_timeout_ms = max(wait_timeout_ms, self.network_wait_min_ms)
+
+        # Even for unusually small caller budgets the internal wait must never
+        # outlive the HTTP request that owns it.
+        if wait_timeout_ms >= outer_timeout_ms:
+            wait_timeout_ms = max(1, outer_timeout_ms - 1)
+        return wait_timeout_ms
 
     def _read_intercepted_response(self, requested_url: str, response) -> Dict:
         content_type = str(response.headers.get("content-type", ""))
@@ -346,16 +362,6 @@ class WBBrowser:
             body_error = str(exc)
 
         body_size = len(body.encode("utf-8"))
-        print(
-            "WB browser intercepted response: "
-            f"intercepted_url={response.url}, "
-            f"status={response.status}, "
-            f"content_type={content_type!r}, "
-            f"body_size={body_size}, "
-            f"body_error={body_error!r}",
-            flush=True,
-        )
-
         result = {
             "status_code": int(response.status),
             "body": body,
@@ -366,31 +372,57 @@ class WBBrowser:
             result["interception_error"] = (
                 f"intercepted response status is {response.status}, expected 200"
             )
-        elif not self._is_json_content_type(content_type):
-            result["interception_error"] = "intercepted response Content-Type is not JSON"
         elif body_error:
             result["interception_error"] = (
                 f"cannot read intercepted response body: {body_error}"
             )
-        elif not self._payload_has_products_or_cards(body):
-            result["interception_error"] = (
-                "intercepted JSON does not contain products/cards"
-            )
-        return self._decorate_result(requested_url, result)
+        result = self._decorate_result(requested_url, result)
+        if result.get("interception_error"):
+            result["valid"] = False
+            if not result.get("validation_error"):
+                result["validation_error"] = result["interception_error"]
+        if not result.get("valid") and not result.get("interception_error"):
+            result["interception_error"] = result.get("validation_error")
 
-    def _capture_frontend_json(self, requested_url: str) -> Dict:
+        print(
+            "WB browser intercepted response: "
+            f"intercepted_url={response.url}, "
+            f"status={response.status}, "
+            f"content_type={content_type!r}, "
+            f"body_size={body_size}, "
+            f"body_error={body_error!r}, "
+            f"json_decode_success={bool(result.get('json_decode_success'))}, "
+            f"response_kind={result.get('response_kind', '')}, "
+            f"resultset={result.get('resultset', '')}, "
+            f"products_count={int(result.get('products_count') or 0)}, "
+            f"requested_nm_id={result.get('requested_nm_id', '')}, "
+            f"parsed_nm_id={result.get('parsed_nm_id', '')}, "
+            f"validation_error={result.get('validation_error', '')!r}",
+            flush=True,
+        )
+        return result
+
+    def _capture_frontend_json(
+        self,
+        requested_url: str,
+        request_timeout_ms: int | None = None,
+    ) -> Dict:
         if self.context is None:
             raise RuntimeError("WB browser context is not ready")
 
         kind = self._request_kind(requested_url)
         frontend_url = self._frontend_page_url(requested_url)
+        network_wait_timeout_ms = self._network_wait_timeout_ms(request_timeout_ms)
         temporary_page = self.context.new_page()
-        temporary_page.set_default_timeout(30_000)
-        temporary_page.set_default_navigation_timeout(45_000)
+        temporary_page.set_default_timeout(network_wait_timeout_ms)
+        temporary_page.set_default_navigation_timeout(network_wait_timeout_ms)
         captured: List[Dict] = []
         seen_responses = set()
+        valid_result: Dict[str, Dict] = {}
 
-        def capture_response(response) -> None:
+        def capture_response(response) -> bool:
+            if valid_result:
+                return True
             if (
                 not self._is_candidate_response(kind, response.url)
                 or not self._matches_requested_resource(
@@ -399,15 +431,17 @@ class WBBrowser:
                     response.url,
                 )
             ):
-                return
+                return False
             response_key = id(response)
             if response_key in seen_responses:
-                return
+                return bool(valid_result)
             seen_responses.add(response_key)
             try:
-                captured.append(
-                    self._read_intercepted_response(requested_url, response)
-                )
+                result = self._read_intercepted_response(requested_url, response)
+                captured.append(result)
+                if not result.get("interception_error") and self._is_acceptable_result(result):
+                    valid_result["result"] = result
+                    return True
             except Exception as exc:
                 print(
                     "WB browser intercepted response processing failed: "
@@ -418,6 +452,7 @@ class WBBrowser:
                     f"error={exc}",
                     flush=True,
                 )
+            return False
 
         # Register both mechanisms before navigation. expect_response provides
         # an exact network wait; the listener records every matching endpoint.
@@ -428,19 +463,8 @@ class WBBrowser:
             navigation = None
             try:
                 with temporary_page.expect_response(
-                    lambda response: (
-                        self._is_candidate_response(kind, response.url)
-                        and self._matches_requested_resource(
-                            kind,
-                            requested_url,
-                            response.url,
-                        )
-                        and response.status == 200
-                        and self._is_json_content_type(
-                            response.headers.get("content-type", "")
-                        )
-                    ),
-                    timeout=45_000,
+                    capture_response,
+                    timeout=network_wait_timeout_ms,
                 ) as response_info:
                     navigation = temporary_page.goto(
                         frontend_url,
@@ -465,9 +489,16 @@ class WBBrowser:
                 f"url={temporary_page.url}, "
                 f"status={navigation_status}, "
                 f"title={document_title!r}, "
-                f"candidates={len(captured)}",
+                f"candidates={len(captured)}, "
+                f"request_timeout_ms={int(request_timeout_ms or self.default_request_timeout_ms)}, "
+                f"network_wait_timeout_ms={network_wait_timeout_ms}",
                 flush=True,
             )
+
+            if valid_result:
+                result = valid_result["result"]
+                result["document_title"] = document_title
+                return result
 
             for result in captured:
                 result["document_title"] = document_title
@@ -505,7 +536,7 @@ class WBBrowser:
                     flush=True,
                 )
 
-    def fetch(self, url: str) -> Dict:
+    def fetch(self, url: str, request_timeout_ms: int | None = None) -> Dict:
         with self.lock:
             if not self.is_ready():
                 self._reconnect()
@@ -514,7 +545,7 @@ class WBBrowser:
                 raise RuntimeError("WB browser is not ready")
 
             self._reload_cookies()
-            result = self._capture_frontend_json(url)
+            result = self._capture_frontend_json(url, request_timeout_ms)
             self._log_result("frontend_network_interception", result)
             return result
 
@@ -525,6 +556,7 @@ class WBBrowser:
             body,
             str(decorated.get("content_type") or ""),
             requested_url,
+            str(decorated.get("final_url") or ""),
         )
         document_title = str(decorated.get("document_title") or "")
         if not document_title:
@@ -541,6 +573,9 @@ class WBBrowser:
                 "response_kind": analysis["response_kind"],
                 "requested_nm_id": analysis["requested_nm_id"],
                 "parsed_nm_id": analysis["parsed_nm_id"],
+                "json_decode_success": bool(analysis["json_decode_success"]),
+                "resultset": str(analysis["resultset"] or ""),
+                "products_count": int(analysis["products_count"] or 0),
                 "valid": bool(analysis["valid"]),
                 "validation_error": str(analysis["error"] or ""),
             }
@@ -566,6 +601,9 @@ class WBBrowser:
             f"response_kind={result.get('response_kind', '')}, "
             f"requested_nm_id={result.get('requested_nm_id', '')}, "
             f"parsed_nm_id={result.get('parsed_nm_id', '')}, "
+            f"json_decode_success={bool(result.get('json_decode_success'))}, "
+            f"resultset={result.get('resultset', '')}, "
+            f"products_count={int(result.get('products_count') or 0)}, "
             f"valid={bool(result.get('valid'))}, "
             f"validation_error={result.get('validation_error', '')!r}",
             flush=True,

@@ -702,6 +702,45 @@ func classifyParserError(err error) ParserErrorDetails {
 	lowerErrorText := strings.ToLower(errorText)
 	extraDetails := extractParserErrorDetails(err)
 
+	if finalSource, _ := extraDetails["final_error_source"].(string); finalSource == "browser_fallback" {
+		fallbackType, _ := extraDetails["browser_fallback_error_type"].(string)
+		switch fallbackType {
+		case "parser_response_invalid":
+			return ParserErrorDetails{
+				ErrorType: "parser_response_invalid",
+				Message:   "Browser fallback received HTTP 200 but marketplace data failed validation",
+				Error:     truncateString(errorText, 500),
+				Details:   extraDetails,
+			}
+		case "browser_fallback_timeout":
+			return ParserErrorDetails{
+				ErrorType: "browser_fallback_timeout",
+				Message:   "Browser fallback timed out while waiting for marketplace data",
+				Error:     truncateString(errorText, 500),
+				Details:   extraDetails,
+			}
+		case "blocked_by_antibot":
+			statusCode := http.StatusForbidden
+			if strings.Contains(lowerErrorText, "498") {
+				statusCode = 498
+			}
+			return ParserErrorDetails{
+				ErrorType:  "blocked_by_antibot",
+				StatusCode: statusCode,
+				Message:    "Browser fallback was also rejected by marketplace antibot",
+				Error:      stripErrorBody(errorText),
+				Details:    extraDetails,
+			}
+		case "browser_fallback_error":
+			return ParserErrorDetails{
+				ErrorType: "browser_fallback_error",
+				Message:   "Browser fallback failed after the direct HTTP parser",
+				Error:     truncateString(errorText, 500),
+				Details:   extraDetails,
+			}
+		}
+	}
+
 	if strings.Contains(lowerErrorText, "temporarily blocked") &&
 		strings.Contains(lowerErrorText, "rate_limited") {
 		return ParserErrorDetails{

@@ -235,6 +235,10 @@ func NormalizeReason(value string) string {
 		return value
 	case "browser_fallback_error":
 		return value
+	case "browser_fallback_timeout":
+		return value
+	case "parser_response_invalid":
+		return value
 	case "parser_error":
 		return value
 	case "validation_error":

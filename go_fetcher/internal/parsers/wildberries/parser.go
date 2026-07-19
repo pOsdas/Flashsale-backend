@@ -2,6 +2,7 @@ package wildberries
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -75,8 +76,16 @@ func (e *parserRequestError) ParserDetails() map[string]interface{} {
 		"request_host":    requestHostFromURL(e.requestURL),
 		"request_profile": wbRequestProfile,
 	}
+	var nestedDetailsProvider interface {
+		ParserDetails() map[string]interface{}
+	}
+	if errors.As(e.err, &nestedDetailsProvider) {
+		for key, value := range nestedDetailsProvider.ParserDetails() {
+			details[key] = value
+		}
+	}
 
-	if isRateLimitedOrBlockedError(e.err) {
+	if isRateLimitedOrBlockedError(e.err) && details["browser_fallback_error_type"] != "parser_response_invalid" && details["browser_fallback_error_type"] != "browser_fallback_timeout" {
 		details["error_type"] = "rate_limited_or_blocked"
 		details["recommendation"] = wbBlockedRecommendation
 	}

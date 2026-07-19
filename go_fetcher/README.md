@@ -20,6 +20,13 @@ including HTTP attempts and browser fallbacks. The handler timeout must be
 greater than the marketplace timeout. Docker Compose already passes these
 variables through `go_fetcher/.env` via the service's `env_file` setting.
 
+The WB browser request receives the effective Go HTTP timeout in milliseconds.
+Its network wait is calculated as `request_timeout - safety_margin`, capped by
+`WB_BROWSER_NETWORK_WAIT_MIN_MS` and `WB_BROWSER_NETWORK_WAIT_MAX_MS`. The
+default 5-second safety margin leaves time for response serialization and the
+HTTP return path. For example, a 35-second Go timeout produces a 30-second
+Playwright response wait.
+
 ## Browser architecture
 
 The browser fetchers no longer call `playwright.chromium.launch()`.
